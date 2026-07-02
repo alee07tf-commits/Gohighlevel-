@@ -7,14 +7,17 @@ const TRIGGER_LABELS = {
   form_submitted: '📩 Form submitted',
   appointment_booked: '📅 Appointment booked',
   opportunity_stage_changed: '🎯 Opportunity stage changed',
+  message_received: '💬 Message received (SMS/WhatsApp)',
 };
 const ACTION_LABELS = {
   add_tag: 'Add tag',
   remove_tag: 'Remove tag',
   send_email: 'Send email',
   send_sms: 'Send SMS',
+  send_whatsapp: 'Send WhatsApp',
   add_note: 'Add note',
   create_opportunity: 'Create opportunity',
+  wait: '⏳ Wait / Esperar',
 };
 
 export async function renderAutomations(view) {
@@ -99,8 +102,15 @@ export async function renderAutomations(view) {
           return `<input class="input" data-i="${i}" data-k="subject" placeholder="Subject — {{first_name}} works" value="${esc(a.config.subject || '')}" style="margin-bottom:6px">
             <textarea class="input" data-i="${i}" data-k="body" rows="3" placeholder="Email body">${esc(a.config.body || '')}</textarea>`;
         case 'send_sms':
+        case 'send_whatsapp':
         case 'add_note':
           return `<textarea class="input" data-i="${i}" data-k="body" rows="2" placeholder="Text — merge fields supported">${esc(a.config.body || '')}</textarea>`;
+        case 'wait':
+          return `<div class="flex">
+            <input class="input" data-i="${i}" data-k="amount" type="number" min="1" placeholder="Cantidad" value="${esc(a.config.amount || '')}" style="width:110px">
+            <select class="input" data-i="${i}" data-k="unit" style="width:130px">
+              ${['minutes', 'hours', 'days'].map((u) => `<option value="${u}" ${a.config.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+            </select></div>`;
         case 'create_opportunity':
           return `<input class="input" data-i="${i}" data-k="title" placeholder="Opportunity title" value="${esc(a.config.title || '')}" style="margin-bottom:6px">
             <input class="input" data-i="${i}" data-k="value" type="number" placeholder="Value $" value="${esc(a.config.value || '')}">`;

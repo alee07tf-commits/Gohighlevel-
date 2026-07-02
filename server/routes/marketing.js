@@ -69,7 +69,7 @@ router.post('/campaigns', async (req, res) => {
   const id = await db.insert(
     `INSERT INTO campaigns (location_id, name, channel, subject, body, tag_filter)
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [req.location.id, name, channel === 'sms' ? 'sms' : 'email', subject || '', body, tag_filter || '']
+    [req.location.id, name, ['sms', 'whatsapp'].includes(channel) ? channel : 'email', subject || '', body, tag_filter || '']
   );
   res.status(201).json(await db.get('SELECT * FROM campaigns WHERE id = ?', [id]));
 });
@@ -96,10 +96,10 @@ router.post('/campaigns/:id/send', async (req, res) => {
 
   let sent = 0;
   for (const contact of contacts) {
-    const message =
-      campaign.channel === 'email'
-        ? await messaging.sendEmail(req.location.id, contact, campaign.subject, campaign.body)
-        : await messaging.sendSms(req.location.id, contact, campaign.body);
+    const message = await messaging.sendByChannel(campaign.channel, req.location.id, contact, {
+      subject: campaign.subject,
+      body: campaign.body,
+    });
     if (message) {
       await db.run('INSERT INTO campaign_recipients (campaign_id, contact_id) VALUES (?, ?)', [
         campaign.id,

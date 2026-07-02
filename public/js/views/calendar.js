@@ -146,6 +146,8 @@ export async function renderCalendar(view) {
           <label class="field"><span class="label">From (hour)</span><input class="input" name="start_hour" type="number" value="9" min="0" max="23"></label>
           <label class="field"><span class="label">To (hour)</span><input class="input" name="end_hour" type="number" value="17" min="1" max="24"></label>
         </div>
+        <label class="field"><span class="label">Recordatorio automático (horas antes de la cita, 0 = desactivado)</span>
+          <input class="input" name="reminder_hours" type="number" value="24" min="0"></label>
         <div class="modal-actions">
           <button type="button" class="btn secondary" id="cancel">Cancel</button>
           <button class="btn">Create</button>

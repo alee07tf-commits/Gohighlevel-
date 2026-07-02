@@ -2,6 +2,8 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth, requireLocation } = require('../auth');
 const automation = require('../services/automation');
+const scheduler = require('../services/scheduler');
+const scoring = require('../services/scoring');
 
 const router = express.Router();
 router.use(requireAuth, requireLocation);
@@ -27,11 +29,11 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, description, duration_minutes, start_hour, end_hour, days } = req.body || {};
+  const { name, description, duration_minutes, start_hour, end_hour, days, reminder_hours } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });
   const id = await db.insert(
-    `INSERT INTO calendars (location_id, name, slug, description, duration_minutes, start_hour, end_hour, days)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO calendars (location_id, name, slug, description, duration_minutes, start_hour, end_hour, days, reminder_hours)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.location.id,
       name,
@@ -41,6 +43,7 @@ router.post('/', async (req, res) => {
       Number.isFinite(Number(start_hour)) && start_hour !== undefined ? Number(start_hour) : 9,
       Number.isFinite(Number(end_hour)) && end_hour !== undefined ? Number(end_hour) : 17,
       JSON.stringify(days || [1, 2, 3, 4, 5]),
+      Number.isFinite(Number(reminder_hours)) && reminder_hours !== undefined ? Number(reminder_hours) : 24,
     ]
   );
   res.status(201).json(await db.get('SELECT * FROM calendars WHERE id = ?', [id]));
@@ -87,6 +90,8 @@ router.post('/:id/appointments', async (req, res) => {
   );
   if (contact_id) {
     const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [contact_id]);
+    await scoring.addScore(contact_id, 'appointment_booked');
+    await scheduler.scheduleAppointmentReminder(calendar, id, starts_at);
     await automation.logActivity(req.location.id, contact_id, 'appointment', `Appointment "${title}" booked`);
     await automation.trigger(req.location.id, 'appointment_booked', contact, { calendar_id: calendar.id });
   }

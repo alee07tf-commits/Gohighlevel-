@@ -215,6 +215,36 @@ CREATE TABLE IF NOT EXISTS form_submissions (
   data TEXT NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS scheduled_jobs (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  run_at TIMESTAMPTZ NOT NULL,
+  type TEXT NOT NULL,
+  payload TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','error','cancelled')),
+  result TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_due ON scheduled_jobs(status, run_at);
+CREATE TABLE IF NOT EXISTS reports (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  token TEXT NOT NULL UNIQUE,
+  period_days INTEGER NOT NULL DEFAULT 30,
+  narrative TEXT NOT NULL DEFAULT '',
+  data TEXT NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+`;
+
+// Idempotent migrations for databases created by earlier versions.
+const MIGRATIONS = `
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS score INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE calendars ADD COLUMN IF NOT EXISTS reminder_hours INTEGER NOT NULL DEFAULT 24;
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_channel_check;
+ALTER TABLE messages ADD CONSTRAINT messages_channel_check CHECK (channel IN ('sms','email','whatsapp','note'));
+ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_channel_check;
+ALTER TABLE campaigns ADD CONSTRAINT campaigns_channel_check CHECK (channel IN ('email','sms','whatsapp'));
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -273,7 +303,9 @@ if (process.env.DATABASE_URL) {
   txRaw = (fn) => pglite.transaction((t) => fn(wrap((sql, params) => t.query(sql, params))));
 }
 
-const ready = Promise.resolve().then(() => execRaw(SCHEMA));
+const ready = Promise.resolve()
+  .then(() => execRaw(SCHEMA))
+  .then(() => execRaw(MIGRATIONS));
 
 function makeApi(rawFn) {
   return {

@@ -57,8 +57,8 @@ async function renderThread(threadEl, conv) {
         .join('')}
     </div>
     <form class="thread-compose" id="compose">
-      <select class="input" name="channel" style="width:100px">
-        <option value="sms">SMS</option><option value="email">Email</option>
+      <select class="input" name="channel" style="width:120px">
+        <option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option>
       </select>
       <textarea class="input" name="body" rows="2" placeholder="Type a message… ({{first_name}} works here too)" required></textarea>
       <button class="btn">Send</button>

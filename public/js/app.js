@@ -35,7 +35,7 @@ function renderShell(activePath) {
             <span class="nav-icon">${n.icon}</span><span class="nav-label">${n.label}</span></a>`
         ).join('')}
       </nav>
-      <div class="sidebar-footer">v1.0 · ${esc(state.agency?.name || '')}</div>
+      <div class="sidebar-footer">v1.2 · ${esc(state.agency?.name || '')}</div>
     </aside>
     <div class="main">
       <header class="topbar">

@@ -11,8 +11,18 @@ const TRIGGER_TYPES = [
   'form_submitted',
   'appointment_booked',
   'opportunity_stage_changed',
+  'message_received',
 ];
-const ACTION_TYPES = ['add_tag', 'remove_tag', 'send_email', 'send_sms', 'add_note', 'create_opportunity'];
+const ACTION_TYPES = [
+  'add_tag',
+  'remove_tag',
+  'send_email',
+  'send_sms',
+  'send_whatsapp',
+  'add_note',
+  'create_opportunity',
+  'wait',
+];
 
 async function withActions(wf) {
   const actions = await db.all('SELECT * FROM workflow_actions WHERE workflow_id = ? ORDER BY position', [wf.id]);

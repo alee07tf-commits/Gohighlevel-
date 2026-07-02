@@ -107,7 +107,7 @@ export async function renderMarketing(view) {
         <label class="field"><span class="label">Name</span><input class="input" name="name" required placeholder="June Promo Blast"></label>
         <div class="form-row">
           <label class="field"><span class="label">Channel</span><select class="input" name="channel" id="channel-sel">
-            <option value="email">Email</option><option value="sms">SMS</option></select></label>
+            <option value="email">Email</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></label>
           <label class="field"><span class="label">Audience</span><select class="input" name="tag_filter">
             <option value="">All contacts</option>
             ${tags.map((t) => `<option value="${esc(t.tag)}">tag: ${esc(t.tag)} (${t.count})</option>`).join('')}
@@ -118,7 +118,9 @@ export async function renderMarketing(view) {
           ${templates.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}
         </select></label>` : ''}
         <label class="field" id="subject-field"><span class="label">Subject</span><input class="input" name="subject"></label>
-        <label class="field"><span class="label">Message</span><textarea class="input" name="body" rows="7" required placeholder="Hi {{first_name}}, …"></textarea></label>
+        <label class="field"><span class="label">Message
+          <button type="button" class="btn secondary small" id="ai-gen" style="margin-left:8px">✨ Generar con IA</button></span>
+          <textarea class="input" name="body" rows="7" required placeholder="Hi {{first_name}}, …"></textarea></label>
         <div class="modal-actions">
           <button type="button" class="btn secondary" id="cancel">Cancel</button>
           <button class="btn">Save as Draft</button>
@@ -126,7 +128,26 @@ export async function renderMarketing(view) {
       </form>`);
     modal.querySelector('#cancel').addEventListener('click', closeOverlay);
     modal.querySelector('#channel-sel').addEventListener('change', (e) => {
-      modal.querySelector('#subject-field').style.display = e.target.value === 'sms' ? 'none' : 'block';
+      modal.querySelector('#subject-field').style.display = e.target.value === 'email' ? 'block' : 'none';
+    });
+    modal.querySelector('#ai-gen').addEventListener('click', async () => {
+      const desc = prompt('Describe la campaña (ej: "promo 20% blanqueamiento dental este mes, urgencia, cita gratis"):');
+      if (!desc) return;
+      const btn = modal.querySelector('#ai-gen');
+      btn.disabled = true;
+      btn.textContent = '✨ Generando…';
+      try {
+        const kind = modal.querySelector('#channel-sel').value === 'email' ? 'email' : modal.querySelector('#channel-sel').value;
+        const gen = await api('/ai/generate', { method: 'POST', body: { kind, prompt: desc } });
+        if (gen.subject) modal.querySelector('[name=subject]').value = gen.subject;
+        modal.querySelector('[name=body]').value = gen.body || '';
+        toast('Copy generado — revísalo y ajusta');
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✨ Generar con IA';
+      }
     });
     modal.querySelector('#tpl-sel')?.addEventListener('change', (e) => {
       const tpl = templates.find((t) => t.id === Number(e.target.value));

@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth, requireLocation } = require('../auth');
 const automation = require('../services/automation');
+const scoring = require('../services/scoring');
 
 const router = express.Router();
 router.use(requireAuth, requireLocation);
@@ -127,6 +128,7 @@ router.post('/:id/tags', getContact, async (req, res) => {
     tag,
   ]);
   if (info.changes) {
+    await scoring.addScore(req.contact.id, 'tag_added');
     await automation.logActivity(req.location.id, req.contact.id, 'tag', `Tag "${tag}" added`);
     await automation.trigger(req.location.id, 'tag_added', req.contact, { tag });
   }
@@ -148,6 +150,69 @@ router.post('/:id/notes', getContact, async (req, res) => {
   ]);
   await automation.logActivity(req.location.id, req.contact.id, 'note', 'Note added');
   res.status(201).json(await db.get('SELECT * FROM notes WHERE id = ?', [id]));
+});
+
+// ---- CSV import/export ----
+router.get('/export/csv', async (req, res) => {
+  const rows = await db.all('SELECT * FROM contacts WHERE location_id = ? ORDER BY id', [req.location.id]);
+  const withT = await Promise.all(rows.map(withTags));
+  const escCsv = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+  const csv = [
+    'first_name,last_name,email,phone,source,tags,score,created_at',
+    ...withT.map((c) =>
+      [c.first_name, c.last_name, c.email, c.phone, c.source, c.tags.join(';'), c.score, c.created_at]
+        .map(escCsv)
+        .join(',')
+    ),
+  ].join('\n');
+  res.type('text/csv').attachment('contacts.csv').send(csv);
+});
+
+// Import: header row with first_name,last_name,email,phone,tags (tags split by ";").
+// Imported contacts do NOT fire automations (avoids mass-send accidents).
+router.post('/import/csv', async (req, res) => {
+  const { csv } = req.body || {};
+  if (!csv) return res.status(400).json({ error: 'csv is required' });
+  const lines = csv.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return res.status(400).json({ error: 'CSV needs a header row and at least one data row' });
+  const parseLine = (line) => {
+    const out = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQ) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') inQ = false;
+        else cur += ch;
+      } else if (ch === '"') inQ = true;
+      else if (ch === ',') { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur);
+    return out;
+  };
+  const header = parseLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const idx = (name) => header.indexOf(name);
+  let imported = 0, skipped = 0;
+  for (const line of lines.slice(1)) {
+    const cols = parseLine(line);
+    const get = (name) => (idx(name) >= 0 ? (cols[idx(name)] || '').trim() : '');
+    const email = get('email'), phone = get('phone'), first = get('first_name');
+    if (!email && !phone && !first) { skipped++; continue; }
+    const existing =
+      (email && (await db.get(`SELECT id FROM contacts WHERE location_id = ? AND email = ? AND email != ''`, [req.location.id, email]))) ||
+      (phone && (await db.get(`SELECT id FROM contacts WHERE location_id = ? AND phone = ? AND phone != ''`, [req.location.id, phone])));
+    if (existing) { skipped++; continue; }
+    const cid = await db.insert(
+      'INSERT INTO contacts (location_id, first_name, last_name, email, phone, source) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.location.id, first, get('last_name'), email, phone, 'import']
+    );
+    for (const tag of get('tags').split(';').map((t) => t.trim()).filter(Boolean)) {
+      await db.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [cid, tag]);
+    }
+    imported++;
+  }
+  res.json({ imported, skipped });
 });
 
 // Distinct tags in this location (for filters/segments).

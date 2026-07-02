@@ -2,8 +2,17 @@ import { api, state, loadMe, setLocation } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast } from '../ui.js';
 
 export async function renderSettings(view) {
-  const [locations, team] = await Promise.all([api('/locations'), api('/locations/team/users')]);
+  const [locations, team, integrations] = await Promise.all([
+    api('/locations'),
+    api('/locations/team/users'),
+    api('/system/integrations'),
+  ]);
   const current = locations.find((l) => l.id === state.locationId) || locations[0];
+
+  const integBadge = (v) =>
+    v === 'simulated' || v === false
+      ? '<span class="badge amber">simulado</span>'
+      : `<span class="badge green">${v === true ? 'activo' : esc(v)}</span>`;
 
   view.innerHTML = `
   <div class="page-header"><h1>Settings</h1></div>
@@ -39,6 +48,25 @@ export async function renderSettings(view) {
         </div>
       </div>
     </div>
+    <div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Integraciones (canales de envío)</div>
+      <div class="card-body">
+        <div class="appt-row"><div style="flex:1"><strong>📧 Email</strong>
+          <div class="muted" style="font-size:12px">${esc(integrations.recommended.email)}</div></div>${integBadge(integrations.email)}</div>
+        <div class="appt-row"><div style="flex:1"><strong>📱 SMS</strong>
+          <div class="muted" style="font-size:12px">${esc(integrations.recommended.sms)}</div></div>${integBadge(integrations.sms)}</div>
+        <div class="appt-row"><div style="flex:1"><strong>💬 WhatsApp</strong>
+          <div class="muted" style="font-size:12px">${esc(integrations.recommended.whatsapp)}</div></div>${integBadge(integrations.whatsapp)}</div>
+        <div class="appt-row"><div style="flex:1"><strong>✨ IA (Claude)</strong>
+          <div class="muted" style="font-size:12px">${esc(integrations.recommended.ai)}</div></div>${integBadge(integrations.ai)}</div>
+        <p class="muted" style="margin-top:10px;font-size:12px">
+          En modo <strong>simulado</strong> todo funciona y queda registrado en el inbox, pero no sale al mundo real.
+          Para activar un canal añade sus variables de entorno (en Vercel: Settings → Environment Variables) y redespliega.
+          Webhook para SMS/WhatsApp entrantes de Twilio: <code class="inline">POST /api/webhooks/twilio/${state.locationId}</code>
+        </p>
+      </div>
+    </div>
     <div class="card">
       <div class="card-title">Agency Team</div>
       <div class="card-body">
@@ -54,6 +82,7 @@ export async function renderSettings(view) {
           .join('')}
         <button class="btn secondary" id="new-user" style="margin-top:12px">+ Invite Team Member</button>
       </div>
+    </div>
     </div>
   </div>`;
 

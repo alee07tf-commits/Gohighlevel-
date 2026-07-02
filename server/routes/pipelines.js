@@ -88,8 +88,10 @@ router.post('/:id/opportunities', getPipeline, async (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?)`,
     [req.location.id, req.pipeline.id, stage.id, contact_id || null, title, Number(value) || 0]
   );
-  if (contact_id)
+  if (contact_id) {
+    await require('../services/scoring').addScore(contact_id, 'opportunity_created');
     await automation.logActivity(req.location.id, contact_id, 'opportunity', `Opportunity "${title}" created`);
+  }
   res.status(201).json(await db.get('SELECT * FROM opportunities WHERE id = ?', [id]));
 });
 

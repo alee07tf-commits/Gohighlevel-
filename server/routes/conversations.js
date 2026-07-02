@@ -42,10 +42,7 @@ router.post('/:id/messages', getConversation, async (req, res) => {
   if (!body) return res.status(400).json({ error: 'body is required' });
   const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [req.conversation.contact_id]);
   if (contact.dnd) return res.status(400).json({ error: 'Contact has DND enabled' });
-  const message =
-    channel === 'email'
-      ? await messaging.sendEmail(req.location.id, contact, subject, body)
-      : await messaging.sendSms(req.location.id, contact, body);
+  const message = await messaging.sendByChannel(channel, req.location.id, contact, { subject, body });
   res.status(201).json(message);
 });
 
@@ -59,7 +56,8 @@ router.post('/start/:contactId', async (req, res) => {
   res.json(await messaging.getOrCreateConversation(req.location.id, contact.id));
 });
 
-// Simulate an inbound message (webhook stand-in for Twilio/Mailgun in v1).
+// Simulate an inbound message (testing tool; real inbound arrives via
+// /api/webhooks/twilio/:locationId).
 router.post('/:id/simulate-inbound', getConversation, async (req, res) => {
   const { channel = 'sms', body } = req.body || {};
   if (!body) return res.status(400).json({ error: 'body is required' });
@@ -70,6 +68,7 @@ router.post('/:id/simulate-inbound', getConversation, async (req, res) => {
     channel,
     body,
   });
+  await require('../services/scoring').addScore(req.conversation.contact_id, 'inbound_message');
   res.status(201).json(message);
 });
 

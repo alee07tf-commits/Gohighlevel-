@@ -40,6 +40,11 @@ async function runAction(action, contact, locationId, log) {
       log.push('Sent SMS');
       break;
     }
+    case 'send_whatsapp': {
+      await messaging.sendWhatsapp(locationId, contact, config.body || '');
+      log.push('Sent WhatsApp');
+      break;
+    }
     case 'add_note': {
       await db.run('INSERT INTO notes (contact_id, body) VALUES (?, ?)', [
         contact.id,
@@ -83,6 +88,51 @@ async function runAction(action, contact, locationId, log) {
   }
 }
 
+const WAIT_UNIT_MS = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
+
+// Runs a workflow's actions starting at startIndex. A `wait` action schedules
+// a workflow_resume job for the remaining actions and stops this segment.
+async function executeActions(wf, contact, startIndex, segmentLabel) {
+  const scheduler = require('./scheduler'); // lazy: breaks circular dependency
+  const actions = await db.all('SELECT * FROM workflow_actions WHERE workflow_id = ? ORDER BY position', [wf.id]);
+  const log = segmentLabel ? [segmentLabel] : [];
+  let status = 'success';
+  try {
+    for (let i = startIndex; i < actions.length; i++) {
+      const action = actions[i];
+      if (action.type === 'wait') {
+        const config = JSON.parse(action.config || '{}');
+        const amount = Number(config.amount) || 0;
+        const unit = WAIT_UNIT_MS[config.unit] ? config.unit : 'hours';
+        const runAt = new Date(Date.now() + amount * WAIT_UNIT_MS[unit]).toISOString();
+        await scheduler.schedule(wf.location_id, runAt, 'workflow_resume', {
+          workflow_id: wf.id,
+          contact_id: contact.id,
+          start_index: i + 1,
+        });
+        log.push(`Waiting ${amount} ${unit} (resumes ${runAt})`);
+        break;
+      }
+      await runAction(action, contact, wf.location_id, log);
+    }
+  } catch (err) {
+    status = 'error';
+    log.push(`Error: ${err.message}`);
+  }
+  await db.run('INSERT INTO workflow_runs (workflow_id, contact_id, status, log) VALUES (?, ?, ?, ?)', [
+    wf.id,
+    contact.id,
+    status,
+    JSON.stringify(log),
+  ]);
+  await logActivity(wf.location_id, contact.id, 'automation', `Workflow "${wf.name}" executed (${status})`);
+}
+
+// Called by the scheduler when a wait elapses.
+async function resumeWorkflow(wf, contact, startIndex) {
+  await executeActions(wf, contact, startIndex, `Resumed after wait (step ${startIndex + 1})`);
+}
+
 // Fire all active workflows for a location matching the trigger.
 // `event` may carry { tag, pipeline_id, stage_id, funnel_id, calendar_id }.
 async function trigger(locationId, triggerType, contact, event = {}) {
@@ -99,23 +149,8 @@ async function trigger(locationId, triggerType, contact, event = {}) {
     if (triggerType === 'appointment_booked' && cfg.calendar_id && Number(cfg.calendar_id) !== Number(event.calendar_id)) continue;
     if (triggerType === 'opportunity_stage_changed' && cfg.stage_id && Number(cfg.stage_id) !== Number(event.stage_id)) continue;
 
-    const actions = await db.all('SELECT * FROM workflow_actions WHERE workflow_id = ? ORDER BY position', [wf.id]);
-    const log = [];
-    let status = 'success';
-    try {
-      for (const action of actions) await runAction(action, contact, locationId, log);
-    } catch (err) {
-      status = 'error';
-      log.push(`Error: ${err.message}`);
-    }
-    await db.run('INSERT INTO workflow_runs (workflow_id, contact_id, status, log) VALUES (?, ?, ?, ?)', [
-      wf.id,
-      contact.id,
-      status,
-      JSON.stringify(log),
-    ]);
-    await logActivity(locationId, contact.id, 'automation', `Workflow "${wf.name}" executed (${status})`);
+    await executeActions(wf, contact, 0, null);
   }
 }
 
-module.exports = { trigger, logActivity };
+module.exports = { trigger, resumeWorkflow, logActivity };

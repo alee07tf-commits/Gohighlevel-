@@ -27,6 +27,9 @@ export async function renderContacts(view, rest = []) {
         <option value="">All tags</option>
         ${tags.map((t) => `<option value="${esc(t.tag)}" ${t.tag === tag ? 'selected' : ''}>${esc(t.tag)} (${t.count})</option>`).join('')}
       </select>
+      <button class="btn secondary" id="export-csv" title="Exportar CSV">⬇ CSV</button>
+      <button class="btn secondary" id="import-csv" title="Importar CSV">⬆ CSV</button>
+      <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
       <button class="btn" id="add-contact">+ Add Contact</button>
     </div>
     <div class="card">
@@ -57,6 +60,32 @@ export async function renderContacts(view, rest = []) {
     });
     view.querySelector('#tag-filter').addEventListener('change', (e) => { tag = e.target.value; load(); });
     view.querySelector('#add-contact').addEventListener('click', () => contactModal(load));
+    view.querySelector('#export-csv').addEventListener('click', async () => {
+      const { state } = await import('../api.js');
+      const res = await fetch('/api/contacts/export/csv', {
+        headers: { Authorization: `Bearer ${state.token}`, 'X-Location-Id': String(state.locationId) },
+      });
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'contacts.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    view.querySelector('#import-csv').addEventListener('click', () => view.querySelector('#csv-file').click());
+    view.querySelector('#csv-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const csv = await file.text();
+      try {
+        const result = await api('/contacts/import/csv', { method: 'POST', body: { csv } });
+        toast(`Importados: ${result.imported} · Omitidos (duplicados): ${result.skipped}`);
+        load();
+      } catch (err) {
+        toast(err.message, true);
+      }
+      e.target.value = '';
+    });
   }
 
   await load();
@@ -104,6 +133,7 @@ async function renderContactDetail(view, id) {
     <a href="#/contacts" class="btn secondary small">← Contacts</a>
     <span class="avatar" style="width:40px;height:40px">${initials(c)}</span>
     <h1>${esc(fullName(c))}</h1>
+    ${c.score >= 20 ? `<span class="badge amber">🔥 ${c.score} pts</span>` : c.score > 0 ? `<span class="badge gray">${c.score} pts</span>` : ''}
     ${c.dnd ? '<span class="badge red">DND</span>' : ''}
     <div class="spacer"></div>
     <button class="btn secondary" id="msg-btn">💬 Message</button>

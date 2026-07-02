@@ -1,4 +1,4 @@
-# ⚡ LeadFlow — v1.1
+# ⚡ LeadFlow — v1.2
 
 Plataforma todo-en-uno de CRM y marketing para agencias, estilo **GoHighLevel**: multi-tenant (agencia → sub-cuentas de clientes), CRM, pipelines, calendarios con reservas públicas, inbox unificado, email marketing, automatizaciones y constructor de funnels con captura de leads.
 
@@ -19,7 +19,7 @@ Sin configurar nada usa un Postgres embebido (PGlite) guardado en `data/`. Con l
 - **Widget de reservas de demo**: `http://localhost:3000/book/free-consult`
 
 ```bash
-npm test         # suite de tests de API (12 tests, corre sobre Postgres en memoria)
+npm test         # suite de tests de API (21 tests, corre sobre Postgres en memoria)
 ```
 
 ## 🚀 Desplegar en Vercel + Supabase (paso a paso)
@@ -59,7 +59,13 @@ Cada push a la rama conectada redespliega automáticamente en Vercel. La rama de
 | **Automatizaciones** | Workflows *WHEN → THEN*: triggers (contacto creado, tag añadido, formulario enviado, cita reservada, cambio de etapa) y acciones (añadir/quitar tag, enviar email/SMS, nota, crear oportunidad), con historial de ejecuciones. |
 | **Sites & Funnels** | Constructor de páginas por bloques (hero, texto, features, formulario), publicación en `/f/<funnel>/<página>`, captura de leads que crea/actualiza el contacto, lo etiqueta y dispara automatizaciones. |
 | **Dashboard** | Métricas: contactos, valor de pipeline, revenue ganado, citas próximas, conversaciones sin leer, submissions. |
-| **Equipo y ajustes** | Usuarios de agencia (admin/member), perfil de cada sub-cuenta, creación de sub-cuentas. |
+| **Equipo y ajustes** | Usuarios de agencia (admin/member), perfil de cada sub-cuenta, creación de sub-cuentas, panel de estado de integraciones. |
+| **Envíos reales (v1.2)** | Email vía Resend/SendGrid, SMS y WhatsApp vía Twilio, con fallback simulado sin claves. Webhook de entrada `/api/webhooks/twilio/:locationId` alimenta el inbox. |
+| **Scheduler (v1.2)** | Acción "wait" en workflows (secuencias de seguimiento) y recordatorios de cita automáticos. Corre con cron de Vercel, pinger externo o lazy tick con el tráfico. |
+| **Lead scoring (v1.2)** | Puntos por comportamiento (formularios, mensajes, citas, oportunidades) y tarjeta "🔥 Leads calientes" en el dashboard. |
+| **Informe del cliente (v1.2)** | Informe white-label con link público (`/r/<token>`), narrativa escrita por IA (o plantilla), envío por email al cliente. |
+| **Content AI (v1.2)** | Botón "✨ Generar con IA" en campañas: redacta emails/SMS/WhatsApp con Claude (`ANTHROPIC_API_KEY`). |
+| **CSV (v1.2)** | Importación/exportación de contactos con deduplicación (sin disparar automatizaciones en masa). |
 
 ## Arquitectura
 
@@ -77,20 +83,23 @@ server/
     messaging.js     # abstracción de proveedor (hoy simulado; enchufa Twilio/SMTP aquí)
     automation.js    # motor de workflows (triggers → acciones)
 public/              # SPA vanilla JS sin build (hash routing, ES modules)
-tests/api.test.js    # 12 tests end-to-end de API (node:test + supertest)
+  services/         # providers (Resend/SendGrid/Twilio), messaging, automation,
+                     # scheduler, scoring, ai (Claude)
+tests/               # 21 tests end-to-end de API (node:test + supertest)
 ```
 
-- **Mensajería simulada a propósito**: cada email/SMS "enviado" queda registrado en el inbox del contacto. Para producción, conecta Twilio/SendGrid/SMTP dentro de `server/services/messaging.js` sin tocar el resto del código.
-- **Variables**: `DATABASE_URL`, `JWT_SECRET`, `PORT` (default 3000), `AUTO_SEED=1` (siembra demo), `PG_POOL_MAX` (default 5).
+- **Canales con fallback**: sin claves, email/SMS/WhatsApp funcionan en modo simulado (registrados en el inbox). Añade las variables de `.env.example` para activarlos de verdad — sin tocar código. El estado de cada canal se ve en **Settings → Integraciones**.
+- **Variables**: ver `.env.example` (DATABASE_URL, JWT_SECRET, RESEND_API_KEY, TWILIO_*, ANTHROPIC_API_KEY, CRON_SECRET…).
+- **Scheduler**: las esperas de workflows y los recordatorios los procesa `GET /api/cron/tick` (cron de Vercel cada hora incluido; para más precisión usa un pinger cada 5 min, p. ej. cron-job.org). Además cualquier request procesa jobs pendientes (lazy tick).
 
-## Roadmap propuesto (v1.2+)
+## Roadmap propuesto (v1.3+)
 
-1. **Proveedores reales**: Twilio (SMS) + SMTP/SendGrid (email) + webhooks entrantes al inbox.
-2. **Acciones con espera** en workflows (wait 1 día → seguimiento) con cola/scheduler.
+1. **Ramas if/else** en workflows + más triggers (pago recibido, cita completada).
+2. **Pagos** (Stripe: links de pago, checkout) + facturación.
 3. **Custom fields** de contacto con UI y uso en formularios/merge fields.
-4. **Facturación/pagos** (Stripe) y membresías/cursos.
+4. **Snapshots** (clonar sub-cuenta como plantilla) + white-label por agencia.
 5. **Reputación**: solicitudes de reseñas Google/Facebook.
-6. **White-label por sub-cuenta** (dominio, logo, colores) y permisos por usuario/sub-cuenta.
+6. **Conversation AI**: chatbot que responde y agenda citas (Claude + function calling).
 7. **Reportes** avanzados (conversión por funnel, atribución por fuente).
 
 ## Seguridad

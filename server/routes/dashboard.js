@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth, requireLocation } = require('../auth');
+const scoring = require('../services/scoring');
 
 const router = express.Router();
 router.use(requireAuth, requireLocation);
@@ -67,7 +68,9 @@ router.get('/', async (req, res) => {
     [loc]
   );
 
-  res.json({ stats, recentContacts, recentActivity, upcoming });
+  const hotLeads = await scoring.hotLeads(loc, 5);
+
+  res.json({ stats, recentContacts, recentActivity, upcoming, hotLeads });
 });
 
 module.exports = router;

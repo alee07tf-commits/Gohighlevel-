@@ -1,7 +1,9 @@
-// Messaging provider abstraction. v1 ships with a simulated provider that
-// records every message in the unified inbox. Swap `sendSms`/`sendEmail`
-// internals for Twilio / SMTP / SendGrid without touching callers.
+// Unified messaging: every outbound message is recorded in the contact's
+// inbox and, when a real provider is configured (see services/providers.js),
+// also delivered for real. Message.status reflects the outcome:
+// 'simulated' | 'sent' | 'failed'.
 const db = require('../db');
+const providers = require('./providers');
 
 async function getOrCreateConversation(locationId, contactId) {
   let conv = await db.get('SELECT * FROM conversations WHERE location_id = ? AND contact_id = ?', [
@@ -18,12 +20,12 @@ async function getOrCreateConversation(locationId, contactId) {
   return conv;
 }
 
-async function recordMessage({ locationId, contactId, direction, channel, subject = '', body }) {
+async function recordMessage({ locationId, contactId, direction, channel, subject = '', body, status = 'sent' }) {
   const conv = await getOrCreateConversation(locationId, contactId);
   const id = await db.insert(
-    `INSERT INTO messages (conversation_id, direction, channel, subject, body)
-     VALUES (?, ?, ?, ?, ?)`,
-    [conv.id, direction, channel, subject, body]
+    `INSERT INTO messages (conversation_id, direction, channel, subject, body, status)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [conv.id, direction, channel, subject, body, status]
   );
   await db.run('UPDATE conversations SET last_message_at = now(), unread = unread + ? WHERE id = ?', [
     direction === 'inbound' ? 1 : 0,
@@ -42,27 +44,78 @@ function mergeFields(text, contact) {
     .replaceAll('{{phone}}', contact.phone || '');
 }
 
+async function deliveryStatus(result) {
+  if (result.provider === 'simulated') return 'simulated';
+  return result.ok ? 'sent' : 'failed';
+}
+
+async function locationName(locationId) {
+  const loc = await db.get('SELECT name, company FROM locations WHERE id = ?', [locationId]);
+  return loc ? loc.name || loc.company : '';
+}
+
 async function sendEmail(locationId, contact, subject, body) {
   if (contact.dnd) return null;
+  const mergedSubject = mergeFields(subject, contact);
+  const mergedBody = mergeFields(body, contact);
+  const result = await providers.deliverEmail({
+    to: contact.email,
+    subject: mergedSubject,
+    text: mergedBody,
+    fromName: await locationName(locationId),
+  });
   return recordMessage({
     locationId,
     contactId: contact.id,
     direction: 'outbound',
     channel: 'email',
-    subject: mergeFields(subject, contact),
-    body: mergeFields(body, contact),
+    subject: mergedSubject,
+    body: result.ok === false ? `${mergedBody}\n\n[Delivery failed: ${result.error}]` : mergedBody,
+    status: await deliveryStatus(result),
   });
 }
 
 async function sendSms(locationId, contact, body) {
   if (contact.dnd) return null;
+  const merged = mergeFields(body, contact);
+  const result = await providers.deliverSms({ to: contact.phone, body: merged });
   return recordMessage({
     locationId,
     contactId: contact.id,
     direction: 'outbound',
     channel: 'sms',
-    body: mergeFields(body, contact),
+    body: merged,
+    status: await deliveryStatus(result),
   });
 }
 
-module.exports = { getOrCreateConversation, recordMessage, mergeFields, sendEmail, sendSms };
+async function sendWhatsapp(locationId, contact, body) {
+  if (contact.dnd) return null;
+  const merged = mergeFields(body, contact);
+  const result = await providers.deliverWhatsapp({ to: contact.phone, body: merged });
+  return recordMessage({
+    locationId,
+    contactId: contact.id,
+    direction: 'outbound',
+    channel: 'whatsapp',
+    body: merged,
+    status: await deliveryStatus(result),
+  });
+}
+
+// Channel-generic helper used by campaigns and workflow actions.
+async function sendByChannel(channel, locationId, contact, { subject = '', body }) {
+  if (channel === 'email') return sendEmail(locationId, contact, subject, body);
+  if (channel === 'whatsapp') return sendWhatsapp(locationId, contact, body);
+  return sendSms(locationId, contact, body);
+}
+
+module.exports = {
+  getOrCreateConversation,
+  recordMessage,
+  mergeFields,
+  sendEmail,
+  sendSms,
+  sendWhatsapp,
+  sendByChannel,
+};

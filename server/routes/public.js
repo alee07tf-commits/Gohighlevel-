@@ -3,6 +3,8 @@
 const express = require('express');
 const db = require('../db');
 const automation = require('../services/automation');
+const scheduler = require('../services/scheduler');
+const scoring = require('../services/scoring');
 
 const router = express.Router();
 
@@ -155,6 +157,7 @@ router.post('/pages/:pageId/submit', async (req, res) => {
     JSON.stringify(data),
   ]);
 
+  await scoring.addScore(contact.id, 'form_submitted');
   await automation.logActivity(funnel.location_id, contact.id, 'form', `Submitted form on "${page.name}" (${funnel.name})`);
   if (isNew) await automation.trigger(funnel.location_id, 'contact_created', contact);
   await automation.trigger(funnel.location_id, 'form_submitted', contact, { funnel_id: funnel.id });
@@ -242,17 +245,65 @@ router.post('/book/:slug', async (req, res) => {
     isNew = true;
   }
 
-  await db.run(
+  const apptId = await db.insert(
     `INSERT INTO appointments (location_id, calendar_id, contact_id, title, starts_at, ends_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [calendar.location_id, calendar.id, contact.id, `${calendar.name} with ${name}`, startsAt, endsAt]
   );
 
+  await scoring.addScore(contact.id, 'appointment_booked');
+  await scheduler.scheduleAppointmentReminder(calendar, apptId, startsAt);
   await automation.logActivity(calendar.location_id, contact.id, 'appointment', `Booked "${calendar.name}" for ${startsAt}`);
   if (isNew) await automation.trigger(calendar.location_id, 'contact_created', contact);
   await automation.trigger(calendar.location_id, 'appointment_booked', contact, { calendar_id: calendar.id });
 
   res.status(201).json({ ok: true });
+});
+
+// ---- Public client report (/r/<token>) ----
+router.get('/r/:token', async (req, res) => {
+  const report = await db.get('SELECT * FROM reports WHERE token = ?', [req.params.token]);
+  if (!report) return res.status(404).send('Report not found');
+  const location = await db.get('SELECT * FROM locations WHERE id = ?', [report.location_id]);
+  const stats = JSON.parse(report.data || '{}');
+  const created = new Date(report.created_at).toLocaleDateString('es-ES', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const stat = (label, value) =>
+    `<div class="stat"><div class="v">${esc(value)}</div><div class="l">${esc(label)}</div></div>`;
+  const money = (v) => '$' + Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Informe — ${esc(location.name)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f4f9;color:#1e293b;line-height:1.6}
+.head{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:48px 24px;text-align:center}
+.head h1{font-size:1.9rem}.head p{opacity:.85;margin-top:6px}
+.wrap{max-width:860px;margin:-30px auto 40px;padding:0 20px}
+.card{background:#fff;border-radius:14px;box-shadow:0 4px 18px rgba(15,23,42,.08);padding:28px;margin-bottom:18px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.stat{text-align:center;padding:16px 8px;background:#f8fafc;border-radius:10px}
+.stat .v{font-size:1.7rem;font-weight:800;color:#4f46e5}.stat .l{font-size:.78rem;color:#64748b;font-weight:600}
+.narr{white-space:pre-wrap;font-size:1.02rem}
+.foot{text-align:center;color:#94a3b8;font-size:.8rem;padding:20px}
+</style></head><body>
+<div class="head"><h1>${esc(location.name)}</h1>
+<p>Informe de resultados · últimos ${report.period_days} días · ${esc(created)}</p></div>
+<div class="wrap">
+<div class="card"><div class="stats">
+${stat('Contactos nuevos', stats.new_contacts ?? 0)}
+${stat('Formularios recibidos', stats.form_submissions ?? 0)}
+${stat('Citas agendadas', stats.appointments ?? 0)}
+${stat('Mensajes enviados', stats.messages_sent ?? 0)}
+${stat('Oportunidades creadas', stats.opportunities_created ?? 0)}
+${stat('Pipeline abierto', money(stats.pipeline_value))}
+${stat('Ganado en el periodo', money(stats.won_value))}
+</div></div>
+<div class="card"><h2 style="margin-bottom:10px;font-size:1.1rem">Resumen</h2>
+<p class="narr">${esc(report.narrative)}</p></div>
+</div>
+<div class="foot">Preparado con ❤ por tu equipo de marketing</div>
+</body></html>`);
 });
 
 module.exports = router;
