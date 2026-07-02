@@ -80,13 +80,14 @@ function renderBlock(block, pageId) {
   }
 }
 
-router.get('/f/:funnelSlug{/:pageSlug}', (req, res) => {
-  const funnel = db.prepare('SELECT * FROM funnels WHERE slug = ?').get(req.params.funnelSlug);
+router.get('/f/:funnelSlug{/:pageSlug}', async (req, res) => {
+  const funnel = await db.get('SELECT * FROM funnels WHERE slug = ?', [req.params.funnelSlug]);
   if (!funnel) return res.status(404).send('Funnel not found');
   const slug = req.params.pageSlug || 'home';
-  const page = db
-    .prepare('SELECT * FROM funnel_pages WHERE funnel_id = ? AND slug = ? AND published = 1')
-    .get(funnel.id, slug);
+  const page = await db.get('SELECT * FROM funnel_pages WHERE funnel_id = ? AND slug = ? AND published = 1', [
+    funnel.id,
+    slug,
+  ]);
   if (!page) return res.status(404).send('Page not found or not published');
   const blocks = JSON.parse(page.content || '[]');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -107,53 +108,65 @@ return false;}
 
 // Lead capture: upserts a contact by email/phone, records the submission and
 // fires form_submitted / contact_created automations.
-router.post('/pages/:pageId/submit', (req, res) => {
-  const page = db.prepare('SELECT * FROM funnel_pages WHERE id = ?').get(req.params.pageId);
+router.post('/pages/:pageId/submit', async (req, res) => {
+  const page = await db.get('SELECT * FROM funnel_pages WHERE id = ?', [req.params.pageId]);
   if (!page || !page.published) return res.status(404).json({ error: 'Page not found' });
-  const funnel = db.prepare('SELECT * FROM funnels WHERE id = ?').get(page.funnel_id);
+  const funnel = await db.get('SELECT * FROM funnels WHERE id = ?', [page.funnel_id]);
   const data = req.body || {};
   const email = (data.email || '').trim();
   const phone = (data.phone || '').trim();
   if (!email && !phone) return res.status(400).json({ error: 'email or phone is required' });
 
-  let contact =
-    (email &&
-      db.prepare('SELECT * FROM contacts WHERE location_id = ? AND email = ? AND email != ?').get(funnel.location_id, email, '')) ||
-    (phone &&
-      db.prepare('SELECT * FROM contacts WHERE location_id = ? AND phone = ? AND phone != ?').get(funnel.location_id, phone, ''));
+  let contact = null;
+  if (email)
+    contact = await db.get(`SELECT * FROM contacts WHERE location_id = ? AND email = ? AND email != ''`, [
+      funnel.location_id,
+      email,
+    ]);
+  if (!contact && phone)
+    contact = await db.get(`SELECT * FROM contacts WHERE location_id = ? AND phone = ? AND phone != ''`, [
+      funnel.location_id,
+      phone,
+    ]);
   let isNew = false;
   if (!contact) {
-    const info = db
-      .prepare(
-        `INSERT INTO contacts (location_id, first_name, last_name, email, phone, source)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(funnel.location_id, data.first_name || '', data.last_name || '', email, phone, `funnel:${funnel.slug}`);
-    contact = db.prepare('SELECT * FROM contacts WHERE id = ?').get(info.lastInsertRowid);
+    const id = await db.insert(
+      `INSERT INTO contacts (location_id, first_name, last_name, email, phone, source)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [funnel.location_id, data.first_name || '', data.last_name || '', email, phone, `funnel:${funnel.slug}`]
+    );
+    contact = await db.get('SELECT * FROM contacts WHERE id = ?', [id]);
     isNew = true;
   }
 
   // Tag from the form block config, if set.
   const formBlock = JSON.parse(page.content || '[]').find((b) => b.type === 'form');
   if (formBlock && formBlock.tag) {
-    db.prepare('INSERT OR IGNORE INTO contact_tags (contact_id, tag) VALUES (?, ?)').run(contact.id, formBlock.tag);
+    await db.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [
+      contact.id,
+      formBlock.tag,
+    ]);
   }
 
-  db.prepare(
-    'INSERT INTO form_submissions (location_id, funnel_page_id, contact_id, data) VALUES (?, ?, ?, ?)'
-  ).run(funnel.location_id, page.id, contact.id, JSON.stringify(data));
+  await db.run('INSERT INTO form_submissions (location_id, funnel_page_id, contact_id, data) VALUES (?, ?, ?, ?)', [
+    funnel.location_id,
+    page.id,
+    contact.id,
+    JSON.stringify(data),
+  ]);
 
-  automation.logActivity(funnel.location_id, contact.id, 'form', `Submitted form on "${page.name}" (${funnel.name})`);
-  if (isNew) automation.trigger(funnel.location_id, 'contact_created', contact);
-  automation.trigger(funnel.location_id, 'form_submitted', contact, { funnel_id: funnel.id });
-  if (formBlock && formBlock.tag) automation.trigger(funnel.location_id, 'tag_added', contact, { tag: formBlock.tag });
+  await automation.logActivity(funnel.location_id, contact.id, 'form', `Submitted form on "${page.name}" (${funnel.name})`);
+  if (isNew) await automation.trigger(funnel.location_id, 'contact_created', contact);
+  await automation.trigger(funnel.location_id, 'form_submitted', contact, { funnel_id: funnel.id });
+  if (formBlock && formBlock.tag)
+    await automation.trigger(funnel.location_id, 'tag_added', contact, { tag: formBlock.tag });
 
   res.status(201).json({ ok: true });
 });
 
 // ---- Public booking widget ----
-router.get('/book/:slug', (req, res) => {
-  const calendar = db.prepare('SELECT * FROM calendars WHERE slug = ?').get(req.params.slug);
+router.get('/book/:slug', async (req, res) => {
+  const calendar = await db.get('SELECT * FROM calendars WHERE slug = ?', [req.params.slug]);
   if (!calendar) return res.status(404).send('Calendar not found');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Book: ${esc(calendar.name)}</title>
@@ -194,8 +207,8 @@ return false;}
   res.send(html);
 });
 
-router.post('/book/:slug', (req, res) => {
-  const calendar = db.prepare('SELECT * FROM calendars WHERE slug = ?').get(req.params.slug);
+router.post('/book/:slug', async (req, res) => {
+  const calendar = await db.get('SELECT * FROM calendars WHERE slug = ?', [req.params.slug]);
   if (!calendar) return res.status(404).json({ error: 'Calendar not found' });
   const { name, email, phone, date, time } = req.body || {};
   if (!name || !email || !date || !time)
@@ -206,35 +219,38 @@ router.post('/book/:slug', (req, res) => {
     .toISOString()
     .slice(0, 19);
 
-  const clash = db
-    .prepare('SELECT id FROM appointments WHERE calendar_id = ? AND starts_at = ? AND status != ?')
-    .get(calendar.id, startsAt, 'cancelled');
+  const clash = await db.get('SELECT id FROM appointments WHERE calendar_id = ? AND starts_at = ? AND status != ?', [
+    calendar.id,
+    startsAt,
+    'cancelled',
+  ]);
   if (clash) return res.status(409).json({ error: 'That slot is already taken, pick another time.' });
 
-  let contact = db
-    .prepare('SELECT * FROM contacts WHERE location_id = ? AND email = ?')
-    .get(calendar.location_id, email);
+  let contact = await db.get('SELECT * FROM contacts WHERE location_id = ? AND email = ?', [
+    calendar.location_id,
+    email,
+  ]);
   let isNew = false;
   if (!contact) {
     const [first, ...rest] = String(name).split(' ');
-    const info = db
-      .prepare(
-        `INSERT INTO contacts (location_id, first_name, last_name, email, phone, source)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(calendar.location_id, first, rest.join(' '), email, phone || '', `booking:${calendar.slug}`);
-    contact = db.prepare('SELECT * FROM contacts WHERE id = ?').get(info.lastInsertRowid);
+    const id = await db.insert(
+      `INSERT INTO contacts (location_id, first_name, last_name, email, phone, source)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [calendar.location_id, first, rest.join(' '), email, phone || '', `booking:${calendar.slug}`]
+    );
+    contact = await db.get('SELECT * FROM contacts WHERE id = ?', [id]);
     isNew = true;
   }
 
-  db.prepare(
+  await db.run(
     `INSERT INTO appointments (location_id, calendar_id, contact_id, title, starts_at, ends_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(calendar.location_id, calendar.id, contact.id, `${calendar.name} with ${name}`, startsAt, endsAt);
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [calendar.location_id, calendar.id, contact.id, `${calendar.name} with ${name}`, startsAt, endsAt]
+  );
 
-  automation.logActivity(calendar.location_id, contact.id, 'appointment', `Booked "${calendar.name}" for ${startsAt}`);
-  if (isNew) automation.trigger(calendar.location_id, 'contact_created', contact);
-  automation.trigger(calendar.location_id, 'appointment_booked', contact, { calendar_id: calendar.id });
+  await automation.logActivity(calendar.location_id, contact.id, 'appointment', `Booked "${calendar.name}" for ${startsAt}`);
+  if (isNew) await automation.trigger(calendar.location_id, 'contact_created', contact);
+  await automation.trigger(calendar.location_id, 'appointment_booked', contact, { calendar_id: calendar.id });
 
   res.status(201).json({ ok: true });
 });

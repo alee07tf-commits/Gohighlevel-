@@ -7,13 +7,14 @@
   "scripts": {
     "start": "node server/index.js",
     "seed": "node server/seed.js",
-    "test": "node --test tests/api.test.js"
+    "test": "NODE_ENV=test node --test tests/api.test.js"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.3",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.6.0",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "supertest": "^7.2.0"

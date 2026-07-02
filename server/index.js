@@ -1,6 +1,16 @@
 const express = require('express');
 const path = require('path');
-require('./db'); // initialize schema
+require('./db'); // initialize schema (async; queries await readiness)
+
+// Demo-mode seeding: on Vercel WITHOUT a DATABASE_URL the embedded database
+// lives in /tmp and resets on cold starts, so re-seed the demo agency there.
+// With Supabase/Postgres connected, data is persistent and seeding is opt-in
+// via AUTO_SEED=1.
+if ((process.env.VERCEL && !process.env.DATABASE_URL) || process.env.AUTO_SEED) {
+  require('./demo-seed')
+    .seedDemo()
+    .catch((err) => console.error('Auto-seed failed:', err));
+}
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));

@@ -1,33 +1,32 @@
-const Database = require('better-sqlite3');
+// Database layer — Postgres everywhere:
+//  - DATABASE_URL set (Supabase or any Postgres) → node-postgres pool.
+//  - No DATABASE_URL → embedded PGlite (zero-config Postgres for local dev,
+//    tests, and ephemeral demo deploys).
+//
+// API (all async): db.all(sql, params) → rows · db.get → first row
+// db.run → {changes} · db.insert → new id (appends RETURNING id)
+// db.tx(fn) → fn receives the same API inside a transaction.
+// SQL uses `?` placeholders; they are rewritten to $1..$n automatically.
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'leadflow.db');
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-db.exec(`
+const SCHEMA = `
 CREATE TABLE IF NOT EXISTS agencies (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   agency_id INTEGER NOT NULL REFERENCES agencies(id),
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('admin','member')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS locations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   agency_id INTEGER NOT NULL REFERENCES agencies(id),
   name TEXT NOT NULL,
   company TEXT DEFAULT '',
@@ -35,11 +34,10 @@ CREATE TABLE IF NOT EXISTS locations (
   email TEXT DEFAULT '',
   website TEXT DEFAULT '',
   timezone TEXT DEFAULT 'UTC',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS contacts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   first_name TEXT NOT NULL DEFAULT '',
   last_name TEXT DEFAULT '',
@@ -48,65 +46,58 @@ CREATE TABLE IF NOT EXISTS contacts (
   source TEXT DEFAULT 'manual',
   dnd INTEGER NOT NULL DEFAULT 0,
   custom_fields TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_contacts_location ON contacts(location_id);
-
 CREATE TABLE IF NOT EXISTS contact_tags (
   contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
   tag TEXT NOT NULL,
   PRIMARY KEY (contact_id, tag)
 );
-
 CREATE TABLE IF NOT EXISTS notes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
   user_id INTEGER REFERENCES users(id),
   body TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS activities (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
   type TEXT NOT NULL,
   description TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_activities_contact ON activities(contact_id);
-
 CREATE TABLE IF NOT EXISTS pipelines (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS stages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0
 );
-
 CREATE TABLE IF NOT EXISTS opportunities (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
   stage_id INTEGER NOT NULL REFERENCES stages(id),
   contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
-  value REAL NOT NULL DEFAULT 0,
+  value DOUBLE PRECISION NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','won','lost')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_opps_location ON opportunities(location_id);
-
 CREATE TABLE IF NOT EXISTS calendars (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
@@ -115,55 +106,50 @@ CREATE TABLE IF NOT EXISTS calendars (
   start_hour INTEGER NOT NULL DEFAULT 9,
   end_hour INTEGER NOT NULL DEFAULT 17,
   days TEXT NOT NULL DEFAULT '[1,2,3,4,5]',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS appointments (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   calendar_id INTEGER NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
   contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
-  starts_at TEXT NOT NULL,
-  ends_at TEXT NOT NULL,
+  starts_at TIMESTAMP NOT NULL,
+  ends_at TIMESTAMP NOT NULL,
   status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed','cancelled','completed','no_show')),
   notes TEXT DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_appts_location ON appointments(location_id);
-
 CREATE TABLE IF NOT EXISTS conversations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-  last_message_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_message_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   unread INTEGER NOT NULL DEFAULT 0,
   UNIQUE (location_id, contact_id)
 );
-
 CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   direction TEXT NOT NULL CHECK (direction IN ('inbound','outbound')),
   channel TEXT NOT NULL CHECK (channel IN ('sms','email','note')),
   subject TEXT DEFAULT '',
   body TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'sent',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
-
 CREATE TABLE IF NOT EXISTS email_templates (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   name TEXT NOT NULL,
   subject TEXT NOT NULL DEFAULT '',
   body TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS campaigns (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   name TEXT NOT NULL,
   channel TEXT NOT NULL DEFAULT 'email' CHECK (channel IN ('email','sms')),
@@ -171,54 +157,48 @@ CREATE TABLE IF NOT EXISTS campaigns (
   body TEXT NOT NULL DEFAULT '',
   tag_filter TEXT DEFAULT '',
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sent')),
-  sent_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS campaign_recipients (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'sent'
 );
-
 CREATE TABLE IF NOT EXISTS workflows (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   name TEXT NOT NULL,
   trigger_type TEXT NOT NULL,
   trigger_config TEXT NOT NULL DEFAULT '{}',
   active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS workflow_actions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
   position INTEGER NOT NULL DEFAULT 0,
   type TEXT NOT NULL,
   config TEXT NOT NULL DEFAULT '{}'
 );
-
 CREATE TABLE IF NOT EXISTS workflow_runs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
   contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'success',
   log TEXT NOT NULL DEFAULT '[]',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS funnels (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS funnel_pages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   funnel_id INTEGER NOT NULL REFERENCES funnels(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
@@ -227,15 +207,93 @@ CREATE TABLE IF NOT EXISTS funnel_pages (
   content TEXT NOT NULL DEFAULT '[]',
   UNIQUE (funnel_id, slug)
 );
-
 CREATE TABLE IF NOT EXISTS form_submissions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   funnel_page_id INTEGER REFERENCES funnel_pages(id) ON DELETE SET NULL,
   contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
   data TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-`);
+`;
 
-module.exports = db;
+// Rewrites `?` placeholders to Postgres $1..$n.
+function numbered(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+let raw; // (sql, params) => Promise<{rows, count}>
+let execRaw; // multi-statement DDL
+let txRaw; // (fn(rawInTx)) => Promise
+
+if (process.env.DATABASE_URL) {
+  const { Pool } = require('pg');
+  const url = process.env.DATABASE_URL;
+  const isLocal = /localhost|127\.0\.0\.1/.test(url);
+  const pool = new Pool({
+    connectionString: url,
+    ssl: isLocal || process.env.PGSSL === 'disable' ? undefined : { rejectUnauthorized: false },
+    max: Number(process.env.PG_POOL_MAX) || 5,
+  });
+  const wrap = (client) => async (sql, params = []) => {
+    const res = await client.query(sql, params);
+    return { rows: res.rows, count: res.rowCount || 0 };
+  };
+  raw = wrap(pool);
+  execRaw = (sql) => pool.query(sql);
+  txRaw = async (fn) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn(wrap(client));
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  };
+} else {
+  const { PGlite } = require('@electric-sql/pglite');
+  let dataDir;
+  if (process.env.NODE_ENV === 'test') dataDir = 'memory://';
+  else if (process.env.VERCEL) dataDir = '/tmp/leadflow-pglite';
+  else dataDir = process.env.PGLITE_DIR || path.join(__dirname, '..', 'data', 'pglite');
+  if (dataDir !== 'memory://') fs.mkdirSync(dataDir, { recursive: true });
+  const pglite = new PGlite(dataDir);
+  const wrap = (q) => async (sql, params = []) => {
+    const res = await q(sql, params);
+    return { rows: res.rows, count: res.affectedRows ?? res.rows.length };
+  };
+  raw = wrap((sql, params) => pglite.query(sql, params));
+  execRaw = (sql) => pglite.exec(sql);
+  txRaw = (fn) => pglite.transaction((t) => fn(wrap((sql, params) => t.query(sql, params))));
+}
+
+const ready = Promise.resolve().then(() => execRaw(SCHEMA));
+
+function makeApi(rawFn) {
+  return {
+    all: async (sql, params = []) => (await rawFn(numbered(sql), params)).rows,
+    get: async (sql, params = []) => (await rawFn(numbered(sql), params)).rows[0],
+    run: async (sql, params = []) => ({ changes: (await rawFn(numbered(sql), params)).count }),
+    insert: async (sql, params = []) => (await rawFn(numbered(sql) + ' RETURNING id', params)).rows[0].id,
+  };
+}
+
+const base = makeApi(async (sql, params) => {
+  await ready;
+  return raw(sql, params);
+});
+
+module.exports = {
+  ...base,
+  ready,
+  tx: async (fn) => {
+    await ready;
+    return txRaw((rawInTx) => fn(makeApi(rawInTx)));
+  },
+};

@@ -1,13 +1,8 @@
 const { test, before } = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
 
-// Isolated test database.
-process.env.DB_PATH = path.join(__dirname, 'test.db');
-for (const f of ['test.db', 'test.db-wal', 'test.db-shm']) {
-  try { fs.unlinkSync(path.join(__dirname, f)); } catch {}
-}
+// Isolated in-memory Postgres (PGlite) — see server/db.js.
+process.env.NODE_ENV = 'test';
 
 const request = require('supertest');
 const app = require('../server/index');
