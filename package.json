@@ -1,0 +1,21 @@
+{
+  "name": "leadflow",
+  "version": "1.0.0",
+  "description": "LeadFlow - All-in-one CRM & marketing platform for agencies (GoHighLevel-style)",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "seed": "node server/seed.js",
+    "test": "node --test tests/api.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.6.0",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "devDependencies": {
+    "supertest": "^7.2.0"
+  }
+}
