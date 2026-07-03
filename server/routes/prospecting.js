@@ -7,16 +7,20 @@ const automation = require('../services/automation');
 const router = express.Router();
 router.use(requireAuth, requireLocation);
 
-router.get('/status', (req, res) => res.json({ provider: prospecting.provider() }));
+router.get('/status', (req, res) =>
+  res.json({ provider: prospecting.provider(), ads_provider: prospecting.adsProvider() })
+);
 
 router.post('/search', async (req, res) => {
   const query = String(req.body?.query || '').trim();
   const filters = req.body?.filters || {};
-  const enrich = req.body?.enrich !== false; // ads/tech detection on by default
+  const enrich = req.body?.enrich !== false; // pixel/tech detection on by default
+  const liveAds = req.body?.live_ads === true; // real-time active-ads check (opt-in, slower)
   if (query.length < 3) return res.status(400).json({ error: 'Escribe qué buscar (ej: "dentistas en Madrid")' });
   try {
     const out = await prospecting.search(query);
     if (enrich) out.results = await prospecting.enrich(out.results);
+    if (liveAds) out.results = await prospecting.checkActiveAds(out.results);
     const total = out.results.length;
     out.results = prospecting.applyFilters(out.results, filters);
     out.total_before_filters = total;
@@ -82,6 +86,8 @@ router.post('/import', async (req, res) => {
           rating_google: p.rating != null ? String(p.rating) : '',
           resenas_google: String(p.reviews || ''),
           hace_anuncios: p.runs_ads === true ? 'sí' : p.runs_ads === false ? 'no' : 'desconocido',
+          anuncios_activos_ahora: p.active_ads === true ? 'sí' : p.active_ads === false ? 'no' : 'desconocido',
+          anuncios_meta_activos: p.meta_active_ads != null ? String(p.meta_active_ads) : '',
         }),
       ]
     );

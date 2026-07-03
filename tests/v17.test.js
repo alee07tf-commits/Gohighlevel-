@@ -261,3 +261,48 @@ test('prospecting search API: enriched results + server-side filters', async () 
     assert.ok(r.tech, 'tech detection attached');
   }
 });
+
+test('prospecting live ads: Meta Ad Library ACTIVE query + filters', async () => {
+  const prospecting = require('../server/services/prospecting');
+  // Deterministic demo mode drives ads_live without external calls.
+  const results = [
+    { name: 'Con Ads Activos', website: 'https://a.com', reviews: 30, demo: true },
+    { name: 'Sin Ads Activos', website: 'https://b.com', reviews: 30, demo: true },
+    { name: 'Otro Con Ads', website: '', reviews: 5, demo: true },
+  ];
+  await prospecting.checkActiveAds(results);
+  assert.ok(results.every((r) => r.ads_live === true), 'live flag set in demo mode');
+  assert.ok(typeof results[0].active_ads === 'boolean');
+
+  const active = prospecting.applyFilters(results, { active_ads: 'with' });
+  assert.ok(active.every((r) => r.active_ads === true));
+  const inactive = prospecting.applyFilters(results, { active_ads: 'without' });
+  assert.ok(inactive.every((r) => r.active_ads === false));
+});
+
+test('prospecting live ads: checkMetaActiveAds hits the ad_archive endpoint', async () => {
+  // Point the Meta client at a local stub emulating graph.facebook.com.
+  const stub = http.createServer((req, res) => {
+    assert.match(req.url, /ad_active_status=ACTIVE/);
+    assert.match(req.url, /search_terms=/);
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ data: [{ id: '1' }, { id: '2' }, { id: '3' }] }));
+  });
+  await new Promise((r) => stub.listen(0, r));
+  const port = stub.address().port;
+
+  // Temporarily rewire fetch to redirect graph.facebook.com → local stub.
+  process.env.META_AD_LIBRARY_TOKEN = 'test-token';
+  const realFetch = global.fetch;
+  global.fetch = (url, opts) =>
+    realFetch(String(url).replace('https://graph.facebook.com/v19.0', `http://127.0.0.1:${port}`), opts);
+  try {
+    const prospecting = require('../server/services/prospecting');
+    const count = await prospecting.checkMetaActiveAds('Clinica Test', 'ES');
+    assert.equal(count, 3, 'counts ACTIVE ads returned by the API');
+  } finally {
+    global.fetch = realFetch;
+    delete process.env.META_AD_LIBRARY_TOKEN;
+    stub.close();
+  }
+});

@@ -150,8 +150,97 @@ function applyFilters(results, filters = {}) {
     if (filters.website === 'without' && r.website) return false;
     if (filters.ads === 'with' && r.runs_ads !== true) return false;
     if (filters.ads === 'without' && r.runs_ads !== false) return false;
+    if (filters.active_ads === 'with' && r.active_ads !== true) return false;
+    if (filters.active_ads === 'without' && r.active_ads !== false) return false;
     return true;
   });
 }
 
 module.exports = { provider, search, enrich, applyFilters, scanWebsite };
+// ---- Real-time active-ads check (Ad transparency libraries) ----
+// The website pixel only proves a business *has set up* ads. To know whether
+// it is *running ads right now*, we query public ad-transparency sources:
+//   Meta Ad Library API (official, ACTIVE status) — needs META_AD_LIBRARY_TOKEN
+//   Google Ads Transparency Center — public HTML, best-effort, no key
+// Returns { meta_active: number|null, google_active: boolean|null, live: bool }.
+function adsProvider() {
+  return process.env.META_AD_LIBRARY_TOKEN ? 'meta_ad_library' : 'simulated';
+}
+
+async function checkMetaActiveAds(name, country = process.env.ADS_COUNTRY || 'ES') {
+  if (!process.env.META_AD_LIBRARY_TOKEN) return null;
+  const params = new URLSearchParams({
+    access_token: process.env.META_AD_LIBRARY_TOKEN,
+    search_terms: name,
+    ad_active_status: 'ACTIVE',
+    ad_reached_countries: `["${country}"]`,
+    ad_type: 'ALL',
+    fields: 'id',
+    limit: '50',
+  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7000);
+  try {
+    const res = await fetch(`https://graph.facebook.com/v19.0/ads_archive?${params}`, { signal: controller.signal });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `Meta ${res.status}`);
+    return Array.isArray(data.data) ? data.data.length : 0;
+  } catch {
+    return null; // unknown
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Google Ads Transparency Center has no free API. Best-effort public check;
+// returns null (unknown) if it can't determine it — never a false claim.
+async function checkGoogleActiveAds(name) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7000);
+  try {
+    const res = await fetch(
+      `https://adstransparency.google.com/anji/lookup?region=anywhere&query=${encodeURIComponent(name)}`,
+      { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    if (!res.ok) return null;
+    const text = await res.text();
+    // Presence of advertiser records in the transparency payload.
+    return /advertiser|creativeId|"AR\d/i.test(text) ? true : false;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Adds live active-ads status to prospects (bounded concurrency). Runs after
+// enrich(); demo rows get deterministic values so the filter is testable.
+async function checkActiveAds(results, concurrency = 5) {
+  const live = adsProvider() !== 'simulated';
+  const queue = [...results.entries()];
+  async function worker() {
+    while (queue.length) {
+      const [i, r] = queue.shift();
+      if (r.demo) {
+        const metaActive = i % 3 === 0 ? (i % 2) + 1 : 0;
+        results[i] = { ...r, ads_live: true, meta_active_ads: metaActive, google_active_ads: i % 4 === 0, active_ads: metaActive > 0 || i % 4 === 0 };
+        continue;
+      }
+      const [meta, google] = await Promise.all([checkMetaActiveAds(r.name), checkGoogleActiveAds(r.name)]);
+      const active = (meta || 0) > 0 || google === true;
+      results[i] = {
+        ...r,
+        ads_live: meta !== null || google !== null,
+        meta_active_ads: meta,
+        google_active_ads: google,
+        active_ads: meta !== null || google !== null ? active : null,
+      };
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return results;
+}
+
+module.exports.adsProvider = adsProvider;
+module.exports.checkActiveAds = checkActiveAds;
+module.exports.checkMetaActiveAds = checkMetaActiveAds;

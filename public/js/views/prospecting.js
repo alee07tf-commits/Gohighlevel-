@@ -9,6 +9,7 @@ export async function renderProspecting(view) {
   function currentFilters() {
     return {
       ads: view.querySelector('#f-ads')?.value || 'any',
+      active_ads: view.querySelector('#f-active')?.value || 'any',
       website: view.querySelector('#f-web')?.value || 'any',
       min_reviews: view.querySelector('#f-rmin')?.value || null,
       max_reviews: view.querySelector('#f-rmax')?.value || null,
@@ -26,6 +27,8 @@ export async function renderProspecting(view) {
       if (f.website === 'without' && r.website) return false;
       if (f.ads === 'with' && r.runs_ads !== true) return false;
       if (f.ads === 'without' && r.runs_ads !== false) return false;
+      if (f.active_ads === 'with' && r.active_ads !== true) return false;
+      if (f.active_ads === 'without' && r.active_ads !== false) return false;
       return true;
     });
     renderResults();
@@ -46,10 +49,15 @@ export async function renderProspecting(view) {
           onkeydown="if(event.key==='Enter')document.getElementById('psearch').click()">
         <button class="btn" id="psearch">🔎 Buscar y analizar</button>
       </div>
+      <label class="flex" style="margin-top:10px;font-size:12.5px"><input type="checkbox" id="live-ads">
+        <strong>Comprobar anuncios activos en tiempo real</strong> (consulta Meta Ad Library + Google Ads Transparency — más lento)</label>
       <div class="flex" style="margin-top:10px;flex-wrap:wrap">
-        <label class="field mb0" style="width:150px"><span class="label">📢 Anuncios</span>
+        <label class="field mb0" style="width:170px"><span class="label">📢 Píxel de anuncios</span>
           <select class="input" id="f-ads"><option value="any">Todos</option>
-          <option value="with">Hacen anuncios</option><option value="without">NO hacen anuncios 🎯</option></select></label>
+          <option value="with">Con píxel</option><option value="without">Sin píxel 🎯</option></select></label>
+        <label class="field mb0" style="width:190px"><span class="label">🔴 Anuncios activos AHORA</span>
+          <select class="input" id="f-active"><option value="any">Todos</option>
+          <option value="with">Corriendo anuncios</option><option value="without">Sin anuncios activos 🎯</option></select></label>
         <label class="field mb0" style="width:150px"><span class="label">🌐 Sitio web</span>
           <select class="input" id="f-web"><option value="any">Todos</option>
           <option value="with">Con web</option><option value="without">Sin web 🎯</option></select></label>
@@ -67,7 +75,7 @@ export async function renderProspecting(view) {
     <div id="presults"></div>`;
 
     view.querySelector('#psearch').addEventListener('click', doSearch);
-    ['f-ads', 'f-web', 'f-rmin', 'f-rmax', 'f-rating'].forEach((id) =>
+    ['f-ads', 'f-active', 'f-web', 'f-rmin', 'f-rmax', 'f-rating'].forEach((id) =>
       view.querySelector('#' + id).addEventListener('change', filterLocal)
     );
     renderResults();
@@ -89,7 +97,7 @@ export async function renderProspecting(view) {
         <label class="flex" style="font-weight:400;font-size:12px"><input type="checkbox" id="popp" checked> crear oportunidades</label>
         <button class="btn" id="pimport">⬇ Importar seleccionados</button>
       </div>
-      <table class="table"><thead><tr><th></th><th>Negocio</th><th>Teléfono</th><th>Web</th><th>📢 Anuncios</th><th>Google</th></tr></thead>
+      <table class="table"><thead><tr><th></th><th>Negocio</th><th>Teléfono</th><th>Web</th><th>📢 Píxel</th><th>🔴 Activos ahora</th><th>Google</th></tr></thead>
       <tbody>
         ${results
           .map(
@@ -105,6 +113,13 @@ export async function renderProspecting(view) {
                   : r.runs_ads === false
                     ? '<span class="badge red">no 🎯</span>'
                     : '<span class="badge gray">?</span>'
+              }</td>
+              <td>${
+                r.active_ads === true
+                  ? `<span class="badge green">🔴 EN VIVO</span>${r.meta_active_ads ? ` <span class="muted" style="font-size:10px">${r.meta_active_ads} en Meta</span>` : ''}`
+                  : r.active_ads === false
+                    ? '<span class="badge gray">no</span>'
+                    : '<span class="muted" style="font-size:11px">— activa la comprobación</span>'
               }</td>
               <td>${r.rating ? `⭐ ${r.rating} <span class="muted">(${r.reviews})</span>` : '<span class="muted">—</span>'}
                 ${r.maps_url ? ` <a href="${esc(r.maps_url)}" target="_blank">maps ↗</a>` : ''}</td>
@@ -147,9 +162,9 @@ export async function renderProspecting(view) {
     if (q.length < 3) return toast('Escribe qué buscar (ej: "dentistas en Madrid")', true);
     const btn = view.querySelector('#psearch');
     btn.disabled = true;
-    btn.textContent = 'Buscando y analizando webs…';
+    btn.textContent = view.querySelector('#live-ads').checked ? 'Buscando + comprobando anuncios activos…' : 'Buscando y analizando webs…';
     try {
-      const out = await api('/prospecting/search', { method: 'POST', body: { query: q, filters: {} } });
+      const out = await api('/prospecting/search', { method: 'POST', body: { query: q, filters: {}, live_ads: view.querySelector('#live-ads').checked } });
       allResults = out.results;
       filterLocal();
     } catch (err) {
