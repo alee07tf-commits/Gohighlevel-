@@ -39,7 +39,7 @@ export async function renderContacts(view, rest = []) {
           <tbody>${contacts
             .map(
               (c) => `<tr data-id="${c.id}">
-                <td><strong>${esc(fullName(c))}</strong></td>
+                <td><div class="flex" style="gap:9px"><span class="avatar soft">${initials(c)}</span><strong>${esc(fullName(c))}</strong></div></td>
                 <td>${esc(c.email)}</td><td>${esc(c.phone)}</td>
                 <td>${c.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</td>
                 <td><span class="badge gray">${esc(c.source)}</span></td>

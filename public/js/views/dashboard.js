@@ -8,9 +8,25 @@ export async function renderDashboard(view) {
   const s = data.stats;
 
   view.innerHTML = `
+  <div class="page-greeting">${esc(window.__greeting || 'Hola')} — ${s.unread_conversations > 0 ? `${s.unread_conversations} conversación(es) sin leer` : 'todo al día'} · ${s.upcoming_appointments} cita(s) próximas</div>
   <div class="page-header"><h1>Dashboard</h1>
     <div class="spacer"></div>
     <button class="btn secondary" id="report-btn">📊 Informe del cliente</button>
+  </div>
+  <div class="hero-banner">
+    <div class="hb-label">◎ Pipeline abierto</div>
+    <div class="hb-value">${fmtMoney(s.pipeline_value)}</div>
+    <div class="hb-sub">${s.open_opportunities} oportunidades abiertas en el pipeline</div>
+    <div class="hb-badges">
+      <span class="hb-badge">↗ +${s.contacts_this_week} contactos esta semana</span>
+      <span class="hb-badge">📩 ${s.form_submissions_week} formularios (7 días)</span>
+    </div>
+    <div class="hb-cards">
+      <div class="hb-card"><div class="l">Ganado</div><div class="v">${fmtMoney(s.won_value)}</div><div class="s">oportunidades cerradas</div></div>
+      <div class="hb-card"><div class="l">Contactos</div><div class="v">${s.contacts}</div><div class="s">en esta sub-cuenta</div></div>
+      <div class="hb-card"><div class="l">Citas próximas</div><div class="v">${s.upcoming_appointments}</div><div class="s">confirmadas</div></div>
+      <div class="hb-card"><div class="l">Sin leer</div><div class="v">${s.unread_conversations}</div><div class="s">conversaciones</div></div>
+    </div>
   </div>
   ${
     data.hotLeads?.length
@@ -26,16 +42,10 @@ export async function renderDashboard(view) {
           </div></div></div>`
       : ''
   }
-  <div class="stats-grid">
-    <div class="stat"><div class="stat-label">Contacts</div><div class="stat-value">${s.contacts}</div>
-      <div class="stat-sub">+${s.contacts_this_week} this week</div></div>
-    <div class="stat"><div class="stat-label">Pipeline Value</div><div class="stat-value">${fmtMoney(s.pipeline_value)}</div>
-      <div class="stat-sub">${s.open_opportunities} open deals</div></div>
-    <div class="stat"><div class="stat-label">Revenue Won</div><div class="stat-value">${fmtMoney(s.won_value)}</div></div>
-    <div class="stat"><div class="stat-label">Upcoming Appointments</div><div class="stat-value">${s.upcoming_appointments}</div></div>
-    <div class="stat"><div class="stat-label">Unread Conversations</div><div class="stat-value">${s.unread_conversations}</div></div>
-    <div class="stat"><div class="stat-label">Form Submissions</div><div class="stat-value">${s.form_submissions_week}</div>
-      <div class="stat-sub">last 7 days</div></div>
+  <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <div class="stat"><div class="stat-label">Contactos nuevos (7 días)</div><div class="stat-value">${s.contacts_this_week}</div></div>
+    <div class="stat"><div class="stat-label">Formularios (7 días)</div><div class="stat-value">${s.form_submissions_week}</div></div>
+    <div class="stat"><div class="stat-label">Oportunidades abiertas</div><div class="stat-value">${s.open_opportunities}</div></div>
   </div>
   <div class="grid-2">
     <div class="card">
