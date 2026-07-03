@@ -533,4 +533,30 @@ router.post('/review/:token', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Trigger links (/l/<slug>?c=<contactId>) ----
+// Counts the click, optionally tags the contact (firing tag automations),
+// then redirects to the target URL.
+router.get('/l/:slug', async (req, res) => {
+  const link = await db.get('SELECT * FROM trigger_links WHERE slug = ?', [req.params.slug]);
+  if (!link) return res.status(404).send('Link not found');
+  await db.run('UPDATE trigger_links SET clicks = clicks + 1 WHERE id = ?', [link.id]);
+  const contactId = Number(req.query.c);
+  if (contactId) {
+    const contact = await db.get('SELECT * FROM contacts WHERE id = ? AND location_id = ?', [
+      contactId,
+      link.location_id,
+    ]);
+    if (contact) {
+      await automation.logActivity(link.location_id, contact.id, 'note', `Clicked trigger link "${link.name}"`);
+      if (link.tag) {
+        const info = await db.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [
+          contact.id, link.tag,
+        ]);
+        if (info.changes) await automation.trigger(link.location_id, 'tag_added', contact, { tag: link.tag });
+      }
+    }
+  }
+  res.redirect(link.target_url);
+});
+
 module.exports = router;

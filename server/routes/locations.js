@@ -32,11 +32,12 @@ router.put('/:id', async (req, res) => {
   await db.run(
     `UPDATE locations SET name=?, company=?, phone=?, email=?, website=?, timezone=?,
      brand_color=?, logo_url=?, review_link_google=?, review_link_facebook=?,
-     briefing_enabled=?, briefing_hour=?, briefing_email=? WHERE id=?`,
+     briefing_enabled=?, briefing_hour=?, briefing_email=?, ai_agent_enabled=?, ai_agent_prompt=? WHERE id=?`,
     [
       m.name, m.company, m.phone, m.email, m.website, m.timezone,
       m.brand_color || '#4f46e5', m.logo_url || '', m.review_link_google || '', m.review_link_facebook || '',
       m.briefing_enabled ? 1 : 0, Number(m.briefing_hour) || 8, m.briefing_email || '',
+      m.ai_agent_enabled ? 1 : 0, m.ai_agent_prompt || '',
       loc.id,
     ]
   );

@@ -34,14 +34,19 @@ async function recordMessage({ locationId, contactId, direction, channel, subjec
   return db.get('SELECT * FROM messages WHERE id = ?', [id]);
 }
 
-// Replaces {{first_name}}, {{last_name}}, {{email}}, {{phone}} merge fields.
+// Replaces {{first_name}}, {{last_name}}, {{email}}, {{phone}} and custom
+// field merge tokens. {{link:slug}} expands to a per-contact trigger link.
 function mergeFields(text, contact) {
   if (!text) return '';
-  return text
+  let out = text
     .replaceAll('{{first_name}}', contact.first_name || '')
     .replaceAll('{{last_name}}', contact.last_name || '')
     .replaceAll('{{email}}', contact.email || '')
     .replaceAll('{{phone}}', contact.phone || '');
+  const custom = (() => { try { return JSON.parse(contact.custom_fields || '{}'); } catch { return {}; } })();
+  out = out.replace(/\{\{link:([a-z0-9-]+)\}\}/g, (_, slug) => `${process.env.APP_URL || ''}/l/${slug}?c=${contact.id}`);
+  out = out.replace(/\{\{([a-z0-9_]+)\}\}/g, (m, key) => (custom[key] !== undefined ? String(custom[key]) : m));
+  return out;
 }
 
 async function deliveryStatus(result) {
@@ -107,6 +112,12 @@ async function sendWhatsapp(locationId, contact, body) {
 async function sendByChannel(channel, locationId, contact, { subject = '', body }) {
   if (channel === 'email') return sendEmail(locationId, contact, subject, body);
   if (channel === 'whatsapp') return sendWhatsapp(locationId, contact, body);
+  if (channel === 'chat')
+    // Web chat lives in our own widget — no external provider, just the inbox.
+    return recordMessage({
+      locationId, contactId: contact.id, direction: 'outbound', channel: 'chat',
+      body: mergeFields(body, contact),
+    });
   return sendSms(locationId, contact, body);
 }
 

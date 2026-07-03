@@ -300,6 +300,30 @@ ALTER TABLE locations ADD COLUMN IF NOT EXISTS briefing_hour INTEGER NOT NULL DE
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS briefing_email TEXT DEFAULT '';
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id);
 ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'clean';
+
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS ai_agent_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS ai_agent_prompt TEXT DEFAULT '';
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ai_paused INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS public_token TEXT;
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_channel_check;
+ALTER TABLE messages ADD CONSTRAINT messages_channel_check CHECK (channel IN ('sms','email','whatsapp','chat','note'));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_public_token ON conversations(public_token) WHERE public_token IS NOT NULL;
+CREATE TABLE IF NOT EXISTS smart_lists (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  name TEXT NOT NULL,
+  filters TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS trigger_links (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  target_url TEXT NOT NULL,
+  tag TEXT DEFAULT '',
+  clicks INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -372,7 +396,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 let readyPromise = null;
 function ensureReady() {

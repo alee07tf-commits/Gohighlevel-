@@ -237,4 +237,84 @@ router.get('/meta/tags', async (req, res) => {
   );
 });
 
+// ---- Smart lists (saved filters) ----
+router.get('/meta/smart-lists', async (req, res) => {
+  const lists = await db.all('SELECT * FROM smart_lists WHERE location_id = ? ORDER BY id', [req.location.id]);
+  res.json(lists.map((l) => ({ ...l, filters: JSON.parse(l.filters || '{}') })));
+});
+
+router.post('/meta/smart-lists', async (req, res) => {
+  const { name, filters } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  const id = await db.insert('INSERT INTO smart_lists (location_id, name, filters) VALUES (?, ?, ?)', [
+    req.location.id, name, JSON.stringify(filters || {}),
+  ]);
+  res.status(201).json(await db.get('SELECT * FROM smart_lists WHERE id = ?', [id]));
+});
+
+router.delete('/meta/smart-lists/:id', async (req, res) => {
+  const info = await db.run('DELETE FROM smart_lists WHERE id = ? AND location_id = ?', [req.params.id, req.location.id]);
+  if (!info.changes) return res.status(404).json({ error: 'List not found' });
+  res.json({ ok: true });
+});
+
+// ---- Duplicate detection & merge ----
+router.get('/meta/duplicates', async (req, res) => {
+  const byEmail = await db.all(
+    `SELECT email AS value, 'email' AS kind, array_agg(id ORDER BY id) AS ids
+     FROM contacts WHERE location_id = ? AND email != '' GROUP BY email HAVING COUNT(*) > 1`,
+    [req.location.id]
+  );
+  const byPhone = await db.all(
+    `SELECT phone AS value, 'phone' AS kind, array_agg(id ORDER BY id) AS ids
+     FROM contacts WHERE location_id = ? AND phone != '' GROUP BY phone HAVING COUNT(*) > 1`,
+    [req.location.id]
+  );
+  const groups = [...byEmail, ...byPhone];
+  const detailed = [];
+  for (const g of groups) {
+    const rows = await db.all(`SELECT id, first_name, last_name, email, phone, source, created_at FROM contacts WHERE id = ANY(?)`, [g.ids]);
+    detailed.push({ kind: g.kind, value: g.value, contacts: rows });
+  }
+  res.json(detailed);
+});
+
+// Merge `merge_id` into `keep_id`: children move over, tags union, then the
+// duplicate is deleted.
+router.post('/merge', async (req, res) => {
+  const { keep_id, merge_id } = req.body || {};
+  if (!keep_id || !merge_id || keep_id === merge_id) return res.status(400).json({ error: 'keep_id and merge_id required' });
+  const keep = await db.get('SELECT * FROM contacts WHERE id = ? AND location_id = ?', [keep_id, req.location.id]);
+  const dup = await db.get('SELECT * FROM contacts WHERE id = ? AND location_id = ?', [merge_id, req.location.id]);
+  if (!keep || !dup) return res.status(404).json({ error: 'Contact not found' });
+
+  await db.tx(async (t) => {
+    for (const table of ['notes', 'activities', 'opportunities', 'appointments', 'form_submissions', 'review_requests', 'tasks', 'invoices', 'campaign_recipients', 'workflow_runs']) {
+      await t.run(`UPDATE ${table} SET contact_id = ? WHERE contact_id = ?`, [keep.id, dup.id]);
+    }
+    const dupTags = await t.all('SELECT tag FROM contact_tags WHERE contact_id = ?', [dup.id]);
+    for (const r of dupTags) {
+      await t.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [keep.id, r.tag]);
+    }
+    const keepConv = await t.get('SELECT * FROM conversations WHERE location_id = ? AND contact_id = ?', [req.location.id, keep.id]);
+    const dupConv = await t.get('SELECT * FROM conversations WHERE location_id = ? AND contact_id = ?', [req.location.id, dup.id]);
+    if (dupConv && !keepConv) {
+      await t.run('UPDATE conversations SET contact_id = ? WHERE id = ?', [keep.id, dupConv.id]);
+    } else if (dupConv && keepConv) {
+      await t.run('UPDATE messages SET conversation_id = ? WHERE conversation_id = ?', [keepConv.id, dupConv.id]);
+      await t.run('DELETE FROM conversations WHERE id = ?', [dupConv.id]);
+    }
+    // Fill gaps in the kept contact from the duplicate.
+    await t.run(
+      `UPDATE contacts SET email = CASE WHEN email = '' THEN ? ELSE email END,
+        phone = CASE WHEN phone = '' THEN ? ELSE phone END,
+        last_name = CASE WHEN last_name = '' THEN ? ELSE last_name END WHERE id = ?`,
+      [dup.email, dup.phone, dup.last_name, keep.id]
+    );
+    await t.run('DELETE FROM contacts WHERE id = ?', [dup.id]);
+  });
+  await automation.logActivity(req.location.id, keep.id, 'note', `Merged duplicate contact #${dup.id}`);
+  res.json({ ok: true });
+});
+
 module.exports = router;

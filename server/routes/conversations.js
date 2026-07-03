@@ -72,4 +72,10 @@ router.post('/:id/simulate-inbound', getConversation, async (req, res) => {
   res.status(201).json(message);
 });
 
+// Pause/resume the AI agent for one conversation (human takeover).
+router.put('/:id/ai', getConversation, async (req, res) => {
+  await db.run('UPDATE conversations SET ai_paused = ? WHERE id = ?', [req.body?.paused ? 1 : 0, req.conversation.id]);
+  res.json({ ok: true, ai_paused: req.body?.paused ? 1 : 0 });
+});
+
 module.exports = router;

@@ -45,7 +45,8 @@ async function renderThread(threadEl, conv) {
     <div class="thread-head">
       <span class="avatar">${initials(conv)}</span> ${esc(fullName(conv))}
       <span class="muted" style="font-weight:400;font-size:12px">${esc(conv.email || conv.phone || '')}</span>
-      <a class="right" href="#/contacts/${conv.contact_id}">View contact →</a>
+      <button class="btn secondary small right" id="ai-toggle">${conv.ai_paused ? '▶ Reactivar IA' : '🤖 IA activa — pausar'}</button>
+      <a href="#/contacts/${conv.contact_id}">Ver contacto →</a>
     </div>
     <div class="thread-msgs" id="msgs">
       ${messages
@@ -58,7 +59,7 @@ async function renderThread(threadEl, conv) {
     </div>
     <form class="thread-compose" id="compose">
       <select class="input" name="channel" style="width:120px">
-        <option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option>
+        ${['sms', 'whatsapp', 'email', 'chat'].map((c) => `<option value="${c}" ${(conv.last_channel || 'sms') === c ? 'selected' : ''}>${c.toUpperCase()}</option>`).join('')}
       </select>
       <textarea class="input" name="body" rows="2" placeholder="Type a message… ({{first_name}} works here too)" required></textarea>
       <button class="btn">Send</button>
@@ -66,6 +67,13 @@ async function renderThread(threadEl, conv) {
 
   const msgs = threadEl.querySelector('#msgs');
   msgs.scrollTop = msgs.scrollHeight;
+
+  threadEl.querySelector('#ai-toggle').addEventListener('click', async () => {
+    const res = await api(`/conversations/${conv.id}/ai`, { method: 'PUT', body: { paused: !conv.ai_paused } });
+    conv.ai_paused = res.ai_paused;
+    toast(conv.ai_paused ? 'IA pausada — tomas tú la conversación' : 'IA reactivada');
+    renderThread(threadEl, conv);
+  });
 
   threadEl.querySelector('#compose').addEventListener('submit', async (e) => {
     e.preventDefault();

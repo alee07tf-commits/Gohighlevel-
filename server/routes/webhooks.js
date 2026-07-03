@@ -43,6 +43,25 @@ router.post('/twilio/:locationId', express.urlencoded({ extended: false }), asyn
   await automation.logActivity(location.id, contact.id, 'note', `Inbound ${isWhatsapp ? 'WhatsApp' : 'SMS'} received`);
   await automation.trigger(location.id, 'message_received', contact, {});
 
+  // Conversation AI: auto-reply on the same channel when enabled.
+  if (location.ai_agent_enabled) {
+    const conv = await db.get('SELECT * FROM conversations WHERE location_id = ? AND contact_id = ?', [
+      location.id, contact.id,
+    ]);
+    if (conv && !conv.ai_paused) {
+      try {
+        const agent = require('../services/agent');
+        const { reply } = await agent.respond({ location, contact, conversationId: conv.id, inbound: body });
+        if (reply) {
+          if (isWhatsapp) await messaging.sendWhatsapp(location.id, contact, reply);
+          else await messaging.sendSms(location.id, contact, reply);
+        }
+      } catch (err) {
+        console.error('agent error:', err.message);
+      }
+    }
+  }
+
   // Twilio expects TwiML; empty response = no auto-reply.
   res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
 });

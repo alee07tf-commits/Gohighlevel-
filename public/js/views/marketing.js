@@ -2,10 +2,11 @@ import { api } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast, fmtDate } from '../ui.js';
 
 export async function renderMarketing(view) {
-  const [templates, campaigns, tags] = await Promise.all([
+  const [templates, campaigns, tags, links] = await Promise.all([
     api('/marketing/templates'),
     api('/marketing/campaigns'),
     api('/contacts/meta/tags'),
+    api('/marketing/links'),
   ]);
 
   view.innerHTML = `
@@ -60,6 +61,35 @@ export async function renderMarketing(view) {
         }
       </div>
     </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">🔗 Trigger Links (con QR)</div>
+    <div class="card-body">
+      <p class="muted" style="font-size:12px;margin-bottom:10px">Enlaces con seguimiento: cuentan clics, etiquetan al contacto (disparando automatizaciones) y redirigen. En mensajes usa <code class="inline">{{link:slug}}</code> para personalizarlo por contacto.</p>
+      <div class="flex" style="margin-bottom:12px">
+        <input class="input" id="tl-name" placeholder="Nombre (ej. Promo Junio)">
+        <input class="input" id="tl-url" placeholder="https://destino.com/oferta" style="flex:2">
+        <input class="input" id="tl-tag" placeholder="tag (opcional)" style="width:130px">
+        <button class="btn secondary" id="tl-add">+ Crear</button>
+      </div>
+      ${
+        links.length
+          ? `<table class="table"><thead><tr><th>Nombre</th><th>Link</th><th>Tag</th><th>Clics</th><th>QR</th><th></th></tr></thead><tbody>
+            ${links
+              .map(
+                (l) => `<tr>
+                  <td><strong>${esc(l.name)}</strong></td>
+                  <td><code class="inline">/l/${esc(l.slug)}</code></td>
+                  <td>${l.tag ? `<span class="tag">${esc(l.tag)}</span>` : '<span class="muted">—</span>'}</td>
+                  <td><span class="badge indigo">${l.clicks}</span></td>
+                  <td><a href="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(location.origin + '/l/' + l.slug)}" target="_blank" class="btn secondary small">QR ↗</a></td>
+                  <td><button class="btn ghost small tl-del" data-id="${l.id}">✕</button></td>
+                </tr>`
+              )
+              .join('')}</tbody></table>`
+          : '<p class="muted">Sin trigger links aún.</p>'
+      }
+    </div>
   </div>`;
 
   function templateModal(tpl = null) {
@@ -88,6 +118,23 @@ export async function renderMarketing(view) {
     });
   }
 
+  view.querySelector('#tl-add').addEventListener('click', async () => {
+    const name = view.querySelector('#tl-name').value.trim();
+    const target_url = view.querySelector('#tl-url').value.trim();
+    if (!name || !target_url) return toast('Nombre y URL de destino requeridos', true);
+    try {
+      await api('/marketing/links', { method: 'POST', body: { name, target_url, tag: view.querySelector('#tl-tag').value.trim() } });
+      toast('Trigger link creado');
+      renderMarketing(view);
+    } catch (err) { toast(err.message, true); }
+  });
+  view.querySelectorAll('.tl-del').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar link?')) return;
+      await api(`/marketing/links/${b.dataset.id}`, { method: 'DELETE' });
+      renderMarketing(view);
+    })
+  );
   view.querySelector('#new-template').addEventListener('click', () => templateModal());
   view.querySelectorAll('.edit-tpl').forEach((b) =>
     b.addEventListener('click', () => templateModal(templates.find((t) => t.id === Number(b.dataset.id))))

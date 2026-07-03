@@ -11,10 +11,10 @@
 | **1. CRM y contactos** | Contactos ilimitados, tags, notas, timeline unificado, lead source tracking automático (funnel/booking/whatsapp-inbound/manual), import/export CSV, **custom fields con UI y merge fields**, **owner/responsable por contacto**, DND, **lead scoring** con alerta de leads calientes. |
 | **2. Pipelines** | Pipelines ilimitados, etapas custom, kanban drag & drop, valores, won/lost, movimientos disparan automatizaciones. |
 | **3. Automatizaciones** | 8 triggers (contacto, tag, formulario, cita, etapa, mensaje recibido, **factura pagada**, **estado de cita**), 11 acciones (tags, email, SMS, WhatsApp, nota, oportunidad, **espera temporal**, **rama if/else**, **crear tarea**, **pedir reseña**), historial de ejecuciones, **biblioteca de 6 recetas instalables con un clic** (nurture, no-show recovery, reseña post-cita, agradecimiento post-pago, lead que responde, reactivación 30 días). |
-| **4. Comunicación multicanal** | Inbox unificado email + SMS + WhatsApp por contacto, webhook entrante de Twilio, merge fields, campañas segmentadas por tag, recordatorios de cita automáticos. Conectores listos: **Resend/SendGrid (email), Twilio (SMS/WhatsApp)** — se activan con las claves. |
+| **4. Comunicación multicanal** | Inbox unificado email + SMS + WhatsApp + **chat web** por contacto, **widget de chat embebible** en cualquier web (1 línea de código), webhook entrante de Twilio, merge fields, campañas segmentadas por tag, recordatorios de cita automáticos. Conectores listos: **Resend/SendGrid (email), Twilio (SMS/WhatsApp)** — se activan con las claves. |
 | **5. Funnels y formularios** | Builder por bloques (hero/texto/features/form), publicación pública, captura → CRM + tag + automatizaciones, submissions, **branding por sub-cuenta (color + logo)** en todas las páginas públicas. |
 | **6. Calendarios** | Calendarios de reserva, página pública de auto-agendado, anti-doble-reserva, estados (completada/no-show → disparan workflows), recordatorios pre-cita programados. |
-| **7. IA** | **Content AI** (redacción de emails/SMS/copy) con Claude — conector listo, se activa con `ANTHROPIC_API_KEY`. |
+| **7. IA** | **Content AI** (redacción con Claude) + **Claude design** (landing pages completas generadas y editables) + **Conversation AI**: chatbot en widget/SMS/WhatsApp que responde con el contexto del negocio y **agenda citas solo**, con pausa por conversación (human takeover) y modo guiado sin clave. |
 | **8. Reputación** | Solicitudes de reseña por SMS/WhatsApp/email (manual + acción de workflow), **página pública con filtro**: 4-5★ → tu link de Google, 1-3★ → feedback privado, métricas (nota media, promotores, detractores). |
 | **11. Pagos** | **Facturas con líneas**, link de pago público con marca, **text-to-pay** (envío por SMS/WhatsApp/email), **Stripe Checkout** (conector listo, con modo prueba integrado), webhook de confirmación, marcar cobrada manual, trigger `invoice_paid`, métricas cobrado/pendiente. |
 | **12. Agencia/SaaS** | Sub-cuentas ilimitadas bajo una agencia, selector, aislamiento total, equipo admin/member, **Snapshots** (exportar/importar configuración completa de sub-cuenta en JSON). |
@@ -24,19 +24,15 @@
 ## ❌ Pendiente, por dificultad
 
 **🟢 Fácil**
-- Trigger links (enlaces que disparan automatizaciones al clic) y códigos QR
 - Triggers extra: "Payment Failed", "Review Received", "Form Partially Completed"
-- Duplicados: detección/merge de contactos
 - Plantillas de funnels por vertical (contenido)
 - Presupuestos/estimates (variante de factura)
 
 **🟡 Media**
-- Smart Lists (filtros complejos guardados)
 - Secuencias drip multi-paso en campañas (usa el scheduler ya existente)
 - A/B testing de emails y validación de emails
 - Suscripciones/pagos recurrentes (Stripe Billing)
 - Cupones y mini-tienda de productos en funnels
-- Widget de chat web embebible
 - Round-robin y reservas grupales en calendarios
 - Permisos granulares + asignación usuario↔sub-cuenta
 - Missed-call text-back (necesita Twilio Voice webhooks)
@@ -48,7 +44,6 @@
 - Builder drag & drop libre estilo ClickFunnels (alternativa: GrapesJS 🟡) + order bumps/upsells
 - Sincronización Google/Outlook Calendar bidireccional
 - Dominios custom por sub-cuenta/funnel
-- Conversation AI (chatbot que cualifica y agenda) — viable con Claude + function calling
 - Monitoreo/respuesta de reseñas de Google Business Profile (API GBP) y publicación en GBP
 - Social Planner (FB/IG/LinkedIn/TikTok/X/GMB) — aprobaciones de apps de terceros
 - Cursos/membresías/comunidades

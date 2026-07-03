@@ -13,9 +13,10 @@ export async function renderContacts(view, rest = []) {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (tag) params.set('tag', tag);
-    const [contacts, tags] = await Promise.all([
+    const [contacts, tags, smartLists] = await Promise.all([
       api(`/contacts?${params}`),
       api('/contacts/meta/tags'),
+      api('/contacts/meta/smart-lists'),
     ]);
 
     view.innerHTML = `
@@ -30,7 +31,17 @@ export async function renderContacts(view, rest = []) {
       <button class="btn secondary" id="export-csv" title="Exportar CSV">⬇ CSV</button>
       <button class="btn secondary" id="import-csv" title="Importar CSV">⬆ CSV</button>
       <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
+      <button class="btn secondary" id="find-dupes" title="Buscar duplicados">👥²</button>
       <button class="btn" id="add-contact">+ Add Contact</button>
+    </div>
+    <div class="flex" style="margin-bottom:12px;flex-wrap:wrap">
+      ${smartLists
+        .map(
+          (l) => `<span class="tag" style="cursor:pointer;padding:5px 12px" data-sl='${esc(JSON.stringify(l.filters))}'>📋 ${esc(l.name)}
+            <a href="#" class="sl-del" data-id="${l.id}" style="color:inherit;margin-left:4px">×</a></span>`
+        )
+        .join('')}
+      ${(q || tag) ? `<button class="btn secondary small" id="save-sl">💾 Guardar filtro como lista</button>` : ''}
     </div>
     <div class="card">
       ${
@@ -60,6 +71,65 @@ export async function renderContacts(view, rest = []) {
     });
     view.querySelector('#tag-filter').addEventListener('change', (e) => { tag = e.target.value; load(); });
     view.querySelector('#add-contact').addEventListener('click', () => contactModal(load));
+    view.querySelectorAll('[data-sl]').forEach((chip) =>
+      chip.addEventListener('click', (e) => {
+        if (e.target.classList.contains('sl-del')) return;
+        const f = JSON.parse(chip.dataset.sl);
+        q = f.q || '';
+        tag = f.tag || '';
+        load();
+      })
+    );
+    view.querySelectorAll('.sl-del').forEach((a) =>
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await api(`/contacts/meta/smart-lists/${a.dataset.id}`, { method: 'DELETE' });
+        load();
+      })
+    );
+    view.querySelector('#save-sl')?.addEventListener('click', async () => {
+      const name = prompt('Nombre de la lista:', tag || q);
+      if (!name) return;
+      await api('/contacts/meta/smart-lists', { method: 'POST', body: { name, filters: { q, tag } } });
+      toast('Lista guardada');
+      load();
+    });
+    view.querySelector('#find-dupes').addEventListener('click', async () => {
+      const groups = await api('/contacts/meta/duplicates');
+      const modal = openModal(`
+        <h2>👥 Contactos duplicados</h2>
+        ${
+          groups.length
+            ? groups
+                .map(
+                  (g, gi) => `<div class="block-item">
+                    <div class="b-head"><span>${g.kind === 'email' ? '📧' : '📱'} ${esc(g.value)}</span></div>
+                    ${g.contacts
+                      .map(
+                        (c, ci) => `<div class="flex" style="margin:4px 0">
+                          <span>${esc(fullName(c))} <span class="muted" style="font-size:11px">#${c.id} · ${esc(c.source)}</span></span>
+                          ${ci > 0 ? `<button class="btn secondary small right merge-btn" data-keep="${g.contacts[0].id}" data-merge="${c.id}">Fusionar en #${g.contacts[0].id}</button>` : '<span class="badge green right">se conserva</span>'}
+                        </div>`
+                      )
+                      .join('')}
+                  </div>`
+                )
+                .join('')
+            : '<div class="empty">🎉 No hay duplicados por email ni teléfono.</div>'
+        }`);
+      modal.querySelectorAll('.merge-btn').forEach((b) =>
+        b.addEventListener('click', async () => {
+          if (!confirm('¿Fusionar? Se moverán mensajes, citas, notas y tags al contacto conservado.')) return;
+          try {
+            await api('/contacts/merge', { method: 'POST', body: { keep_id: Number(b.dataset.keep), merge_id: Number(b.dataset.merge) } });
+            toast('Contactos fusionados');
+            document.getElementById('modal-root').innerHTML = '';
+            load();
+          } catch (err) { toast(err.message, true); }
+        })
+      );
+    });
     view.querySelector('#export-csv').addEventListener('click', async () => {
       const { state } = await import('../api.js');
       const res = await fetch('/api/contacts/export/csv', {

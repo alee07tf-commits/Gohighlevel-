@@ -86,6 +86,21 @@ export async function renderSettings(view) {
       </div>
     </div>
     <div class="card" style="margin-bottom:16px">
+      <div class="card-title">🤖 Conversation AI (chat + WhatsApp/SMS)</div>
+      <div class="card-body">
+        <label class="flex" style="margin-bottom:10px"><input type="checkbox" id="ai-agent-enabled" ${current?.ai_agent_enabled ? 'checked' : ''}>
+          <strong>Responder automáticamente a los leads</strong></label>
+        <p class="muted" style="font-size:12px;margin-bottom:8px">La IA responde con los datos del negocio y puede <strong>agendar citas</strong> en tu primer calendario. Puedes pausarla por conversación desde el inbox. Sin ANTHROPIC_API_KEY funciona en modo guiado (ofrece huecos y captura al lead).</p>
+        <label class="field"><span class="label">Instrucciones extra para la IA (servicios, precios, horario…)</span>
+          <textarea class="input" id="ai-agent-prompt" rows="3" placeholder="Ej: Somos una clínica dental. Limpieza 45€, blanqueamiento 250€. No damos precios de implantes por chat, ofrece cita.">${esc(current?.ai_agent_prompt || '')}</textarea></label>
+        <button class="btn" id="ai-agent-save">Guardar IA</button>
+        <div class="card-title" style="padding:14px 0 6px">Widget de chat para la web del cliente</div>
+        <p class="muted" style="font-size:12px">Pega esto antes de <code class="inline">&lt;/body&gt;</code> en cualquier web y tendrá el chat con IA conectado a este CRM:</p>
+        <code class="inline" id="widget-snippet" style="display:block;margin-top:6px;padding:10px;user-select:all;font-size:11px">&lt;script src="${location.origin}/widget.js" data-location="${state.locationId}"&gt;&lt;/script&gt;</code>
+        <button class="btn secondary small" id="copy-snippet" style="margin-top:8px">Copiar snippet</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
       <div class="card-title">Campos personalizados</div>
       <div class="card-body">
         ${customFields.length
@@ -144,6 +159,20 @@ export async function renderSettings(view) {
     }
   });
 
+  view.querySelector('#ai-agent-save').addEventListener('click', async () => {
+    await api(`/locations/${current.id}`, {
+      method: 'PUT',
+      body: {
+        ai_agent_enabled: view.querySelector('#ai-agent-enabled').checked,
+        ai_agent_prompt: view.querySelector('#ai-agent-prompt').value,
+      },
+    });
+    toast('Conversation AI guardada');
+  });
+  view.querySelector('#copy-snippet').addEventListener('click', () => {
+    navigator.clipboard.writeText(view.querySelector('#widget-snippet').textContent);
+    toast('Snippet copiado');
+  });
   view.querySelector('#cf-add').addEventListener('click', async () => {
     const name = view.querySelector('#cf-name').value.trim();
     if (!name) return toast('Escribe el nombre del campo', true);

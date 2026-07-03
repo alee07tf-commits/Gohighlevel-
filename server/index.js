@@ -44,10 +44,12 @@ app.use('/api/snapshots', require('./routes/snapshots'));
 app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/public', require('./routes/public'));
+app.use('/api/public/chat', require('./routes/chat-public'));
+app.get('/widget.js', require('./routes/chat-public').widgetScript);
 
 // Public pretty URLs: funnels (/f/...), booking (/book/...), reports (/r/...),
 // invoice payment (/pay/...) and review gate (/review/...).
-for (const prefix of ['/f', '/book', '/r', '/pay', '/review']) {
+for (const prefix of ['/f', '/book', '/r', '/pay', '/review', '/l']) {
   app.use(prefix, (req, res, next) => {
     req.url = prefix + req.url;
     require('./routes/public')(req, res, next);

@@ -121,4 +121,29 @@ router.delete('/campaigns/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Trigger links ----
+router.get('/links', async (req, res) => {
+  res.json(await db.all('SELECT * FROM trigger_links WHERE location_id = ? ORDER BY id DESC', [req.location.id]));
+});
+
+router.post('/links', async (req, res) => {
+  const { name, target_url, tag } = req.body || {};
+  if (!name || !target_url) return res.status(400).json({ error: 'name and target_url are required' });
+  let base = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'link';
+  let slug = base;
+  let i = 1;
+  while (await db.get('SELECT id FROM trigger_links WHERE slug = ?', [slug])) slug = `${base}-${i++}`;
+  const id = await db.insert(
+    'INSERT INTO trigger_links (location_id, name, slug, target_url, tag) VALUES (?, ?, ?, ?, ?)',
+    [req.location.id, name, slug, target_url, tag || '']
+  );
+  res.status(201).json(await db.get('SELECT * FROM trigger_links WHERE id = ?', [id]));
+});
+
+router.delete('/links/:id', async (req, res) => {
+  const info = await db.run('DELETE FROM trigger_links WHERE id = ? AND location_id = ?', [req.params.id, req.location.id]);
+  if (!info.changes) return res.status(404).json({ error: 'Link not found' });
+  res.json({ ok: true });
+});
+
 module.exports = router;
