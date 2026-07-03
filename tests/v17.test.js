@@ -181,3 +181,33 @@ test('missed-call text-back: no-answer call creates contact and sends SMS', asyn
   const conv = convs.body.find((c) => c.contact_id === found.body[0].id);
   assert.ok(conv, 'text-back recorded in inbox');
 });
+
+test('prospecting: simulated search + import creates contacts/opportunities', async () => {
+  const status = await request(app).get('/api/prospecting/status').set(headers);
+  assert.equal(status.body.provider, 'simulated');
+
+  const search = await request(app).post('/api/prospecting/search').set(headers).send({
+    query: 'dentistas en Madrid',
+  });
+  assert.equal(search.status, 200);
+  assert.ok(search.body.results.length >= 5);
+  assert.ok(search.body.results[0].demo, 'clearly labeled as demo');
+
+  await request(app).post('/api/pipelines').set(headers).send({ name: 'Prospección' });
+  const imp = await request(app).post('/api/prospecting/import').set(headers).send({
+    prospects: search.body.results.slice(0, 3), tag: 'prospecto', create_opportunities: true,
+  });
+  assert.equal(imp.body.imported, 3);
+
+  const contacts = await request(app).get('/api/contacts?tag=prospecto').set(headers);
+  assert.equal(contacts.body.length, 3);
+  assert.equal(contacts.body[0].source, 'prospecting');
+  assert.ok(contacts.body[0].custom_fields.direccion, 'address stored in custom fields');
+
+  // Re-import same prospects → skipped as duplicates by phone.
+  const again = await request(app).post('/api/prospecting/import').set(headers).send({
+    prospects: search.body.results.slice(0, 3),
+  });
+  assert.equal(again.body.imported, 0);
+  assert.equal(again.body.skipped, 3);
+});

@@ -76,6 +76,8 @@ export async function renderSettings(view) {
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.whatsapp)}</div></div>${integBadge(integrations.whatsapp)}</div>
         <div class="appt-row"><div style="flex:1"><strong>💳 Pagos (Stripe)</strong>
           <div class="muted" style="font-size:12px">Stripe (stripe.com) — STRIPE_SECRET_KEY · webhook: /api/webhooks/stripe</div></div>${integBadge(integrations.payments)}</div>
+        <div class="appt-row"><div style="flex:1"><strong>🔎 Prospección (Google)</strong>
+          <div class="muted" style="font-size:12px">GOOGLE_PLACES_API_KEY (oficial, capa gratuita) o SERPER_API_KEY</div></div>${integBadge(integrations.prospecting)}</div>
         <div class="appt-row"><div style="flex:1"><strong>✨ IA (Claude)</strong>
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.ai)}</div></div>${integBadge(integrations.ai)}</div>
         <p class="muted" style="margin-top:10px;font-size:12px">

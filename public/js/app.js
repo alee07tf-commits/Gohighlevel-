@@ -13,6 +13,7 @@ import { renderSettings } from './views/settings.js';
 import { renderPayments } from './views/payments.js';
 import { renderReputation } from './views/reputation.js';
 import { renderTasks } from './views/tasks.js';
+import { renderProspecting } from './views/prospecting.js';
 
 const IC = {
   dashboard: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -21,6 +22,7 @@ const IC = {
   pipelines: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
   calendar: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
   payments: '<svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
+  prospecting: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   marketing: '<svg viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>',
   automations: '<svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
   funnels: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
@@ -31,7 +33,7 @@ const IC = {
 
 const NAV_SECTIONS = [
   { title: 'Workspace', items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
-  { title: 'Crecimiento', items: ['marketing', 'funnels', 'automations', 'payments', 'reputation'] },
+  { title: 'Crecimiento', items: ['prospecting', 'marketing', 'funnels', 'automations', 'payments', 'reputation'] },
   { title: 'Cuenta', items: ['settings'] },
 ];
 
@@ -42,6 +44,7 @@ const NAV = [
   { path: 'pipelines', label: 'Opportunities', icon: '🎯', view: renderPipelines },
   { path: 'calendar', label: 'Calendar', icon: '📅', view: renderCalendar },
   { path: 'payments', label: 'Pagos', icon: '💳', view: renderPayments },
+  { path: 'prospecting', label: 'Prospección', icon: '🔎', view: renderProspecting },
   { path: 'marketing', label: 'Marketing', icon: '📣', view: renderMarketing },
   { path: 'automations', label: 'Automations', icon: '⚙️', view: renderAutomations },
   { path: 'funnels', label: 'Sites & Funnels', icon: '🌐', view: renderFunnels },

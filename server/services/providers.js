@@ -31,6 +31,7 @@ function status() {
     sms: smsProvider(),
     whatsapp: whatsappProvider(),
     payments: paymentsProvider(),
+    prospecting: process.env.GOOGLE_PLACES_API_KEY ? 'google_places' : process.env.SERPER_API_KEY ? 'serper' : 'simulated',
     ai: Boolean(process.env.ANTHROPIC_API_KEY),
     mail_from: process.env.MAIL_FROM || null,
   };
