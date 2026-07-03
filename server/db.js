@@ -274,7 +274,9 @@ if (process.env.DATABASE_URL) {
     return { rows: res.rows, count: res.rowCount || 0 };
   };
   raw = wrap(pool);
-  execRaw = (sql) => pool.query(sql);
+  // DDL batches get a longer budget than regular queries (first boot on a
+  // small instance can exceed the default query timeout).
+  execRaw = (sql) => pool.query({ text: sql, query_timeout: 25000 });
   txRaw = async (fn) => {
     const client = await pool.connect();
     try {
@@ -306,9 +308,42 @@ if (process.env.DATABASE_URL) {
   txRaw = (fn) => pglite.transaction((t) => fn(wrap((sql, params) => t.query(sql, params))));
 }
 
-const ready = Promise.resolve()
-  .then(() => execRaw(SCHEMA))
-  .then(() => execRaw(MIGRATIONS));
+// Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
+// running deployments apply them once and then skip DDL on every cold start.
+const SCHEMA_VERSION = 2;
+
+let readyPromise = null;
+function ensureReady() {
+  if (!readyPromise) {
+    readyPromise = initSchema().catch((err) => {
+      readyPromise = null; // allow the next request to retry instead of wedging the instance
+      throw err;
+    });
+  }
+  return readyPromise;
+}
+
+async function initSchema() {
+  try {
+    const check = await raw('SELECT MAX(version) AS v FROM schema_meta', []);
+    if (Number(check.rows[0] && check.rows[0].v) >= SCHEMA_VERSION) return;
+  } catch {
+    // schema_meta missing → first boot, fall through to DDL
+  }
+  // One batch on a single connection. The advisory xact lock serializes
+  // concurrent serverless cold starts so parallel instances don't deadlock
+  // on catalog locks while running the same CREATE TABLE statements.
+  await execRaw(
+    `BEGIN;
+     SELECT pg_advisory_xact_lock(815051);
+     ${SCHEMA}
+     ${MIGRATIONS}
+     CREATE TABLE IF NOT EXISTS schema_meta (version INTEGER NOT NULL);
+     DELETE FROM schema_meta;
+     INSERT INTO schema_meta (version) VALUES (${SCHEMA_VERSION});
+     COMMIT;`
+  );
+}
 
 function makeApi(rawFn) {
   return {
@@ -320,15 +355,15 @@ function makeApi(rawFn) {
 }
 
 const base = makeApi(async (sql, params) => {
-  await ready;
+  await ensureReady();
   return raw(sql, params);
 });
 
 module.exports = {
   ...base,
-  ready,
+  ready: ensureReady,
   tx: async (fn) => {
-    await ready;
+    await ensureReady();
     return txRaw((rawInTx) => fn(makeApi(rawInTx)));
   },
 };
