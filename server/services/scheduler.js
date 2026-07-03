@@ -96,6 +96,39 @@ async function processJob(job) {
       });
       return result.ok ? `briefing sent to ${to} (${result.provider})` : `briefing failed: ${result.error}`;
     }
+    case 'campaign_send': {
+      const campaign = await db.get('SELECT * FROM campaigns WHERE id = ?', [payload.campaign_id]);
+      if (!campaign || campaign.status === 'sent') return 'skipped (campaign gone or already sent)';
+      const marketing = require('../routes/marketing');
+      const sent = await marketing.deliverCampaign(campaign);
+      return `campaign sent to ${sent} contact(s)`;
+    }
+    case 'recurring_invoice': {
+      const prev = await db.get('SELECT * FROM invoices WHERE id = ?', [payload.invoice_id]);
+      if (!prev || !prev.recurring) return 'skipped (invoice gone or not recurring)';
+      const crypto = require('crypto');
+      const { n } = await db.get('SELECT COUNT(*)::int AS n FROM invoices WHERE location_id = ?', [prev.location_id]);
+      const newId = await db.insert(
+        `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, status, token, kind, recurring)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'sent', ?, 'invoice', ?)`,
+        [prev.location_id, prev.contact_id, `INV-${String(n + 1).padStart(4, '0')}`, prev.title, prev.items,
+         prev.currency, prev.total, crypto.randomBytes(16).toString('hex'), prev.recurring]
+      );
+      const inv = await db.get('SELECT * FROM invoices WHERE id = ?', [newId]);
+      if (inv.contact_id) {
+        const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [inv.contact_id]);
+        const messaging = require('./messaging');
+        const url = `${process.env.APP_URL || ''}/pay/${inv.token}`;
+        await messaging.sendEmail(inv.location_id, contact,
+          `Factura ${inv.number} — suscripción`,
+          `Hola {{first_name}}, aquí tienes tu factura recurrente ${inv.number} (${inv.total.toFixed(2)} ${inv.currency}). Puedes pagarla aquí: ${url}`);
+      }
+      // Queue the next cycle.
+      await schedule(prev.location_id, new Date(Date.now() + 30 * 86_400_000).toISOString(), 'recurring_invoice', {
+        invoice_id: newId,
+      });
+      return `recurring invoice ${inv.number} issued`;
+    }
     default:
       return `unknown job type "${job.type}"`;
   }

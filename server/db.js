@@ -307,12 +307,24 @@ ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ai_paused INTEGER NOT NULL DE
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS public_token TEXT;
 ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_channel_check;
 ALTER TABLE messages ADD CONSTRAINT messages_channel_check CHECK (channel IN ('sms','email','whatsapp','chat','note'));
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS send_at TIMESTAMPTZ;
+ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_status_check;
+ALTER TABLE campaigns ADD CONSTRAINT campaigns_status_check CHECK (status IN ('draft','scheduled','sent'));
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'invoice';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS recurring TEXT NOT NULL DEFAULT '';
+ALTER TABLE calendars ADD COLUMN IF NOT EXISTS capacity INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS missed_call_text TEXT DEFAULT '';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_public_token ON conversations(public_token) WHERE public_token IS NOT NULL;
 CREATE TABLE IF NOT EXISTS smart_lists (
   id SERIAL PRIMARY KEY,
   location_id INTEGER NOT NULL REFERENCES locations(id),
   name TEXT NOT NULL,
   filters TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS user_locations (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, location_id)
 );
 CREATE TABLE IF NOT EXISTS trigger_links (
   id SERIAL PRIMARY KEY,
@@ -396,7 +408,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 let readyPromise = null;
 function ensureReady() {

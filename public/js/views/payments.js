@@ -24,7 +24,7 @@ export async function renderPayments(view) {
           <tbody>${invoices
             .map(
               (i) => `<tr>
-                <td><strong>${esc(i.number)}</strong><div class="muted" style="font-size:11px">${fmtDate(i.created_at)}</div></td>
+                <td><strong>${esc(i.number)}</strong>${i.kind === 'quote' ? ' <span class="badge amber">presupuesto</span>' : ''}${i.recurring ? ' <span class="badge indigo">🔁 mensual</span>' : ''}<div class="muted" style="font-size:11px">${fmtDate(i.created_at)}</div></td>
                 <td>${i.contact_id ? esc(fullName(i)) : '<span class="muted">—</span>'}</td>
                 <td>${esc(i.title || i.items[0]?.name || '')}</td>
                 <td><strong>${i.total.toFixed(2)} ${esc(i.currency)}</strong></td>
@@ -95,6 +95,10 @@ export async function renderPayments(view) {
         <input class="input" id="inv-contact-search" placeholder="nombre o email" autocomplete="off">
         <input type="hidden" id="inv-contact-id"><div id="inv-contact-results"></div></label>
       <div class="form-row">
+        <label class="field"><span class="label">Tipo</span><select class="input" id="inv-kind">
+          <option value="invoice">Factura</option><option value="quote">Presupuesto</option></select></label>
+        <label class="field"><span class="label">Recurrencia</span><select class="input" id="inv-recurring">
+          <option value="">Puntual</option><option value="monthly">Mensual (auto)</option></select></label>
         <label class="field"><span class="label">Moneda</span><select class="input" id="inv-currency">
           <option>EUR</option><option>USD</option><option>MXN</option><option>COP</option><option>ARS</option></select></label>
         <label class="field"><span class="label">Vencimiento</span><input class="input" id="inv-due" type="date"></label>
@@ -155,6 +159,8 @@ export async function renderPayments(view) {
             title: modal.querySelector('#inv-title').value,
             contact_id: Number(modal.querySelector('#inv-contact-id').value) || null,
             currency: modal.querySelector('#inv-currency').value,
+            kind: modal.querySelector('#inv-kind').value,
+            recurring: modal.querySelector('#inv-recurring').value,
             due_date: modal.querySelector('#inv-due').value,
             items: items.filter((it) => it.name && Number(it.price) > 0),
           },

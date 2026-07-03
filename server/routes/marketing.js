@@ -64,39 +64,39 @@ router.get('/campaigns', async (req, res) => {
 });
 
 router.post('/campaigns', async (req, res) => {
-  const { name, channel, subject, body, tag_filter } = req.body || {};
+  const { name, channel, subject, body, tag_filter, send_at } = req.body || {};
   if (!name || !body) return res.status(400).json({ error: 'name and body are required' });
+  const scheduled = send_at && new Date(send_at).getTime() > Date.now();
   const id = await db.insert(
-    `INSERT INTO campaigns (location_id, name, channel, subject, body, tag_filter)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [req.location.id, name, ['sms', 'whatsapp'].includes(channel) ? channel : 'email', subject || '', body, tag_filter || '']
+    `INSERT INTO campaigns (location_id, name, channel, subject, body, tag_filter, send_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      req.location.id, name, ['sms', 'whatsapp'].includes(channel) ? channel : 'email', subject || '', body,
+      tag_filter || '', scheduled ? new Date(send_at).toISOString() : null, scheduled ? 'scheduled' : 'draft',
+    ]
   );
+  if (scheduled) {
+    const scheduler = require('../services/scheduler');
+    await scheduler.schedule(req.location.id, new Date(send_at).toISOString(), 'campaign_send', { campaign_id: id });
+  }
   res.status(201).json(await db.get('SELECT * FROM campaigns WHERE id = ?', [id]));
 });
 
-// Send the campaign to all matching contacts (skips DND contacts).
-router.post('/campaigns/:id/send', async (req, res) => {
-  const campaign = await db.get('SELECT * FROM campaigns WHERE id = ? AND location_id = ?', [
-    req.params.id,
-    req.location.id,
-  ]);
-  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-  if (campaign.status === 'sent') return res.status(400).json({ error: 'Campaign already sent' });
-
+// Shared campaign delivery used by the manual send and the scheduler.
+async function deliverCampaign(campaign) {
   let contacts;
   if (campaign.tag_filter) {
     contacts = await db.all(
       `SELECT c.* FROM contacts c JOIN contact_tags ct ON ct.contact_id = c.id
        WHERE c.location_id = ? AND ct.tag = ?`,
-      [req.location.id, campaign.tag_filter]
+      [campaign.location_id, campaign.tag_filter]
     );
   } else {
-    contacts = await db.all('SELECT * FROM contacts WHERE location_id = ?', [req.location.id]);
+    contacts = await db.all('SELECT * FROM contacts WHERE location_id = ?', [campaign.location_id]);
   }
-
   let sent = 0;
   for (const contact of contacts) {
-    const message = await messaging.sendByChannel(campaign.channel, req.location.id, contact, {
+    const message = await messaging.sendByChannel(campaign.channel, campaign.location_id, contact, {
       subject: campaign.subject,
       body: campaign.body,
     });
@@ -109,6 +109,18 @@ router.post('/campaigns/:id/send', async (req, res) => {
     }
   }
   await db.run(`UPDATE campaigns SET status = 'sent', sent_at = now() WHERE id = ?`, [campaign.id]);
+  return sent;
+}
+
+// Send the campaign to all matching contacts (skips DND contacts).
+router.post('/campaigns/:id/send', async (req, res) => {
+  const campaign = await db.get('SELECT * FROM campaigns WHERE id = ? AND location_id = ?', [
+    req.params.id,
+    req.location.id,
+  ]);
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.status === 'sent') return res.status(400).json({ error: 'Campaign already sent' });
+  const sent = await deliverCampaign(campaign);
   res.json({ ...(await db.get('SELECT * FROM campaigns WHERE id = ?', [campaign.id])), recipient_count: sent });
 });
 
@@ -147,3 +159,4 @@ router.delete('/links/:id', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.deliverCampaign = deliverCampaign;

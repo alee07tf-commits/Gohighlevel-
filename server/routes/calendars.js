@@ -29,11 +29,11 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, description, duration_minutes, start_hour, end_hour, days, reminder_hours } = req.body || {};
+  const { name, description, duration_minutes, start_hour, end_hour, days, reminder_hours, capacity } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });
   const id = await db.insert(
-    `INSERT INTO calendars (location_id, name, slug, description, duration_minutes, start_hour, end_hour, days, reminder_hours)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO calendars (location_id, name, slug, description, duration_minutes, start_hour, end_hour, days, reminder_hours, capacity)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.location.id,
       name,
@@ -44,6 +44,7 @@ router.post('/', async (req, res) => {
       Number.isFinite(Number(end_hour)) && end_hour !== undefined ? Number(end_hour) : 17,
       JSON.stringify(days || [1, 2, 3, 4, 5]),
       Number.isFinite(Number(reminder_hours)) && reminder_hours !== undefined ? Number(reminder_hours) : 24,
+      Math.max(1, Number(capacity) || 1),
     ]
   );
   res.status(201).json(await db.get('SELECT * FROM calendars WHERE id = ?', [id]));

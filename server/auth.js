@@ -25,7 +25,9 @@ async function requireAuth(req, res, next) {
 }
 
 // Resolves the sub-account (location) from the X-Location-Id header and
-// verifies it belongs to the authenticated user's agency.
+// verifies it belongs to the authenticated user's agency. Members with
+// explicit assignments are restricted to those sub-accounts; members with
+// no assignments (and all admins) can access every location in the agency.
 async function requireLocation(req, res, next) {
   const locationId = Number(req.headers['x-location-id']);
   if (!locationId) return res.status(400).json({ error: 'X-Location-Id header required' });
@@ -34,6 +36,11 @@ async function requireLocation(req, res, next) {
     req.user.agency_id,
   ]);
   if (!location) return res.status(404).json({ error: 'Location not found in your agency' });
+  if (req.user.role !== 'admin') {
+    const assignments = await db.all('SELECT location_id FROM user_locations WHERE user_id = ?', [req.user.id]);
+    if (assignments.length && !assignments.some((a) => a.location_id === locationId))
+      return res.status(403).json({ error: 'No tienes acceso a esta sub-cuenta' });
+  }
   req.location = location;
   next();
 }

@@ -87,4 +87,31 @@ router.post('/funnel', async (req, res) => {
   }
 });
 
+// Workflow AI: create an automation from a plain-language goal.
+router.post('/workflow', async (req, res) => {
+  const { goal } = req.body || {};
+  if (!goal) return res.status(400).json({ error: 'goal is required' });
+  try {
+    const design = await ai.generateWorkflow({
+      goal,
+      business: `${req.location.name}${req.location.company ? ` (${req.location.company})` : ''}`,
+    });
+    const wfId = await db.tx(async (t) => {
+      const id = await t.insert(
+        'INSERT INTO workflows (location_id, name, trigger_type, trigger_config, active) VALUES (?, ?, ?, ?, 0)',
+        [req.location.id, design.name, design.trigger_type, JSON.stringify(design.trigger_config || {})]
+      );
+      for (let i = 0; i < design.actions.length; i++) {
+        await t.run('INSERT INTO workflow_actions (workflow_id, position, type, config) VALUES (?, ?, ?, ?)', [
+          id, i, design.actions[i].type, JSON.stringify(design.actions[i].config || {}),
+        ]);
+      }
+      return id;
+    });
+    res.status(201).json({ ok: true, workflow_id: wfId, generated_by: design.generated_by, note: 'Creado en pausa: revísalo y actívalo' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

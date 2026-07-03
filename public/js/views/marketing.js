@@ -29,7 +29,7 @@ export async function renderMarketing(view) {
                     <td><strong>${esc(c.name)}</strong><div class="muted" style="font-size:11px">${esc(c.subject)}</div></td>
                     <td><span class="badge gray">${c.channel}</span></td>
                     <td>${c.tag_filter ? `<span class="tag">${esc(c.tag_filter)}</span>` : '<span class="muted">Everyone</span>'}</td>
-                    <td>${c.status === 'sent' ? `<span class="badge green">sent to ${c.recipient_count}</span><div class="muted" style="font-size:10px">${fmtDate(c.sent_at)}</div>` : '<span class="badge amber">draft</span>'}</td>
+                    <td>${c.status === 'sent' ? `<span class="badge green">sent to ${c.recipient_count}</span><div class="muted" style="font-size:10px">${fmtDate(c.sent_at)}</div>` : c.status === 'scheduled' ? `<span class="badge indigo">📅 ${fmtDate(c.send_at)}</span>` : '<span class="badge amber">draft</span>'}</td>
                     <td style="text-align:right">
                       ${c.status === 'draft' ? `<button class="btn small send-camp" data-id="${c.id}">Send</button>` : ''}
                       <button class="btn ghost small del-camp" data-id="${c.id}">✕</button></td>
@@ -206,9 +206,12 @@ export async function renderMarketing(view) {
     modal.querySelector('#camp-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       try {
-        await api('/marketing/campaigns', { method: 'POST', body: formData(e.target) });
+        const data = formData(e.target);
+        if (data.send_at) data.send_at = new Date(data.send_at).toISOString();
+        else delete data.send_at;
+        await api('/marketing/campaigns', { method: 'POST', body: data });
         closeOverlay();
-        toast('Campaign saved as draft');
+        toast(data.send_at ? 'Campaña programada 📅' : 'Campaign saved as draft');
         renderMarketing(view);
       } catch (err) {
         toast(err.message, true);

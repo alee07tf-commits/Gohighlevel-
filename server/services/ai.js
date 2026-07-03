@@ -145,4 +145,60 @@ Devuelve JSON: {"name": "nombre corto del funnel", "theme": "...", "blocks": [..
   }
 }
 
-module.exports = { enabled, complete, generateCopy, reportNarrative, generateFunnelDesign };
+// ---- Workflow AI: generate an automation from a plain-language goal ----
+const WF_TRIGGERS = ['contact_created', 'tag_added', 'form_submitted', 'appointment_booked', 'opportunity_stage_changed', 'message_received', 'invoice_paid', 'appointment_status_changed', 'review_received'];
+const WF_ACTIONS = ['add_tag', 'remove_tag', 'send_email', 'send_sms', 'send_whatsapp', 'add_note', 'create_opportunity', 'wait', 'branch', 'create_task', 'send_review_request', 'webhook'];
+
+function fallbackWorkflow(goal) {
+  return {
+    name: (goal || 'Seguimiento automático').slice(0, 60),
+    trigger_type: 'contact_created',
+    trigger_config: {},
+    actions: [
+      { type: 'add_tag', config: { tag: 'nuevo' } },
+      { type: 'send_email', config: { subject: 'Hola {{first_name}}', body: 'Gracias por tu interés. En breve te contactamos.' } },
+      { type: 'wait', config: { amount: 1, unit: 'days' } },
+      { type: 'create_task', config: { title: 'Llamar a {{first_name}} (seguimiento)', due_in_days: 0 } },
+    ],
+    generated_by: 'template',
+  };
+}
+
+async function generateWorkflow({ goal, business }) {
+  if (!enabled()) return fallbackWorkflow(goal);
+  const system = `Eres experto en automatización de marketing para negocios locales. Respondes SOLO JSON válido.
+Triggers permitidos: ${WF_TRIGGERS.join(', ')}. trigger_config opcional: {"tag":...} para tag_added, {"status":"no_show"|"completed"} para appointment_status_changed.
+Acciones permitidas: ${WF_ACTIONS.join(', ')} con configs: add_tag/remove_tag {"tag"}, send_email {"subject","body"}, send_sms/send_whatsapp/add_note {"body"}, wait {"amount",unit:"minutes"|"hours"|"days"}, create_task {"title","due_in_days"}, send_review_request {"channel"}, create_opportunity {"title","value"}, webhook {"url"}.
+Usa merge fields {{first_name}} en los textos. 2-6 acciones. Español.`;
+  const text = await complete(system, `Negocio: ${business}. Objetivo de la automatización: ${goal}.
+Devuelve JSON: {"name":"...","trigger_type":"...","trigger_config":{...},"actions":[{"type":"...","config":{...}}]}`, 1500);
+  try {
+    const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+    if (!WF_TRIGGERS.includes(parsed.trigger_type)) throw new Error('bad trigger');
+    parsed.actions = (parsed.actions || []).filter((a) => WF_ACTIONS.includes(a.type));
+    if (!parsed.actions.length) throw new Error('no actions');
+    return { ...parsed, generated_by: 'claude' };
+  } catch {
+    return fallbackWorkflow(goal);
+  }
+}
+
+// ---- Reviews AI: suggest a public-quality response to feedback ----
+async function suggestReviewReply({ business, rating, comment, contactName }) {
+  const fallback =
+    rating >= 4
+      ? `¡Mil gracias por tu valoración${contactName ? `, ${contactName}` : ''}! Nos alegra muchísimo que hayas tenido una buena experiencia. ¡Te esperamos pronto!`
+      : `Sentimos que tu experiencia no fuera la esperada${contactName ? `, ${contactName}` : ''}. Gracias por contárnoslo: nos ayuda a mejorar. Nos pondremos en contacto contigo para solucionarlo.`;
+  if (!enabled()) return { reply: fallback, generated_by: 'template' };
+  try {
+    const reply = await complete(
+      `Eres el responsable de ${business}. Redacta una respuesta breve (2-3 frases), empática y profesional a la opinión de un cliente. Español, sin markdown, sin comillas.`,
+      `Valoración: ${rating}/5. Comentario: "${comment || '(sin comentario)'}". Cliente: ${contactName || 'anónimo'}.`
+    );
+    return { reply: reply.trim(), generated_by: 'claude' };
+  } catch {
+    return { reply: fallback, generated_by: 'template' };
+  }
+}
+
+module.exports = { enabled, complete, generateCopy, reportNarrative, generateFunnelDesign, generateWorkflow, suggestReviewReply };

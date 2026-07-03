@@ -149,6 +149,35 @@ async function runAction(action, contact, locationId, log) {
       }
       break;
     }
+    case 'webhook': {
+      if (!config.url || !/^https?:\/\//.test(config.url)) {
+        log.push('Skipped webhook: invalid URL');
+        break;
+      }
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(config.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: config.event || 'workflow',
+            contact: {
+              id: contact.id, first_name: contact.first_name, last_name: contact.last_name,
+              email: contact.email, phone: contact.phone, source: contact.source,
+            },
+            location_id: locationId,
+            sent_at: new Date().toISOString(),
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        log.push(`Webhook ${config.url} → ${res.status}`);
+      } catch (err) {
+        log.push(`Webhook failed: ${err.message}`);
+      }
+      break;
+    }
     default:
       log.push(`Unknown action type "${action.type}" skipped`);
   }

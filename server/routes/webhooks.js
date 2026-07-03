@@ -90,4 +90,31 @@ router.post('/stripe', express.json(), async (req, res) => {
   }
 });
 
+// Missed-call text-back: point the Twilio phone number's *status callback*
+// (or voice webhook fallback) here. When a call isn't answered, the caller
+// instantly receives the location's configured SMS.
+router.post('/twilio-voice/:locationId', express.urlencoded({ extended: false }), async (req, res) => {
+  const location = await db.get('SELECT * FROM locations WHERE id = ?', [req.params.locationId]);
+  if (!location) return res.status(404).send('Unknown location');
+  const status = String(req.body.CallStatus || req.body.DialCallStatus || '').toLowerCase();
+  const from = String(req.body.From || '').replace('whatsapp:', '');
+  if (!['no-answer', 'busy', 'failed'].includes(status) || !from || !location.missed_call_text) {
+    return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+  }
+  let contact = await db.get(`SELECT * FROM contacts WHERE location_id = ? AND phone = ? AND phone != ''`, [
+    location.id, from,
+  ]);
+  if (!contact) {
+    const id = await db.insert(
+      'INSERT INTO contacts (location_id, first_name, phone, source) VALUES (?, ?, ?, ?)',
+      [location.id, from, from, 'missed-call']
+    );
+    contact = await db.get('SELECT * FROM contacts WHERE id = ?', [id]);
+    await automation.trigger(location.id, 'contact_created', contact);
+  }
+  await messaging.sendSms(location.id, contact, location.missed_call_text);
+  await automation.logActivity(location.id, contact.id, 'note', `Missed call → text-back sent`);
+  res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+});
+
 module.exports = router;

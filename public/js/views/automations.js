@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { esc, openModal, closeOverlay, toast, fmtDate, fullName } from '../ui.js';
 
 const TRIGGER_LABELS = {
+  review_received: '⭐ Reseña recibida',
   invoice_paid: '💳 Factura pagada',
   appointment_status_changed: '📅 Cambio de estado de cita',
   contact_created: '👤 Contact created',
@@ -23,6 +24,7 @@ const ACTION_LABELS = {
   create_task: '✅ Crear tarea',
   send_review_request: '⭐ Pedir reseña',
   branch: '🔀 Rama If/Else',
+  webhook: '🌐 Webhook saliente',
 };
 
 export async function renderAutomations(view) {
@@ -32,6 +34,7 @@ export async function renderAutomations(view) {
   <div class="page-header">
     <h1>Automations</h1>
     <div class="spacer"></div>
+    <button class="btn secondary" id="ai-wf-btn">✨ Crear con IA</button>
     <button class="btn secondary" id="recipes-btn">📦 Recetas</button>
     <button class="btn" id="new-wf">+ Workflow</button>
   </div>
@@ -117,6 +120,8 @@ export async function renderAutomations(view) {
             <select class="input" data-i="${i}" data-k="unit" style="width:130px">
               ${['minutes', 'hours', 'days'].map((u) => `<option value="${u}" ${a.config.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
             </select></div>`;
+        case 'webhook':
+          return `<input class="input" data-i="${i}" data-k="url" placeholder="https://hooks.zapier.com/… (POST con datos del contacto)" value="${esc(a.config.url || '')}">`;
         case 'create_task':
           return `<input class="input" data-i="${i}" data-k="title" placeholder="Título de la tarea — {{first_name}} vale" value="${esc(a.config.title || '')}" style="margin-bottom:6px">
             <input class="input" data-i="${i}" data-k="due_in_days" type="number" placeholder="Vence en X días (0 = hoy)" value="${esc(a.config.due_in_days ?? '')}">`;
@@ -226,6 +231,34 @@ export async function renderAutomations(view) {
   }
 
   view.querySelector('#new-wf').addEventListener('click', () => workflowModal());
+  view.querySelector('#ai-wf-btn').addEventListener('click', () => {
+    const modal = openModal(`
+      <h2>✨ Workflow AI</h2>
+      <p class="muted" style="margin-bottom:10px">Describe qué quieres automatizar y la IA monta el workflow (se crea en pausa para que lo revises).</p>
+      <textarea class="input" id="wf-goal" rows="3" placeholder="Ej: cuando alguien reserve una cita, mándale un WhatsApp de confirmación, espera 1 día tras la cita y pídele una reseña"></textarea>
+      <div class="modal-actions">
+        <button class="btn secondary" id="cancel">Cancelar</button>
+        <button class="btn" id="gen">✨ Generar</button>
+      </div>`);
+    modal.querySelector('#cancel').addEventListener('click', () => (document.getElementById('modal-root').innerHTML = ''));
+    modal.querySelector('#gen').addEventListener('click', async () => {
+      const goal = modal.querySelector('#wf-goal').value.trim();
+      if (!goal) return toast('Describe el objetivo', true);
+      const btn = modal.querySelector('#gen');
+      btn.disabled = true;
+      btn.textContent = 'Generando…';
+      try {
+        const r = await api('/ai/workflow', { method: 'POST', body: { goal } });
+        document.getElementById('modal-root').innerHTML = '';
+        toast(r.generated_by === 'claude' ? 'Workflow creado por IA (en pausa — revísalo)' : 'Workflow plantilla creado (conecta ANTHROPIC_API_KEY para IA real)');
+        renderAutomations(view);
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+        btn.textContent = '✨ Generar';
+      }
+    });
+  });
   view.querySelector('#recipes-btn').addEventListener('click', async () => {
     const recipes = await api('/workflows/recipes');
     const modal = openModal(`

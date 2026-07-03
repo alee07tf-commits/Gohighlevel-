@@ -14,6 +14,7 @@ const TRIGGER_TYPES = [
   'message_received',
   'invoice_paid',
   'appointment_status_changed',
+  'review_received',
 ];
 const ACTION_TYPES = [
   'add_tag',
@@ -27,6 +28,7 @@ const ACTION_TYPES = [
   'branch',
   'create_task',
   'send_review_request',
+  'webhook',
 ];
 
 async function withActions(wf) {

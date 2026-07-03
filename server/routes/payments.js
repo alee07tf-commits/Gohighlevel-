@@ -34,13 +34,13 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { contact_id, title, items, currency, due_date } = req.body || {};
+  const { contact_id, title, items, currency, due_date, kind, recurring } = req.body || {};
   const list = Array.isArray(items) ? items : [];
   const total = list.reduce((sum, it) => sum + (Number(it.qty) || 1) * (Number(it.price) || 0), 0);
   if (!list.length || total <= 0) return res.status(400).json({ error: 'At least one item with a price is required' });
   const id = await db.insert(
-    `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, due_date, token)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, due_date, token, kind, recurring)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.location.id,
       contact_id || null,
@@ -51,6 +51,8 @@ router.post('/', async (req, res) => {
       total,
       due_date || '',
       crypto.randomBytes(16).toString('hex'),
+      kind === 'quote' ? 'quote' : 'invoice',
+      recurring === 'monthly' ? 'monthly' : '',
     ]
   );
   res.status(201).json(parsed(await db.get('SELECT * FROM invoices WHERE id = ?', [id])));
@@ -113,6 +115,12 @@ module.exports.settleInvoice = async function settleInvoice(invoiceId, method) {
   const inv = await db.get('SELECT * FROM invoices WHERE id = ?', [invoiceId]);
   if (!inv || inv.status === 'paid') return false;
   await db.run(`UPDATE invoices SET status = 'paid', paid_at = now() WHERE id = ?`, [inv.id]);
+  if (inv.recurring === 'monthly') {
+    const scheduler = require('../services/scheduler');
+    await scheduler.schedule(inv.location_id, new Date(Date.now() + 30 * 86_400_000).toISOString(), 'recurring_invoice', {
+      invoice_id: inv.id,
+    });
+  }
   if (inv.contact_id) {
     const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [inv.contact_id]);
     await automation.logActivity(

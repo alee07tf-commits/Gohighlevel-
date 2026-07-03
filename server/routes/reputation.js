@@ -45,6 +45,23 @@ router.post('/request', async (req, res) => {
   res.status(201).json(rr);
 });
 
+// Reviews AI: suggested response to a piece of feedback.
+router.post('/:id/suggest-reply', async (req, res) => {
+  const rr = await db.get(
+    `SELECT rr.*, c.first_name FROM review_requests rr JOIN contacts c ON c.id = rr.contact_id
+     WHERE rr.id = ? AND rr.location_id = ?`,
+    [req.params.id, req.location.id]
+  );
+  if (!rr || !rr.rating) return res.status(404).json({ error: 'Review not found or not answered yet' });
+  const ai = require('../services/ai');
+  res.json(await ai.suggestReviewReply({
+    business: req.location.name,
+    rating: rr.rating,
+    comment: rr.comment,
+    contactName: rr.first_name,
+  }));
+});
+
 module.exports = router;
 
 module.exports.sendReviewRequest = async function sendReviewRequest(location, contact, channel, baseUrl) {

@@ -93,6 +93,8 @@ export async function renderSettings(view) {
         <p class="muted" style="font-size:12px;margin-bottom:8px">La IA responde con los datos del negocio y puede <strong>agendar citas</strong> en tu primer calendario. Puedes pausarla por conversación desde el inbox. Sin ANTHROPIC_API_KEY funciona en modo guiado (ofrece huecos y captura al lead).</p>
         <label class="field"><span class="label">Instrucciones extra para la IA (servicios, precios, horario…)</span>
           <textarea class="input" id="ai-agent-prompt" rows="3" placeholder="Ej: Somos una clínica dental. Limpieza 45€, blanqueamiento 250€. No damos precios de implantes por chat, ofrece cita.">${esc(current?.ai_agent_prompt || '')}</textarea></label>
+        <label class="field" style="margin-top:8px"><span class="label">📞 Missed-call text-back (SMS automático si no coges una llamada — requiere Twilio Voice apuntando a /api/webhooks/twilio-voice/${state.locationId})</span>
+          <input class="input" id="missed-call-text" placeholder="Hola, vimos tu llamada. ¿En qué podemos ayudarte?" value="${esc(current?.missed_call_text || '')}"></label>
         <button class="btn" id="ai-agent-save">Guardar IA</button>
         <div class="card-title" style="padding:14px 0 6px">Widget de chat para la web del cliente</div>
         <p class="muted" style="font-size:12px">Pega esto antes de <code class="inline">&lt;/body&gt;</code> en cualquier web y tendrá el chat con IA conectado a este CRM:</p>
@@ -135,6 +137,7 @@ export async function renderSettings(view) {
               <div style="flex:1"><strong>${esc(u.name)}</strong>
                 <div class="muted" style="font-size:12px">${esc(u.email)}</div></div>
               <span class="badge ${u.role === 'admin' ? 'indigo' : 'gray'}">${u.role}</span>
+              ${u.role !== 'admin' ? `<button class="btn secondary small assign-user" data-id="${u.id}" data-name="${esc(u.name)}">Sub-cuentas</button>` : ''}
               ${u.id !== state.user.id ? `<button class="btn ghost small del-user" data-id="${u.id}">✕</button>` : ''}
             </div>`
           )
@@ -165,6 +168,7 @@ export async function renderSettings(view) {
       body: {
         ai_agent_enabled: view.querySelector('#ai-agent-enabled').checked,
         ai_agent_prompt: view.querySelector('#ai-agent-prompt').value,
+        missed_call_text: view.querySelector('#missed-call-text').value,
       },
     });
     toast('Conversation AI guardada');
@@ -259,6 +263,25 @@ export async function renderSettings(view) {
     });
   });
 
+  view.querySelectorAll('.assign-user').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const assigned = await api(`/locations/team/users/${b.dataset.id}/locations`);
+      const modal = openModal(`
+        <h2>Acceso de ${esc(b.dataset.name)}</h2>
+        <p class="muted" style="margin-bottom:10px">Sin marcar ninguna, el miembro accede a todas. Marcando algunas, solo verá esas sub-cuentas.</p>
+        ${locations.map((l) => `<label class="flex" style="margin:6px 0"><input type="checkbox" class="al-cb" value="${l.id}" ${assigned.includes(l.id) ? 'checked' : ''}> ${esc(l.name)}</label>`).join('')}
+        <div class="modal-actions">
+          <button class="btn secondary" onclick="document.getElementById('modal-root').innerHTML=''">Cancelar</button>
+          <button class="btn" id="al-save">Guardar acceso</button>
+        </div>`);
+      modal.querySelector('#al-save').addEventListener('click', async () => {
+        const ids = [...modal.querySelectorAll('.al-cb:checked')].map((cb) => Number(cb.value));
+        await api(`/locations/team/users/${b.dataset.id}/locations`, { method: 'PUT', body: { location_ids: ids } });
+        document.getElementById('modal-root').innerHTML = '';
+        toast('Acceso actualizado');
+      });
+    })
+  );
   view.querySelectorAll('.del-user').forEach((b) =>
     b.addEventListener('click', async () => {
       if (!confirm('Remove this team member?')) return;

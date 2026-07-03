@@ -34,7 +34,8 @@ export async function renderReputation(view) {
                 <td class="muted">${fmtDate(r.created_at)}</td>
                 <td><span class="badge ${r.status === 'reviewed' ? 'green' : r.status === 'opened' ? 'amber' : 'gray'}">${r.status}</span></td>
                 <td style="color:#f59e0b;font-size:15px">${stars(r.rating)}</td>
-                <td class="muted" style="max-width:260px">${esc(r.comment || '')}</td></tr>`
+                <td class="muted" style="max-width:260px">${esc(r.comment || '')}
+                  ${r.rating ? `<div><button class="btn secondary small suggest-reply" data-id="${r.id}" style="margin-top:4px">✨ Sugerir respuesta</button></div>` : ''}</td></tr>`
             )
             .join('')}</tbody></table>`
         : '<div class="empty"><div class="big">⭐</div>Aún no has pedido reseñas. Pídelas manualmente o automatiza con el workflow "Pedir reseña tras la cita".</div>'
@@ -68,6 +69,29 @@ export async function renderReputation(view) {
     });
   }
 
+  view.querySelectorAll('.suggest-reply').forEach((b) =>
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      b.textContent = 'Generando…';
+      try {
+        const r = await api(`/reputation/${b.dataset.id}/suggest-reply`, { method: 'POST' });
+        const modal = openModal(`
+          <h2>✨ Respuesta sugerida</h2>
+          <textarea class="input" id="sr-text" rows="5">${esc(r.reply)}</textarea>
+          <p class="muted" style="font-size:11px;margin-top:6px">Cópiala y publícala en Google/Facebook, o úsala como mensaje directo al cliente.</p>
+          <div class="modal-actions">
+            <button class="btn secondary" onclick="document.getElementById('modal-root').innerHTML=''">Cerrar</button>
+            <button class="btn" id="sr-copy">Copiar</button>
+          </div>`);
+        modal.querySelector('#sr-copy').addEventListener('click', () => {
+          navigator.clipboard.writeText(modal.querySelector('#sr-text').value);
+          toast('Respuesta copiada');
+        });
+      } catch (err) { toast(err.message, true); }
+      b.disabled = false;
+      b.textContent = '✨ Sugerir respuesta';
+    })
+  );
   view.querySelector('#edit-links').addEventListener('click', linksModal);
   view.querySelector('#cfg-now')?.addEventListener('click', (e) => { e.preventDefault(); linksModal(); });
 

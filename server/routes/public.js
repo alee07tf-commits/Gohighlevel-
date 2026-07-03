@@ -289,12 +289,12 @@ router.post('/book/:slug', async (req, res) => {
     .toISOString()
     .slice(0, 19);
 
-  const clash = await db.get('SELECT id FROM appointments WHERE calendar_id = ? AND starts_at = ? AND status != ?', [
-    calendar.id,
-    startsAt,
-    'cancelled',
-  ]);
-  if (clash) return res.status(409).json({ error: 'That slot is already taken, pick another time.' });
+  const { n: booked } = await db.get(
+    'SELECT COUNT(*)::int AS n FROM appointments WHERE calendar_id = ? AND starts_at = ? AND status != ?',
+    [calendar.id, startsAt, 'cancelled']
+  );
+  if (booked >= (calendar.capacity || 1))
+    return res.status(409).json({ error: 'That slot is already taken, pick another time.' });
 
   let contact = await db.get('SELECT * FROM contacts WHERE location_id = ? AND email = ?', [
     calendar.location_id,
@@ -403,7 +403,7 @@ td:last-child,th:last-child{text-align:right}
 .muted{color:#64748b;font-size:.85rem}.foot{text-align:center;color:#94a3b8;font-size:.8rem;padding:18px}
 </style></head><body>
 <div class="head">${location.logo_url ? `<img src="${esc(location.logo_url)}" alt="">` : ''}
-<h1>${esc(location.name)}</h1><p>Factura ${esc(inv.number)}</p></div>
+<h1>${esc(location.name)}</h1><p>${inv.kind === 'quote' ? 'Presupuesto' : 'Factura'} ${esc(inv.number)}</p></div>
 <div class="wrap"><div class="card">
 ${contact ? `<p class="muted">Para: ${esc([contact.first_name, contact.last_name].filter(Boolean).join(' '))}</p>` : ''}
 ${inv.title ? `<h2 style="margin:6px 0">${esc(inv.title)}</h2>` : ''}
@@ -418,13 +418,31 @@ ${paid || justPaid
     ? `<div class="paid">✅ Factura pagada${inv.paid_at ? ` el ${new Date(inv.paid_at).toLocaleDateString('es-ES')}` : ''}. ¡Gracias!</div>`
     : inv.status === 'void'
       ? `<div class="paid" style="background:#fef2f2;border-color:#ef4444;color:#b91c1c">Esta factura fue anulada.</div>`
-      : providers.paymentsProvider() === 'stripe'
+      : inv.kind === 'quote'
+        ? `<form method="post" action="/api/public/pay/${esc(inv.token)}/accept-quote"><button class="btn">✓ Aceptar presupuesto (${inv.total.toFixed(2)} ${esc(inv.currency)})</button></form>
+           <p class="muted" style="text-align:center;margin-top:10px">Al aceptarlo se convierte en factura y podrás pagarla.</p>`
+        : providers.paymentsProvider() === 'stripe'
         ? `<form method="post" action="/api/public/pay/${esc(inv.token)}/checkout"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} 💳</button></form>
            <p class="muted" style="text-align:center;margin-top:10px">Pago seguro procesado por Stripe</p>`
         : `<form method="post" action="/api/public/pay/${esc(inv.token)}/simulate-paid"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} (modo prueba)</button></form>
            <p class="muted" style="text-align:center;margin-top:10px">Stripe no está conectado todavía — este botón simula el pago para pruebas.</p>`}
 </div>
 <div class="foot">Powered by LeadFlow</div></div></body></html>`);
+});
+
+// Quote acceptance: converts the estimate into a payable invoice and
+// notifies the business via an activity + contact tag.
+router.post('/pay/:token/accept-quote', async (req, res) => {
+  const inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
+  if (!inv || inv.kind !== 'quote') return res.status(404).send('Quote not found');
+  await db.run(`UPDATE invoices SET kind = 'invoice', status = 'sent' WHERE id = ?`, [inv.id]);
+  if (inv.contact_id) {
+    const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [inv.contact_id]);
+    await automation.logActivity(inv.location_id, inv.contact_id, 'note', `✅ Presupuesto ${inv.number} ACEPTADO (${inv.total.toFixed(2)} ${inv.currency})`);
+    await db.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [inv.contact_id, 'presupuesto-aceptado']);
+    await automation.trigger(inv.location_id, 'tag_added', contact, { tag: 'presupuesto-aceptado' });
+  }
+  res.redirect(`/pay/${inv.token}`);
 });
 
 router.post('/pay/:token/checkout', async (req, res) => {
@@ -530,6 +548,8 @@ router.post('/review/:token', async (req, res) => {
     'note',
     `Review response: ${rating}★${req.body?.comment ? ` — "${String(req.body.comment).slice(0, 120)}"` : ''}`
   );
+  const reviewContact = await db.get('SELECT * FROM contacts WHERE id = ?', [rr.contact_id]);
+  await automation.trigger(rr.location_id, 'review_received', reviewContact, { rating });
   res.json({ ok: true });
 });
 
