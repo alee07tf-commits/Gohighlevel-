@@ -11,9 +11,15 @@ router.get('/status', (req, res) => res.json({ provider: prospecting.provider() 
 
 router.post('/search', async (req, res) => {
   const query = String(req.body?.query || '').trim();
+  const filters = req.body?.filters || {};
+  const enrich = req.body?.enrich !== false; // ads/tech detection on by default
   if (query.length < 3) return res.status(400).json({ error: 'Escribe qué buscar (ej: "dentistas en Madrid")' });
   try {
     const out = await prospecting.search(query);
+    if (enrich) out.results = await prospecting.enrich(out.results);
+    const total = out.results.length;
+    out.results = prospecting.applyFilters(out.results, filters);
+    out.total_before_filters = total;
     // Mark results whose phone already exists as contacts in this sub-account.
     const withDupes = [];
     for (const r of out.results) {
@@ -28,7 +34,7 @@ router.post('/search', async (req, res) => {
       }
       withDupes.push({ ...r, already_contact: exists });
     }
-    res.json({ provider: out.provider, results: withDupes });
+    res.json({ provider: out.provider, results: withDupes, total_before_filters: out.total_before_filters });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -75,6 +81,7 @@ router.post('/import', async (req, res) => {
           web: p.website || '',
           rating_google: p.rating != null ? String(p.rating) : '',
           resenas_google: String(p.reviews || ''),
+          hace_anuncios: p.runs_ads === true ? 'sí' : p.runs_ads === false ? 'no' : 'desconocido',
         }),
       ]
     );
@@ -83,7 +90,7 @@ router.post('/import', async (req, res) => {
       req.location.id,
       id,
       'contact',
-      `Prospecto importado de Google${p.rating ? ` (${p.rating}★, ${p.reviews} reseñas)` : ''}${p.maps_url ? ` — ${p.maps_url}` : ''}`
+      `Prospecto importado de Google${p.rating ? ` (${p.rating}★, ${p.reviews} reseñas)` : ''}${p.runs_ads === true ? ' · 📢 hace anuncios' : p.runs_ads === false ? ' · sin anuncios 🎯' : ''}${p.maps_url ? ` — ${p.maps_url}` : ''}`
     );
     if (pipeline && stage) {
       await db.run(

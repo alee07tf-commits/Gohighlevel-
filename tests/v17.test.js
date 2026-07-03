@@ -211,3 +211,53 @@ test('prospecting: simulated search + import creates contacts/opportunities', as
   assert.equal(again.body.imported, 0);
   assert.equal(again.body.skipped, 3);
 });
+
+test('prospecting ads detection: scans real HTML for Google Ads / Meta Pixel tags', async () => {
+  const prospecting = require('../server/services/prospecting');
+  const advertiser = http.createServer((req, res) =>
+    res.end(`<html><head><script async src="https://www.googletagmanager.com/gtag/js?id=AW-123456789"></script>
+      <script>fbq('init','111');</script></head><body>Hola</body></html>`)
+  );
+  const organic = http.createServer((req, res) => res.end('<html><body>Sin pixeles</body></html>'));
+  await new Promise((r) => advertiser.listen(0, r));
+  await new Promise((r) => organic.listen(0, r));
+
+  const results = [
+    { name: 'Anunciante SL', website: `http://127.0.0.1:${advertiser.address().port}`, reviews: 80, rating: 4.5 },
+    { name: 'Orgánico SL', website: `http://127.0.0.1:${organic.address().port}`, reviews: 12, rating: 4.9 },
+    { name: 'Sin Web SL', website: '', reviews: 3, rating: 5 },
+  ];
+  await prospecting.enrich(results);
+  advertiser.close();
+  organic.close();
+
+  assert.equal(results[0].runs_ads, true, 'AW- tag + fbq detected');
+  assert.equal(results[0].tech.google_ads, true);
+  assert.equal(results[0].tech.meta_pixel, true);
+  assert.equal(results[1].runs_ads, false, 'clean site → not advertising');
+  assert.equal(results[2].runs_ads, false, 'no website → not advertising');
+
+  // Filters
+  const conAds = prospecting.applyFilters(results, { ads: 'with' });
+  assert.deepEqual(conAds.map((r) => r.name), ['Anunciante SL']);
+  const sinAdsConWeb = prospecting.applyFilters(results, { ads: 'without', website: 'with' });
+  assert.deepEqual(sinAdsConWeb.map((r) => r.name), ['Orgánico SL']);
+  const muchasResenas = prospecting.applyFilters(results, { min_reviews: 50 });
+  assert.deepEqual(muchasResenas.map((r) => r.name), ['Anunciante SL']);
+  const sinWeb = prospecting.applyFilters(results, { website: 'without' });
+  assert.deepEqual(sinWeb.map((r) => r.name), ['Sin Web SL']);
+});
+
+test('prospecting search API: enriched results + server-side filters', async () => {
+  const filtered = await request(app).post('/api/prospecting/search').set(headers).send({
+    query: 'clinicas en Sevilla',
+    filters: { ads: 'without', website: 'with' },
+  });
+  assert.equal(filtered.status, 200);
+  assert.ok(filtered.body.total_before_filters > filtered.body.results.length, 'filters reduced the set');
+  for (const r of filtered.body.results) {
+    assert.equal(r.runs_ads, false);
+    assert.ok(r.website);
+    assert.ok(r.tech, 'tech detection attached');
+  }
+});
