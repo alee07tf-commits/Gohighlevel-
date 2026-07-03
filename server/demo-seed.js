@@ -8,6 +8,12 @@ async function seedDemo() {
   if (await db.get('SELECT id FROM users WHERE email = ?', ['demo@leadflow.app'])) return false;
 
   await db.tx(async (t) => {
+    // Serialize competing seeders (boot auto-seed vs manual endpoint) — the
+    // loser re-checks inside the lock and exits instead of colliding on the
+    // unique email index.
+    await t.get('SELECT pg_advisory_xact_lock(815052)');
+    if (await t.get('SELECT id FROM users WHERE email = ?', ['demo@leadflow.app'])) return;
+
     const agencyId = await t.insert('INSERT INTO agencies (name) VALUES (?)', ['Demo Marketing Agency']);
 
     await t.run('INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)', [

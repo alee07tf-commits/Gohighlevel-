@@ -283,12 +283,19 @@ if (process.env.DATABASE_URL) {
       await client.query('BEGIN');
       const result = await fn(wrap(client));
       await client.query('COMMIT');
+      client.release();
       return result;
     } catch (err) {
-      await client.query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // rollback can fail on a broken connection; destroying below handles it
+      }
+      // Destroy the connection instead of returning it to the pool — after a
+      // timeout mid-transaction the stream state is unreliable and a reused
+      // client wedges every later request.
+      client.release(err);
       throw err;
-    } finally {
-      client.release();
     }
   };
 } else {
