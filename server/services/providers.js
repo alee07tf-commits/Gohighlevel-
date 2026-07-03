@@ -21,14 +21,60 @@ function whatsappProvider() {
     : 'simulated';
 }
 
+function paymentsProvider() {
+  return process.env.STRIPE_SECRET_KEY ? 'stripe' : 'simulated';
+}
+
 function status() {
   return {
     email: emailProvider(),
     sms: smsProvider(),
     whatsapp: whatsappProvider(),
+    payments: paymentsProvider(),
     ai: Boolean(process.env.ANTHROPIC_API_KEY),
     mail_from: process.env.MAIL_FROM || null,
   };
+}
+
+// ---- Stripe (payments) ----
+// Creates a Checkout Session for an invoice. Returns { url } to redirect the
+// payer to, or null in simulated mode (the pay page then offers a
+// mark-as-paid test button instead).
+async function createCheckoutSession({ invoice, successUrl, cancelUrl }) {
+  if (paymentsProvider() !== 'stripe') return null;
+  const params = new URLSearchParams({
+    mode: 'payment',
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    'metadata[invoice_id]': String(invoice.id),
+    'metadata[invoice_token]': invoice.token,
+    'line_items[0][quantity]': '1',
+    'line_items[0][price_data][currency]': (invoice.currency || 'EUR').toLowerCase(),
+    'line_items[0][price_data][unit_amount]': String(Math.round(invoice.total * 100)),
+    'line_items[0][price_data][product_data][name]': invoice.title || `Invoice ${invoice.number}`,
+  });
+  const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data.error && data.error.message) || 'Stripe checkout session failed');
+  return { url: data.url, id: data.id };
+}
+
+// Confirms a Checkout Session is actually paid — the webhook re-fetches from
+// Stripe instead of trusting the inbound payload.
+async function retrieveCheckoutSession(sessionId) {
+  const res = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
+    headers: { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data.error && data.error.message) || 'Stripe session retrieve failed');
+  return data;
 }
 
 // ---- Email ----
@@ -109,4 +155,12 @@ async function deliverWhatsapp({ to, body }) {
   }
 }
 
-module.exports = { status, deliverEmail, deliverSms, deliverWhatsapp };
+module.exports = {
+  status,
+  deliverEmail,
+  deliverSms,
+  deliverWhatsapp,
+  paymentsProvider,
+  createCheckoutSession,
+  retrieveCheckoutSession,
+};

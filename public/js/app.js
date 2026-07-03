@@ -10,6 +10,9 @@ import { renderMarketing } from './views/marketing.js';
 import { renderAutomations } from './views/automations.js';
 import { renderFunnels } from './views/funnels.js';
 import { renderSettings } from './views/settings.js';
+import { renderPayments } from './views/payments.js';
+import { renderReputation } from './views/reputation.js';
+import { renderTasks } from './views/tasks.js';
 
 const NAV = [
   { path: 'dashboard', label: 'Dashboard', icon: '📊', view: renderDashboard },
@@ -17,9 +20,12 @@ const NAV = [
   { path: 'contacts', label: 'Contacts', icon: '👥', view: renderContacts },
   { path: 'pipelines', label: 'Opportunities', icon: '🎯', view: renderPipelines },
   { path: 'calendar', label: 'Calendar', icon: '📅', view: renderCalendar },
+  { path: 'payments', label: 'Pagos', icon: '💳', view: renderPayments },
   { path: 'marketing', label: 'Marketing', icon: '📣', view: renderMarketing },
   { path: 'automations', label: 'Automations', icon: '⚙️', view: renderAutomations },
   { path: 'funnels', label: 'Sites & Funnels', icon: '🌐', view: renderFunnels },
+  { path: 'reputation', label: 'Reputación', icon: '⭐', view: renderReputation },
+  { path: 'tasks', label: 'Tareas', icon: '✅', view: renderTasks },
   { path: 'settings', label: 'Settings', icon: '🛠️', view: renderSettings },
 ];
 
@@ -96,3 +102,8 @@ async function route() {
 
 window.addEventListener('hashchange', route);
 route();
+
+// PWA: register the service worker (no-op where unsupported).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}

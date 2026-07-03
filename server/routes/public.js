@@ -91,10 +91,12 @@ router.get('/f/:funnelSlug{/:pageSlug}', async (req, res) => {
     slug,
   ]);
   if (!page) return res.status(404).send('Page not found or not published');
+  const loc = await db.get('SELECT * FROM locations WHERE id = ?', [funnel.location_id]);
+  const css = PAGE_CSS.replaceAll('#4f46e5', (loc && loc.brand_color) || '#4f46e5');
   const blocks = JSON.parse(page.content || '[]');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(page.name)}</title>
-<style>${PAGE_CSS}</style></head><body>
+<style>${css}</style></head><body>
 ${blocks.map((b) => renderBlock(b, page.id)).join('\n')}
 <div class="footer">Powered by LeadFlow</div>
 <script>
@@ -171,9 +173,11 @@ router.post('/pages/:pageId/submit', async (req, res) => {
 router.get('/book/:slug', async (req, res) => {
   const calendar = await db.get('SELECT * FROM calendars WHERE slug = ?', [req.params.slug]);
   if (!calendar) return res.status(404).send('Calendar not found');
+  const bookLoc = await db.get('SELECT * FROM locations WHERE id = ?', [calendar.location_id]);
+  const bookCss = PAGE_CSS.replaceAll('#4f46e5', (bookLoc && bookLoc.brand_color) || '#4f46e5');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Book: ${esc(calendar.name)}</title>
-<style>${PAGE_CSS}
+<style>${bookCss}
 .book{max-width:460px;margin:60px auto;background:#fff;border-radius:12px;padding:34px;box-shadow:0 4px 14px rgba(0,0,0,.1)}
 .book h1{font-size:1.5rem;margin-bottom:6px}.book .desc{color:#6b7280;margin-bottom:18px}
 .book label{display:block;font-size:.85rem;font-weight:600;margin:12px 0 4px;color:#374151}
@@ -304,6 +308,166 @@ ${stat('Ganado en el periodo', money(stats.won_value))}
 </div>
 <div class="foot">Preparado con ❤ por tu equipo de marketing</div>
 </body></html>`);
+});
+
+// ---- Public invoice payment page (/pay/<token>) ----
+router.get('/pay/:token', async (req, res) => {
+  const inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
+  if (!inv) return res.status(404).send('Invoice not found');
+  const location = await db.get('SELECT * FROM locations WHERE id = ?', [inv.location_id]);
+  const contact = inv.contact_id ? await db.get('SELECT * FROM contacts WHERE id = ?', [inv.contact_id]) : null;
+  const providers = require('../services/providers');
+  const items = JSON.parse(inv.items || '[]');
+  const brand = location.brand_color || '#4f46e5';
+  const paid = inv.status === 'paid';
+  const justPaid = req.query.paid === '1';
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Factura ${esc(inv.number)} — ${esc(location.name)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f4f9;color:#1e293b;line-height:1.6}
+.head{background:${esc(brand)};color:#fff;padding:36px 24px;text-align:center}
+.head img{max-height:48px;margin-bottom:8px}
+.wrap{max-width:560px;margin:-24px auto 40px;padding:0 20px}
+.card{background:#fff;border-radius:14px;box-shadow:0 4px 18px rgba(15,23,42,.08);padding:28px;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+td,th{padding:9px 4px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:.92rem}
+td:last-child,th:last-child{text-align:right}
+.total{font-size:1.4rem;font-weight:800;text-align:right;margin-top:10px}
+.btn{display:block;width:100%;background:${esc(brand)};color:#fff;border:none;border-radius:10px;padding:15px;
+     font-size:1.05rem;font-weight:700;cursor:pointer;text-align:center;text-decoration:none}
+.paid{background:#ecfdf5;border:1px solid #10b981;color:#065f46;padding:16px;border-radius:10px;text-align:center;font-weight:700}
+.muted{color:#64748b;font-size:.85rem}.foot{text-align:center;color:#94a3b8;font-size:.8rem;padding:18px}
+</style></head><body>
+<div class="head">${location.logo_url ? `<img src="${esc(location.logo_url)}" alt="">` : ''}
+<h1>${esc(location.name)}</h1><p>Factura ${esc(inv.number)}</p></div>
+<div class="wrap"><div class="card">
+${contact ? `<p class="muted">Para: ${esc([contact.first_name, contact.last_name].filter(Boolean).join(' '))}</p>` : ''}
+${inv.title ? `<h2 style="margin:6px 0">${esc(inv.title)}</h2>` : ''}
+${inv.due_date ? `<p class="muted">Vencimiento: ${esc(inv.due_date)}</p>` : ''}
+<table><thead><tr><th>Concepto</th><th>Cant.</th><th>Importe</th></tr></thead><tbody>
+${items.map((it) => `<tr><td>${esc(it.name)}</td><td>${Number(it.qty) || 1}</td><td>${((Number(it.qty) || 1) * (Number(it.price) || 0)).toFixed(2)} ${esc(inv.currency)}</td></tr>`).join('')}
+</tbody></table>
+<div class="total">Total: ${inv.total.toFixed(2)} ${esc(inv.currency)}</div>
+</div>
+<div class="card">
+${paid || justPaid
+    ? `<div class="paid">✅ Factura pagada${inv.paid_at ? ` el ${new Date(inv.paid_at).toLocaleDateString('es-ES')}` : ''}. ¡Gracias!</div>`
+    : inv.status === 'void'
+      ? `<div class="paid" style="background:#fef2f2;border-color:#ef4444;color:#b91c1c">Esta factura fue anulada.</div>`
+      : providers.paymentsProvider() === 'stripe'
+        ? `<form method="post" action="/api/public/pay/${esc(inv.token)}/checkout"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} 💳</button></form>
+           <p class="muted" style="text-align:center;margin-top:10px">Pago seguro procesado por Stripe</p>`
+        : `<form method="post" action="/api/public/pay/${esc(inv.token)}/simulate-paid"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} (modo prueba)</button></form>
+           <p class="muted" style="text-align:center;margin-top:10px">Stripe no está conectado todavía — este botón simula el pago para pruebas.</p>`}
+</div>
+<div class="foot">Powered by LeadFlow</div></div></body></html>`);
+});
+
+router.post('/pay/:token/checkout', async (req, res) => {
+  const inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
+  if (!inv) return res.status(404).send('Invoice not found');
+  if (inv.status === 'paid') return res.redirect(`/pay/${inv.token}`);
+  const providers = require('../services/providers');
+  const base = `${req.protocol}://${req.get('host')}`;
+  try {
+    const session = await providers.createCheckoutSession({
+      invoice: inv,
+      successUrl: `${base}/pay/${inv.token}?paid=1`,
+      cancelUrl: `${base}/pay/${inv.token}`,
+    });
+    if (!session) return res.redirect(`/pay/${inv.token}`);
+    res.redirect(303, session.url);
+  } catch (err) {
+    res.status(502).send(`Payment error: ${esc(err.message)}`);
+  }
+});
+
+router.post('/pay/:token/simulate-paid', async (req, res) => {
+  const inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
+  if (!inv) return res.status(404).send('Invoice not found');
+  const providers = require('../services/providers');
+  if (providers.paymentsProvider() === 'stripe')
+    return res.status(400).send('Simulated payments are disabled when Stripe is connected');
+  await require('./payments').settleInvoice(inv.id, 'simulated');
+  res.redirect(`/pay/${inv.token}?paid=1`);
+});
+
+// ---- Public review / feedback gate (/review/<token>) ----
+router.get('/review/:token', async (req, res) => {
+  const rr = await db.get('SELECT * FROM review_requests WHERE token = ?', [req.params.token]);
+  if (!rr) return res.status(404).send('Not found');
+  const location = await db.get('SELECT * FROM locations WHERE id = ?', [rr.location_id]);
+  if (rr.status === 'sent') await db.run(`UPDATE review_requests SET status = 'opened' WHERE id = ?`, [rr.id]);
+  const brand = location.brand_color || '#4f46e5';
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Tu opinión — ${esc(location.name)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f4f9;color:#1e293b;text-align:center}
+.card{max-width:440px;margin:60px auto;background:#fff;border-radius:16px;box-shadow:0 6px 22px rgba(15,23,42,.1);padding:36px 28px}
+h1{font-size:1.3rem;margin-bottom:6px}p{color:#64748b}
+.stars{font-size:2.6rem;margin:22px 0;cursor:pointer;user-select:none}
+.stars span{opacity:.35;transition:.1s}.stars span.on{opacity:1}
+textarea{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px;font-family:inherit;margin-top:10px}
+.btn{background:${esc(brand)};color:#fff;border:none;border-radius:10px;padding:13px 30px;font-weight:700;cursor:pointer;margin-top:14px;font-size:1rem}
+#done{display:none;color:#065f46;background:#ecfdf5;border:1px solid #10b981;padding:16px;border-radius:10px;margin-top:16px}
+.foot{color:#94a3b8;font-size:.8rem;padding:14px}
+</style></head><body>
+<div class="card">
+<h1>${esc(location.name)}</h1>
+<p>¿Cómo fue tu experiencia con nosotros?</p>
+<div class="stars" id="stars">${[1, 2, 3, 4, 5].map((n) => `<span data-n="${n}">★</span>`).join('')}</div>
+<div id="low" style="display:none">
+  <p>Sentimos no haber estado a la altura. ¿Qué podemos mejorar?</p>
+  <textarea id="comment" rows="4" placeholder="Cuéntanos qué pasó…"></textarea>
+  <button class="btn" onclick="send()">Enviar</button>
+</div>
+<div id="done">¡Gracias por tu opinión! La usaremos para mejorar.</div>
+</div>
+<div class="foot">Powered by LeadFlow</div>
+<script>
+const googleLink=${JSON.stringify(location.review_link_google || '')};
+let rating=0;
+const spans=[...document.querySelectorAll('#stars span')];
+spans.forEach(s=>s.addEventListener('click',async()=>{
+  rating=Number(s.dataset.n);
+  spans.forEach(x=>x.classList.toggle('on',Number(x.dataset.n)<=rating));
+  if(rating>=4&&googleLink){
+    await post('');
+    location.href=googleLink;
+  }else{
+    document.getElementById('low').style.display='block';
+  }
+}));
+async function post(comment){
+  await fetch('/api/public/review/${esc(rr.token)}',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({rating,comment})});
+}
+async function send(){
+  await post(document.getElementById('comment').value);
+  document.getElementById('low').style.display='none';
+  document.getElementById('done').style.display='block';
+}
+</script></body></html>`);
+});
+
+router.post('/review/:token', async (req, res) => {
+  const rr = await db.get('SELECT * FROM review_requests WHERE token = ?', [req.params.token]);
+  if (!rr) return res.status(404).json({ error: 'Not found' });
+  const rating = Math.min(5, Math.max(1, Number(req.body?.rating) || 0));
+  if (!rating) return res.status(400).json({ error: 'rating is required' });
+  await db.run(
+    `UPDATE review_requests SET rating = ?, comment = ?, status = 'reviewed', responded_at = now() WHERE id = ?`,
+    [rating, String(req.body?.comment || '').slice(0, 2000), rr.id]
+  );
+  await automation.logActivity(
+    rr.location_id,
+    rr.contact_id,
+    'note',
+    `Review response: ${rating}★${req.body?.comment ? ` — "${String(req.body.comment).slice(0, 120)}"` : ''}`
+  );
+  res.json({ ok: true });
 });
 
 module.exports = router;

@@ -28,10 +28,23 @@ router.put('/:id', async (req, res) => {
     req.user.agency_id,
   ]);
   if (!loc) return res.status(404).json({ error: 'Location not found' });
-  const { name, company, phone, email, website, timezone } = { ...loc, ...req.body };
-  await db.run('UPDATE locations SET name=?, company=?, phone=?, email=?, website=?, timezone=? WHERE id=?', [
-    name, company, phone, email, website, timezone, loc.id,
-  ]);
+  const m = { ...loc, ...req.body };
+  await db.run(
+    `UPDATE locations SET name=?, company=?, phone=?, email=?, website=?, timezone=?,
+     brand_color=?, logo_url=?, review_link_google=?, review_link_facebook=?,
+     briefing_enabled=?, briefing_hour=?, briefing_email=? WHERE id=?`,
+    [
+      m.name, m.company, m.phone, m.email, m.website, m.timezone,
+      m.brand_color || '#4f46e5', m.logo_url || '', m.review_link_google || '', m.review_link_facebook || '',
+      m.briefing_enabled ? 1 : 0, Number(m.briefing_hour) || 8, m.briefing_email || '',
+      loc.id,
+    ]
+  );
+  // (Re)schedule the daily briefing when it's enabled.
+  if (m.briefing_enabled) {
+    const scheduler = require('../services/scheduler');
+    await scheduler.scheduleDailyBriefing(loc.id, Number(m.briefing_hour) || 8);
+  }
   res.json(await db.get('SELECT * FROM locations WHERE id = ?', [loc.id]));
 });
 

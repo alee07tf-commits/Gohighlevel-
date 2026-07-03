@@ -87,6 +87,15 @@ router.get('/:id', getContact, async (req, res) => {
      WHERE o.contact_id = ? ORDER BY o.created_at DESC`,
     [contact.id]
   );
+  contact.tasks = await db.all(
+    `SELECT t.*, u.name AS user_name FROM tasks t LEFT JOIN users u ON u.id = t.user_id
+     WHERE t.contact_id = ? ORDER BY t.status, t.due_at NULLS LAST LIMIT 20`,
+    [contact.id]
+  );
+  if (contact.owner_user_id) {
+    const owner = await db.get('SELECT name FROM users WHERE id = ?', [contact.owner_user_id]);
+    contact.owner_name = owner ? owner.name : null;
+  }
   contact.appointments = await db.all(
     'SELECT * FROM appointments WHERE contact_id = ? ORDER BY starts_at DESC LIMIT 20',
     [contact.id]
@@ -97,7 +106,7 @@ router.get('/:id', getContact, async (req, res) => {
 router.put('/:id', getContact, async (req, res) => {
   const merged = { ...req.contact, ...req.body };
   await db.run(
-    `UPDATE contacts SET first_name=?, last_name=?, email=?, phone=?, source=?, dnd=?, custom_fields=?,
+    `UPDATE contacts SET first_name=?, last_name=?, email=?, phone=?, source=?, dnd=?, owner_user_id=?, custom_fields=?,
      updated_at=now() WHERE id=?`,
     [
       merged.first_name,
@@ -106,6 +115,7 @@ router.put('/:id', getContact, async (req, res) => {
       merged.phone,
       merged.source,
       merged.dnd ? 1 : 0,
+      merged.owner_user_id || null,
       JSON.stringify(
         typeof merged.custom_fields === 'string' ? JSON.parse(merged.custom_fields) : merged.custom_fields || {}
       ),

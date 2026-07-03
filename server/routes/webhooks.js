@@ -47,4 +47,28 @@ router.post('/twilio/:locationId', express.urlencoded({ extended: false }), asyn
   res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
 });
 
+// Stripe: point the webhook to POST https://<your-app>/api/webhooks/stripe
+// with the checkout.session.completed event. We never trust the payload --
+// the session is re-fetched from Stripe's API before settling the invoice.
+router.post('/stripe', express.json(), async (req, res) => {
+  const event = req.body || {};
+  if (event.type !== 'checkout.session.completed') return res.json({ received: true });
+  const sessionId = event.data && event.data.object && event.data.object.id;
+  if (!sessionId) return res.status(400).json({ error: 'Missing session id' });
+  try {
+    const providers = require('../services/providers');
+    const session = await providers.retrieveCheckoutSession(sessionId);
+    if (session.payment_status === 'paid' && session.metadata && session.metadata.invoice_id) {
+      const inv = await db.get('SELECT * FROM invoices WHERE id = ? AND token = ?', [
+        session.metadata.invoice_id,
+        session.metadata.invoice_token || '',
+      ]);
+      if (inv) await require('./payments').settleInvoice(inv.id, 'stripe');
+    }
+    res.json({ received: true });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 module.exports = router;

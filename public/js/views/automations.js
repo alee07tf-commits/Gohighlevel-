@@ -2,6 +2,8 @@ import { api } from '../api.js';
 import { esc, openModal, closeOverlay, toast, fmtDate, fullName } from '../ui.js';
 
 const TRIGGER_LABELS = {
+  invoice_paid: '💳 Factura pagada',
+  appointment_status_changed: '📅 Cambio de estado de cita',
   contact_created: '👤 Contact created',
   tag_added: '🏷️ Tag added',
   form_submitted: '📩 Form submitted',
@@ -18,6 +20,9 @@ const ACTION_LABELS = {
   add_note: 'Add note',
   create_opportunity: 'Create opportunity',
   wait: '⏳ Wait / Esperar',
+  create_task: '✅ Crear tarea',
+  send_review_request: '⭐ Pedir reseña',
+  branch: '🔀 Rama If/Else',
 };
 
 export async function renderAutomations(view) {
@@ -27,6 +32,7 @@ export async function renderAutomations(view) {
   <div class="page-header">
     <h1>Automations</h1>
     <div class="spacer"></div>
+    <button class="btn secondary" id="recipes-btn">📦 Recetas</button>
     <button class="btn" id="new-wf">+ Workflow</button>
   </div>
   ${
@@ -111,6 +117,30 @@ export async function renderAutomations(view) {
             <select class="input" data-i="${i}" data-k="unit" style="width:130px">
               ${['minutes', 'hours', 'days'].map((u) => `<option value="${u}" ${a.config.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
             </select></div>`;
+        case 'create_task':
+          return `<input class="input" data-i="${i}" data-k="title" placeholder="Título de la tarea — {{first_name}} vale" value="${esc(a.config.title || '')}" style="margin-bottom:6px">
+            <input class="input" data-i="${i}" data-k="due_in_days" type="number" placeholder="Vence en X días (0 = hoy)" value="${esc(a.config.due_in_days ?? '')}">`;
+        case 'send_review_request':
+          return `<select class="input" data-i="${i}" data-k="channel">
+            ${['sms', 'whatsapp', 'email'].map((c) => `<option ${a.config.channel === c ? 'selected' : ''}>${c}</option>`).join('')}
+          </select><p class="muted" style="font-size:11px;margin-top:4px">4-5★ → tu link de Google (configúralo en Reputación) · 1-3★ → feedback privado</p>`;
+        case 'branch': {
+          const branchActions = (list) => (list || []).map((n) => `${n.type}${n.config?.tag ? ':' + n.config.tag : ''}`).join(', ') || 'vacío';
+          return `<div class="form-row">
+              <select class="input" data-i="${i}" data-k="field">
+                ${['tag', 'score', 'source', 'email', 'phone'].map((f) => `<option ${a.config.field === f ? 'selected' : ''}>${f}</option>`).join('')}
+              </select>
+              <select class="input" data-i="${i}" data-k="op">
+                ${['has', 'not_has', 'equals', 'not_equals', 'contains', 'gte', 'lte', 'is_set', 'not_set'].map((o) => `<option ${a.config.op === o ? 'selected' : ''}>${o}</option>`).join('')}
+              </select>
+              <input class="input" data-i="${i}" data-k="value" placeholder="valor" value="${esc(a.config.value ?? '')}">
+            </div>
+            <p class="muted" style="font-size:11px;margin:4px 0">SI se cumple → <strong>${esc(branchActions(a.config.then))}</strong> · SI NO → <strong>${esc(branchActions(a.config.otherwise))}</strong></p>
+            <div class="flex">
+              <button type="button" class="btn secondary small edit-branch" data-i="${i}" data-side="then">Editar SI ✓</button>
+              <button type="button" class="btn secondary small edit-branch" data-i="${i}" data-side="otherwise">Editar SI NO ✗</button>
+            </div>`;
+        }
         case 'create_opportunity':
           return `<input class="input" data-i="${i}" data-k="title" placeholder="Opportunity title" value="${esc(a.config.title || '')}" style="margin-bottom:6px">
             <input class="input" data-i="${i}" data-k="value" type="number" placeholder="Value $" value="${esc(a.config.value || '')}">`;
@@ -139,6 +169,28 @@ export async function renderAutomations(view) {
       listEl.querySelectorAll('[data-k]').forEach((input) =>
         input.addEventListener('input', () => {
           actions[Number(input.dataset.i)].config[input.dataset.k] = input.value;
+        })
+      );
+      listEl.querySelectorAll('.edit-branch').forEach((btn) =>
+        btn.addEventListener('click', () => {
+          const action = actions[Number(btn.dataset.i)];
+          const side = btn.dataset.side;
+          const simple = ['add_tag', 'remove_tag', 'send_email', 'send_sms', 'send_whatsapp', 'add_note', 'create_task', 'send_review_request'];
+          const current = JSON.stringify(action.config[side] || [], null, 2);
+          const example = '[\n  { "type": "add_tag", "config": { "tag": "caliente" } },\n  { "type": "send_sms", "config": { "body": "Hola {{first_name}}!" } }\n]';
+          const value = prompt(
+            `Acciones de la rama ${side === 'then' ? 'SI ✓' : 'SI NO ✗'} (JSON).\nTipos: ${simple.join(', ')}\nEjemplo: ${example}`,
+            current
+          );
+          if (value === null) return;
+          try {
+            const parsed = JSON.parse(value);
+            if (!Array.isArray(parsed)) throw new Error('Debe ser una lista []');
+            action.config[side] = parsed;
+            renderActions();
+          } catch (err) {
+            toast('JSON inválido: ' + err.message, true);
+          }
         })
       );
     }
@@ -174,6 +226,35 @@ export async function renderAutomations(view) {
   }
 
   view.querySelector('#new-wf').addEventListener('click', () => workflowModal());
+  view.querySelector('#recipes-btn').addEventListener('click', async () => {
+    const recipes = await api('/workflows/recipes');
+    const modal = openModal(`
+      <h2>📦 Recetas de automatización</h2>
+      <p class="muted" style="margin-bottom:12px">Workflows probados listos para instalar con un clic. Luego puedes editarlos.</p>
+      ${recipes
+        .map(
+          (r) => `<div class="block-item">
+            <div class="b-head"><span>${esc(r.name)}</span>
+              <button class="btn small install-recipe" data-key="${esc(r.key)}">Instalar</button></div>
+            <div class="muted" style="font-size:12px">${esc(r.description)}</div>
+          </div>`
+        )
+        .join('')}`);
+    modal.querySelectorAll('.install-recipe').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          await api(`/workflows/recipes/${b.dataset.key}/install`, { method: 'POST' });
+          toast('Receta instalada');
+          document.getElementById('modal-root').innerHTML = '';
+          renderAutomations(view);
+        } catch (err) {
+          toast(err.message, true);
+          b.disabled = false;
+        }
+      })
+    );
+  });
   view.querySelectorAll('.edit-wf').forEach((b) =>
     b.addEventListener('click', () => workflowModal(workflows.find((w) => w.id === Number(b.dataset.id))))
   );

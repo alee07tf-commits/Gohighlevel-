@@ -113,6 +113,14 @@ router.put('/appointments/:id', async (req, res) => {
     merged.notes,
     appt.id,
   ]);
+  if (req.body.status && req.body.status !== appt.status && appt.contact_id) {
+    const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [appt.contact_id]);
+    await automation.logActivity(req.location.id, appt.contact_id, 'appointment', `Appointment marked ${req.body.status}`);
+    await automation.trigger(req.location.id, 'appointment_status_changed', contact, {
+      status: req.body.status,
+      calendar_id: appt.calendar_id,
+    });
+  }
   res.json(await db.get('SELECT * FROM appointments WHERE id = ?', [appt.id]));
 });
 

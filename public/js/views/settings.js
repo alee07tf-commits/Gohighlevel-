@@ -2,10 +2,11 @@ import { api, state, loadMe, setLocation } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast } from '../ui.js';
 
 export async function renderSettings(view) {
-  const [locations, team, integrations] = await Promise.all([
+  const [locations, team, integrations, customFields] = await Promise.all([
     api('/locations'),
     api('/locations/team/users'),
     api('/system/integrations'),
+    api('/custom-fields'),
   ]);
   const current = locations.find((l) => l.id === state.locationId) || locations[0];
 
@@ -29,6 +30,21 @@ export async function renderSettings(view) {
               <label class="field"><span class="label">Email</span><input class="input" name="email" value="${esc(current?.email || '')}"></label>
             </div>
             <label class="field"><span class="label">Website</span><input class="input" name="website" value="${esc(current?.website || '')}"></label>
+            <div class="form-row">
+              <label class="field"><span class="label">Color de marca (páginas públicas)</span>
+                <input class="input" name="brand_color" type="color" value="${esc(current?.brand_color || '#4f46e5')}" style="height:38px;padding:3px"></label>
+              <label class="field"><span class="label">Logo URL (opcional)</span>
+                <input class="input" name="logo_url" value="${esc(current?.logo_url || '')}" placeholder="https://…/logo.png"></label>
+            </div>
+            <div class="card-title" style="padding:8px 0 6px">☀️ Briefing diario</div>
+            <div class="form-row">
+              <label class="field" style="flex:0 0 auto;display:flex;align-items:center;gap:8px;margin-top:20px">
+                <input type="checkbox" name="briefing_enabled" ${current?.briefing_enabled ? 'checked' : ''}> Activado</label>
+              <label class="field"><span class="label">Hora (UTC)</span>
+                <input class="input" name="briefing_hour" type="number" min="0" max="23" value="${current?.briefing_hour ?? 8}"></label>
+              <label class="field"><span class="label">Enviar a (email)</span>
+                <input class="input" name="briefing_email" type="email" value="${esc(current?.briefing_email || '')}" placeholder="tu@email.com"></label>
+            </div>
             <button class="btn">Save Profile</button>
           </form>
         </div>
@@ -58,6 +74,8 @@ export async function renderSettings(view) {
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.sms)}</div></div>${integBadge(integrations.sms)}</div>
         <div class="appt-row"><div style="flex:1"><strong>💬 WhatsApp</strong>
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.whatsapp)}</div></div>${integBadge(integrations.whatsapp)}</div>
+        <div class="appt-row"><div style="flex:1"><strong>💳 Pagos (Stripe)</strong>
+          <div class="muted" style="font-size:12px">Stripe (stripe.com) — STRIPE_SECRET_KEY · webhook: /api/webhooks/stripe</div></div>${integBadge(integrations.payments)}</div>
         <div class="appt-row"><div style="flex:1"><strong>✨ IA (Claude)</strong>
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.ai)}</div></div>${integBadge(integrations.ai)}</div>
         <p class="muted" style="margin-top:10px;font-size:12px">
@@ -65,6 +83,32 @@ export async function renderSettings(view) {
           Para activar un canal añade sus variables de entorno (en Vercel: Settings → Environment Variables) y redespliega.
           Webhook para SMS/WhatsApp entrantes de Twilio: <code class="inline">POST /api/webhooks/twilio/${state.locationId}</code>
         </p>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Campos personalizados</div>
+      <div class="card-body">
+        ${customFields.length
+          ? customFields.map((f) => `<div class="appt-row"><div style="flex:1"><strong>${esc(f.name)}</strong>
+              <span class="muted" style="font-size:12px">· ${f.type} · merge: <code class="inline">{{${esc(f.key)}}}</code></span></div>
+              <button class="btn ghost small del-cf" data-id="${f.id}">✕</button></div>`).join('')
+          : '<p class="muted">Sin campos personalizados aún.</p>'}
+        <div class="flex" style="margin-top:10px">
+          <input class="input" id="cf-name" placeholder="Nombre del campo (ej. Cumpleaños)">
+          <select class="input" id="cf-type" style="width:110px"><option value="text">texto</option><option value="number">número</option><option value="date">fecha</option></select>
+          <button class="btn secondary" id="cf-add">+ Añadir</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Snapshots (plantillas de sub-cuenta)</div>
+      <div class="card-body">
+        <p class="muted" style="margin-bottom:10px;font-size:12px">Exporta toda la configuración de esta sub-cuenta (pipelines, workflows, funnels, calendarios, plantillas y campos) e impórtala en otra para desplegar un cliente nuevo en minutos.</p>
+        <div class="flex">
+          <button class="btn secondary" id="snap-export">⬇ Exportar snapshot</button>
+          <button class="btn secondary" id="snap-import">⬆ Importar snapshot</button>
+          <input type="file" id="snap-file" accept=".json,application/json" style="display:none">
+        </div>
       </div>
     </div>
     <div class="card">
@@ -89,7 +133,9 @@ export async function renderSettings(view) {
   view.querySelector('#loc-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      await api(`/locations/${current.id}`, { method: 'PUT', body: formData(e.target) });
+      const body = formData(e.target);
+      body.briefing_enabled = e.target.briefing_enabled.checked;
+      await api(`/locations/${current.id}`, { method: 'PUT', body });
       await loadMe();
       toast('Profile saved');
       renderSettings(view);
@@ -98,6 +144,43 @@ export async function renderSettings(view) {
     }
   });
 
+  view.querySelector('#cf-add').addEventListener('click', async () => {
+    const name = view.querySelector('#cf-name').value.trim();
+    if (!name) return toast('Escribe el nombre del campo', true);
+    await api('/custom-fields', { method: 'POST', body: { name, type: view.querySelector('#cf-type').value } });
+    toast('Campo creado');
+    renderSettings(view);
+  });
+  view.querySelectorAll('.del-cf').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar campo personalizado?')) return;
+      await api(`/custom-fields/${b.dataset.id}`, { method: 'DELETE' });
+      renderSettings(view);
+    })
+  );
+  view.querySelector('#snap-export').addEventListener('click', async () => {
+    const snap = await api('/snapshots/export');
+    const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `leadflow-snapshot-${(current?.name || 'cuenta').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  view.querySelector('#snap-import').addEventListener('click', () => view.querySelector('#snap-file').click());
+  view.querySelector('#snap-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const snap = JSON.parse(await file.text());
+      if (!confirm(`¿Importar snapshot "${snap.name || 'sin nombre'}" en la sub-cuenta actual (${current?.name})?`)) return;
+      const result = await api('/snapshots/import', { method: 'POST', body: snap });
+      toast(`Importado: ${Object.entries(result.imported).map(([k, v]) => `${v} ${k}`).join(', ')}`);
+    } catch (err) {
+      toast(err.message, true);
+    }
+    e.target.value = '';
+  });
   view.querySelectorAll('.switch-loc').forEach((b) =>
     b.addEventListener('click', () => {
       setLocation(b.dataset.id);

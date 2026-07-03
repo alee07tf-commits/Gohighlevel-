@@ -41,9 +41,77 @@ async function processJob(job) {
       if (contact.phone) await messaging.sendSms(job.location_id, contact, body);
       return 'reminder sent';
     }
+    case 'daily_briefing': {
+      const location = await db.get('SELECT * FROM locations WHERE id = ?', [job.location_id]);
+      if (!location || !location.briefing_enabled) return 'skipped (briefing disabled)';
+      // Always queue tomorrow's run first so a failure below can't kill the loop.
+      await scheduleDailyBriefing(location.id, location.briefing_hour, true);
+      const to = location.briefing_email || location.email;
+      if (!to) return 'skipped (no briefing email configured)';
+
+      const appts = await db.all(
+        `SELECT a.*, c.first_name, c.last_name FROM appointments a LEFT JOIN contacts c ON c.id = a.contact_id
+         WHERE a.location_id = ? AND a.status = 'confirmed'
+           AND a.starts_at >= now() AND a.starts_at < now() + interval '24 hours'
+         ORDER BY a.starts_at LIMIT 10`,
+        [location.id]
+      );
+      const hot = await db.all(
+        `SELECT * FROM contacts WHERE location_id = ? AND score >= 20 ORDER BY score DESC LIMIT 5`,
+        [location.id]
+      );
+      const overdue = await db.all(
+        `SELECT t.*, c.first_name, c.last_name FROM tasks t LEFT JOIN contacts c ON c.id = t.contact_id
+         WHERE t.location_id = ? AND t.status = 'open' AND t.due_at IS NOT NULL AND t.due_at <= now()
+         ORDER BY t.due_at LIMIT 8`,
+        [location.id]
+      );
+      const unread = await db.get(
+        'SELECT COUNT(*)::int AS n FROM conversations WHERE location_id = ? AND unread > 0',
+        [location.id]
+      );
+      const name = (r) => [r.first_name, r.last_name].filter(Boolean).join(' ') || 'Sin contacto';
+      const lines = [
+        `☀️ Briefing diario — ${location.name}`,
+        '',
+        `📅 Citas próximas 24h (${appts.length}):`,
+        ...(appts.length
+          ? appts.map((a) => `  • ${new Date(a.starts_at).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })} — ${a.title} (${name(a)})`)
+          : ['  • Ninguna']),
+        '',
+        `🔥 Leads calientes (${hot.length}):`,
+        ...(hot.length ? hot.map((c) => `  • ${name(c)} — ${c.score} pts (${c.phone || c.email})`) : ['  • Ninguno']),
+        '',
+        `⏰ Tareas vencidas (${overdue.length}):`,
+        ...(overdue.length ? overdue.map((t) => `  • ${t.title}${t.contact_id ? ` — ${name(t)}` : ''}`) : ['  • Ninguna']),
+        '',
+        `💬 Conversaciones sin leer: ${unread.n}`,
+      ];
+      const providers = require('./providers');
+      const result = await providers.deliverEmail({
+        to,
+        subject: `☀️ Briefing ${location.name} — ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}`,
+        text: lines.join('\n'),
+        fromName: 'LeadFlow',
+      });
+      return result.ok ? `briefing sent to ${to} (${result.provider})` : `briefing failed: ${result.error}`;
+    }
     default:
       return `unknown job type "${job.type}"`;
   }
+}
+
+// Schedules the next daily briefing at the location's configured hour (UTC).
+// Replaces any pending briefing job for the location to avoid duplicates.
+async function scheduleDailyBriefing(locationId, hour, forceTomorrow = false) {
+  await db.run(
+    `UPDATE scheduled_jobs SET status = 'done', result = 'superseded' WHERE location_id = ? AND type = 'daily_briefing' AND status = 'pending'`,
+    [locationId]
+  );
+  const next = new Date();
+  next.setUTCHours(Number(hour) || 8, 0, 0, 0);
+  if (forceTomorrow || next.getTime() <= Date.now()) next.setUTCDate(next.getUTCDate() + 1);
+  return schedule(locationId, next.toISOString(), 'daily_briefing', {});
 }
 
 // Process due jobs; returns how many were handled.
@@ -88,4 +156,4 @@ function lazyTick() {
   tick().catch((err) => console.error('lazy tick failed:', err.message));
 }
 
-module.exports = { schedule, tick, lazyTick, scheduleAppointmentReminder };
+module.exports = { schedule, tick, lazyTick, scheduleAppointmentReminder, scheduleDailyBriefing };

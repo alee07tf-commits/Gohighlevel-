@@ -91,7 +91,12 @@ export async function renderContacts(view, rest = []) {
   await load();
 }
 
-function contactModal(onSaved, contact = null) {
+async function contactModal(onSaved, contact = null) {
+  const [customFields, team] = await Promise.all([
+    api('/custom-fields'),
+    api('/locations/team/users'),
+  ]);
+  const cfValues = contact?.custom_fields || {};
   const modal = openModal(`
     <h2>${contact ? 'Edit' : 'New'} Contact</h2>
     <form id="contact-form">
@@ -102,6 +107,17 @@ function contactModal(onSaved, contact = null) {
       <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" value="${esc(contact?.email || '')}"></label>
       <label class="field"><span class="label">Phone</span><input class="input" name="phone" value="${esc(contact?.phone || '')}"></label>
       ${contact ? '' : `<label class="field"><span class="label">Tags (comma separated)</span><input class="input" name="tags_raw" placeholder="lead, vip"></label>`}
+      <label class="field"><span class="label">Responsable (owner)</span><select class="input" name="owner_user_id">
+        <option value="">— sin asignar —</option>
+        ${team.map((u) => `<option value="${u.id}" ${contact?.owner_user_id === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+      </select></label>
+      ${customFields
+        .map(
+          (f) => `<label class="field"><span class="label">${esc(f.name)}</span>
+            <input class="input" data-cf="${esc(f.key)}" type="${f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}"
+              value="${esc(cfValues[f.key] ?? '')}"></label>`
+        )
+        .join('')}
       <div class="modal-actions">
         <button type="button" class="btn secondary" id="cancel">Cancel</button>
         <button class="btn">${contact ? 'Save' : 'Create Contact'}</button>
@@ -113,6 +129,10 @@ function contactModal(onSaved, contact = null) {
     const data = formData(e.target);
     const tags = (data.tags_raw || '').split(',').map((t) => t.trim()).filter(Boolean);
     delete data.tags_raw;
+    data.owner_user_id = Number(data.owner_user_id) || null;
+    const custom_fields = { ...(contact?.custom_fields || {}) };
+    modal.querySelectorAll('[data-cf]').forEach((inp) => { custom_fields[inp.dataset.cf] = inp.value; });
+    data.custom_fields = custom_fields;
     try {
       if (contact) await api(`/contacts/${contact.id}`, { method: 'PUT', body: data });
       else await api('/contacts', { method: 'POST', body: { ...data, tags } });
@@ -146,6 +166,9 @@ async function renderContactDetail(view, id) {
         <p><strong>Email:</strong> ${esc(c.email) || '<span class="muted">—</span>'}</p>
         <p><strong>Phone:</strong> ${esc(c.phone) || '<span class="muted">—</span>'}</p>
         <p><strong>Source:</strong> <span class="badge gray">${esc(c.source)}</span></p>
+        ${c.owner_name ? `<p><strong>Responsable:</strong> ${esc(c.owner_name)}</p>` : ''}
+        ${Object.entries(c.custom_fields || {}).filter(([, v]) => v !== '' && v != null)
+          .map(([k, v]) => `<p><strong>${esc(k)}:</strong> ${esc(v)}</p>`).join('')}
         <p style="margin-top:8px"><strong>Tags:</strong> <span id="tags">${c.tags
           .map((t) => `<span class="tag">${esc(t)} <a href="#" data-tag="${esc(t)}" class="rm-tag" style="color:inherit">×</a></span>`)
           .join('')}</span>
@@ -163,6 +186,14 @@ async function renderContactDetail(view, id) {
                 .join('')
             : '<span class="muted">No opportunities</span>'
         }
+      </div></div>
+      <div class="card" style="margin-bottom:16px"><div class="card-title">Tareas</div><div class="card-body">
+        ${(c.tasks || []).length
+          ? c.tasks.map((t) => `<div class="timeline-item"><div class="t-icon">${t.status === 'done' ? '✅' : '⬜'}</div>
+              <div style="${t.status === 'done' ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(t.title)}
+              ${t.due_at ? `<div class="t-time">vence ${fmtDate(t.due_at)}</div>` : ''}</div></div>`).join('')
+          : '<span class="muted">Sin tareas</span>'}
+        <div style="margin-top:8px"><a href="#/tasks">Gestionar en Tareas →</a></div>
       </div></div>
       <div class="card"><div class="card-title">Notes</div><div class="card-body">
         <form id="note-form" class="flex" style="margin-bottom:12px">

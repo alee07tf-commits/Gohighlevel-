@@ -1,6 +1,8 @@
 // Workflow automation engine.
-// Triggers: contact_created | tag_added | form_submitted | appointment_booked | opportunity_stage_changed
-// Actions:  add_tag | remove_tag | send_email | send_sms | add_note | create_opportunity
+// Triggers: contact_created | tag_added | form_submitted | appointment_booked |
+//           opportunity_stage_changed | message_received | invoice_paid | appointment_status_changed
+// Actions:  add_tag | remove_tag | send_email | send_sms | send_whatsapp | add_note |
+//           create_opportunity | wait | branch | create_task | send_review_request
 const db = require('../db');
 const messaging = require('./messaging');
 
@@ -11,6 +13,34 @@ async function logActivity(locationId, contactId, type, description) {
     type,
     description,
   ]);
+}
+
+// Branch conditions evaluated against the live contact record.
+// config: { field: 'tag'|'score'|'email'|'phone'|'source'|custom key, op, value }
+async function evaluateCondition(config, contact) {
+  const op = config.op || 'has';
+  const value = String(config.value ?? '');
+  if (config.field === 'tag') {
+    const row = await db.get('SELECT 1 AS x FROM contact_tags WHERE contact_id = ? AND tag = ?', [contact.id, value]);
+    return op === 'not_has' ? !row : Boolean(row);
+  }
+  const fresh = (await db.get('SELECT * FROM contacts WHERE id = ?', [contact.id])) || contact;
+  let actual;
+  if (['score', 'email', 'phone', 'source', 'first_name', 'last_name'].includes(config.field)) {
+    actual = fresh[config.field];
+  } else {
+    actual = JSON.parse(fresh.custom_fields || '{}')[config.field];
+  }
+  switch (op) {
+    case 'equals': return String(actual ?? '') === value;
+    case 'not_equals': return String(actual ?? '') !== value;
+    case 'contains': return String(actual ?? '').toLowerCase().includes(value.toLowerCase());
+    case 'gte': return Number(actual) >= Number(value);
+    case 'lte': return Number(actual) <= Number(value);
+    case 'is_set': return actual !== undefined && actual !== null && String(actual) !== '';
+    case 'not_set': return actual === undefined || actual === null || String(actual) === '';
+    default: return false;
+  }
 }
 
 async function runAction(action, contact, locationId, log) {
@@ -83,6 +113,42 @@ async function runAction(action, contact, locationId, log) {
       log.push(`Created opportunity in "${pipeline.name}"`);
       break;
     }
+    case 'create_task': {
+      await db.run(
+        'INSERT INTO tasks (location_id, contact_id, title, notes, due_at) VALUES (?, ?, ?, ?, ?)',
+        [
+          locationId,
+          contact.id,
+          messaging.mergeFields(config.title || 'Follow up with {{first_name}}', contact),
+          messaging.mergeFields(config.notes || '', contact),
+          config.due_in_days
+            ? new Date(Date.now() + Number(config.due_in_days) * 86_400_000).toISOString().slice(0, 19)
+            : null,
+        ]
+      );
+      log.push(`Created task "${config.title || 'Follow up'}"`);
+      break;
+    }
+    case 'send_review_request': {
+      const location = await db.get('SELECT * FROM locations WHERE id = ?', [locationId]);
+      const reputation = require('../routes/reputation'); // lazy: avoids circular dependency
+      await reputation.sendReviewRequest(location, contact, config.channel || 'sms', process.env.APP_URL || '');
+      log.push(`Sent review request (${config.channel || 'sms'})`);
+      break;
+    }
+    case 'branch': {
+      const matched = await evaluateCondition(config, contact);
+      const list = matched ? config.then || [] : config.otherwise || [];
+      log.push(`Branch: condition ${matched ? 'matched -> THEN' : 'not matched -> ELSE'} (${list.length} action(s))`);
+      for (const nested of list) {
+        if (nested.type === 'branch' || nested.type === 'wait') {
+          log.push(`Nested "${nested.type}" inside a branch is not supported - skipped`);
+          continue;
+        }
+        await runAction({ type: nested.type, config: JSON.stringify(nested.config || {}) }, contact, locationId, log);
+      }
+      break;
+    }
     default:
       log.push(`Unknown action type "${action.type}" skipped`);
   }
@@ -148,6 +214,7 @@ async function trigger(locationId, triggerType, contact, event = {}) {
     if (triggerType === 'form_submitted' && cfg.funnel_id && Number(cfg.funnel_id) !== Number(event.funnel_id)) continue;
     if (triggerType === 'appointment_booked' && cfg.calendar_id && Number(cfg.calendar_id) !== Number(event.calendar_id)) continue;
     if (triggerType === 'opportunity_stage_changed' && cfg.stage_id && Number(cfg.stage_id) !== Number(event.stage_id)) continue;
+    if (triggerType === 'appointment_status_changed' && cfg.status && cfg.status !== event.status) continue;
 
     await executeActions(wf, contact, 0, null);
   }

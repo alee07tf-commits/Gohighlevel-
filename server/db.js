@@ -245,6 +245,60 @@ ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_channel_check;
 ALTER TABLE messages ADD CONSTRAINT messages_channel_check CHECK (channel IN ('sms','email','whatsapp','note'));
 ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_channel_check;
 ALTER TABLE campaigns ADD CONSTRAINT campaigns_channel_check CHECK (channel IN ('email','sms','whatsapp'));
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+  number TEXT NOT NULL,
+  title TEXT DEFAULT '',
+  items TEXT NOT NULL DEFAULT '[]',
+  currency TEXT NOT NULL DEFAULT 'EUR',
+  total DOUBLE PRECISION NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sent','paid','void')),
+  token TEXT NOT NULL UNIQUE,
+  due_date TEXT DEFAULT '',
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tasks (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id),
+  title TEXT NOT NULL,
+  notes TEXT DEFAULT '',
+  due_at TIMESTAMP,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS custom_fields (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  name TEXT NOT NULL,
+  key TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'text',
+  UNIQUE (location_id, key)
+);
+CREATE TABLE IF NOT EXISTS review_requests (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  rating INTEGER,
+  comment TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'sent' CHECK (status IN ('sent','opened','reviewed')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  responded_at TIMESTAMPTZ
+);
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS brand_color TEXT DEFAULT '#4f46e5';
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT '';
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS review_link_google TEXT DEFAULT '';
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS review_link_facebook TEXT DEFAULT '';
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS briefing_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS briefing_hour INTEGER NOT NULL DEFAULT 8;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS briefing_email TEXT DEFAULT '';
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -317,7 +371,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 let readyPromise = null;
 function ensureReady() {

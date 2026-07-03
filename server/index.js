@@ -36,12 +36,18 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/system', require('./routes/system'));
+app.use('/api/payments', require('./routes/payments'));
+app.use('/api/tasks', require('./routes/tasks'));
+app.use('/api/custom-fields', require('./routes/custom-fields'));
+app.use('/api/reputation', require('./routes/reputation'));
+app.use('/api/snapshots', require('./routes/snapshots'));
 app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/public', require('./routes/public'));
 
-// Public pretty URLs: funnels (/f/...), booking (/book/...), reports (/r/...).
-for (const prefix of ['/f', '/book', '/r']) {
+// Public pretty URLs: funnels (/f/...), booking (/book/...), reports (/r/...),
+// invoice payment (/pay/...) and review gate (/review/...).
+for (const prefix of ['/f', '/book', '/r', '/pay', '/review']) {
   app.use(prefix, (req, res, next) => {
     req.url = prefix + req.url;
     require('./routes/public')(req, res, next);
