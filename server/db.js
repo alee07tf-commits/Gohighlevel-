@@ -241,8 +241,6 @@ CREATE TABLE IF NOT EXISTS reports (
 const MIGRATIONS = `
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS score INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE calendars ADD COLUMN IF NOT EXISTS reminder_hours INTEGER NOT NULL DEFAULT 24;
-ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_channel_check;
-ALTER TABLE messages ADD CONSTRAINT messages_channel_check CHECK (channel IN ('sms','email','whatsapp','note'));
 ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_channel_check;
 ALTER TABLE campaigns ADD CONSTRAINT campaigns_channel_check CHECK (channel IN ('email','sms','whatsapp'));
 
@@ -408,7 +406,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 let readyPromise = null;
 function ensureReady() {
