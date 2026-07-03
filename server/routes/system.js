@@ -20,6 +20,18 @@ router.get('/health', async (req, res) => {
   }
 });
 
+// Idempotent demo-data seeding (safe to expose: only creates the demo agency
+// if it doesn't exist yet). Surfaces seed errors that background auto-seed
+// would swallow on serverless.
+router.post('/seed-demo', async (req, res) => {
+  try {
+    const seeded = await require('../demo-seed').seedDemo();
+    res.json({ ok: true, seeded });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.use(requireAuth);
 
 router.get('/integrations', (req, res) => {
