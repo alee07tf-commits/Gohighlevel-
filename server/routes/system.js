@@ -4,7 +4,22 @@ const express = require('express');
 const { requireAuth } = require('../auth');
 const providers = require('../services/providers');
 
+const db = require('../db');
+
 const router = express.Router();
+
+// Public DB health check — no auth so it works even when login is broken.
+// Surfaces the underlying driver error instead of hanging into a 504.
+router.get('/health', async (req, res) => {
+  const info = { database: process.env.DATABASE_URL ? 'postgres' : 'pglite' };
+  try {
+    await db.get('SELECT 1 AS ok');
+    res.json({ ok: true, ...info });
+  } catch (err) {
+    res.status(500).json({ ok: false, ...info, error: err.message });
+  }
+});
+
 router.use(requireAuth);
 
 router.get('/integrations', (req, res) => {

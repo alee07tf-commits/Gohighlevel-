@@ -265,6 +265,9 @@ if (process.env.DATABASE_URL) {
     connectionString: url,
     ssl: isLocal || process.env.PGSSL === 'disable' ? undefined : { rejectUnauthorized: false },
     max: Number(process.env.PG_POOL_MAX) || 5,
+    // Fail fast instead of hanging a serverless invocation until the gateway 504s.
+    connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 10000,
+    query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS) || 15000,
   });
   const wrap = (client) => async (sql, params = []) => {
     const res = await client.query(sql, params);
