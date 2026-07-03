@@ -94,10 +94,11 @@ router.put('/:id/pages/:pageId', getFunnel, async (req, res) => {
   ]);
   if (!page) return res.status(404).json({ error: 'Page not found' });
   const merged = { ...page, ...req.body };
-  await db.run('UPDATE funnel_pages SET name=?, published=?, content=? WHERE id=?', [
+  await db.run('UPDATE funnel_pages SET name=?, published=?, content=?, theme=? WHERE id=?', [
     merged.name,
     merged.published ? 1 : 0,
     JSON.stringify(typeof merged.content === 'string' ? JSON.parse(merged.content) : merged.content || []),
+    ['clean', 'bold', 'warm', 'elegant'].includes(merged.theme) ? merged.theme : 'clean',
     page.id,
   ]);
   const updated = await db.get('SELECT * FROM funnel_pages WHERE id = ?', [page.id]);

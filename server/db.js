@@ -299,6 +299,7 @@ ALTER TABLE locations ADD COLUMN IF NOT EXISTS briefing_enabled INTEGER NOT NULL
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS briefing_hour INTEGER NOT NULL DEFAULT 8;
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS briefing_email TEXT DEFAULT '';
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id);
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'clean';
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -371,7 +372,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 let readyPromise = null;
 function ensureReady() {

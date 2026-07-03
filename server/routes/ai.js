@@ -22,4 +22,69 @@ router.post('/generate', async (req, res) => {
   }
 });
 
+
+// ---- Claude design: generate a complete, fully-editable landing page ----
+// Creates a new funnel (or replaces an existing page's content). The result
+// uses the same block schema as the visual editor, so the user can edit
+// every text, reorder sections and re-publish afterwards.
+const db = require('../db');
+
+function slugify(text) {
+  return (
+    String(text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'funnel'
+  );
+}
+
+router.post('/funnel', async (req, res) => {
+  const { business, offer, audience, goal, tone, funnel_id, page_id } = req.body || {};
+  try {
+    const design = await ai.generateFunnelDesign({
+      business: business || `${req.location.name}${req.location.company ? ` (${req.location.company})` : ''}`,
+      offer,
+      audience,
+      goal,
+      tone,
+      locationName: req.location.name,
+    });
+
+    // Regenerate an existing page in place (kept unpublished changes editable).
+    if (funnel_id && page_id) {
+      const page = await db.get(
+        `SELECT fp.* FROM funnel_pages fp JOIN funnels f ON f.id = fp.funnel_id
+         WHERE fp.id = ? AND f.id = ? AND f.location_id = ?`,
+        [page_id, funnel_id, req.location.id]
+      );
+      if (!page) return res.status(404).json({ error: 'Page not found' });
+      await db.run('UPDATE funnel_pages SET content = ?, theme = ? WHERE id = ?', [
+        JSON.stringify(design.blocks),
+        design.theme || 'clean',
+        page.id,
+      ]);
+      return res.json({ ok: true, mode: 'regenerated', generated_by: design.generated_by, page_id: page.id, funnel_id });
+    }
+
+    // Create a brand new funnel with the generated landing page.
+    let slug = slugify(design.name || offer);
+    let i = 1;
+    while (await db.get('SELECT id FROM funnels WHERE slug = ?', [slug])) slug = `${slugify(design.name || offer)}-${i++}`;
+    const funnelId = await db.insert('INSERT INTO funnels (location_id, name, slug) VALUES (?, ?, ?)', [
+      req.location.id,
+      design.name || offer || 'Funnel IA',
+      slug,
+    ]);
+    await db.run(
+      'INSERT INTO funnel_pages (funnel_id, name, slug, position, published, content, theme) VALUES (?, ?, ?, 0, 1, ?, ?)',
+      [funnelId, 'Landing', 'home', JSON.stringify(design.blocks), design.theme || 'clean']
+    );
+    res.status(201).json({ ok: true, mode: 'created', generated_by: design.generated_by, funnel_id: funnelId, slug });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

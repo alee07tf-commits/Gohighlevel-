@@ -39,6 +39,44 @@ const PAGE_CSS = `
   .footer{text-align:center;color:#9ca3af;font-size:.8rem;padding:30px}
 `;
 
+
+// ---- Landing page themes (Claude design picks one; user can change it) ----
+function themeCss(theme, brand) {
+  const base = PAGE_CSS;
+  const t = {
+    clean: { bg: '#f7fafc', heroBg: `linear-gradient(135deg,${brand},#7c3aed)`, heroText: '#fff', accent: '#f59e0b', font: "'Segoe UI',system-ui,sans-serif", heading: 'inherit' },
+    bold: { bg: '#0f172a', heroBg: '#0f172a', heroText: '#fff', accent: brand, font: "'Segoe UI',system-ui,sans-serif", heading: 'inherit' },
+    warm: { bg: '#fdf6ee', heroBg: `linear-gradient(135deg,#b45309,${brand})`, heroText: '#fff', accent: '#b45309', font: "Georgia,'Times New Roman',serif", heading: 'inherit' },
+    elegant: { bg: '#fafafa', heroBg: '#1c1917', heroText: '#fafaf9', accent: brand, font: "'Segoe UI',system-ui,sans-serif", heading: "Georgia,serif" },
+  }[theme] || null;
+  if (!t) return base.replaceAll('#4f46e5', brand);
+  return (
+    base.replaceAll('#4f46e5', brand) +
+    `
+  body{background:${t.bg};font-family:${t.font}}
+  .hero{background:${t.heroBg};color:${t.heroText}}
+  .hero h1,.section h2{font-family:${t.heading}}
+  .btn{background:${t.accent}}
+  ${theme === 'bold' ? `body{color:#e2e8f0}.section p{color:#94a3b8}.feature,form.lead,.t-card,.p-card,details{background:#1e293b;color:#e2e8f0}.feature h3{color:#fff}.section h2{color:#fff}details summary{color:#fff}form.lead label{color:#cbd5e1}form.lead input,form.lead textarea{background:#0f172a;border-color:#334155;color:#e2e8f0}` : ''}
+  .t-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-top:26px}
+  .t-card{background:#fff;border-radius:12px;padding:22px;box-shadow:0 1px 5px rgba(0,0,0,.08);text-align:left}
+  .t-card .t-text{font-style:italic;margin-bottom:10px}
+  .t-card .t-name{font-weight:700;font-size:.9rem;opacity:.8}
+  .p-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-top:26px}
+  .p-card{background:#fff;border-radius:14px;padding:26px;box-shadow:0 2px 8px rgba(0,0,0,.09);text-align:center}
+  .p-card .p-price{font-size:2rem;font-weight:800;margin:8px 0}
+  .p-card ul{list-style:none;padding:0;margin:12px 0;text-align:left}
+  .p-card li{padding:5px 0;border-bottom:1px dashed rgba(128,128,128,.25);font-size:.92rem}
+  details{background:#fff;border-radius:10px;padding:14px 18px;margin:10px auto;max-width:640px;box-shadow:0 1px 4px rgba(0,0,0,.07);text-align:left}
+  details summary{font-weight:700;cursor:pointer}
+  details p{text-align:left;margin-top:8px}
+  .cta-band{text-align:center;padding:64px 24px;background:${t.heroBg};color:${t.heroText}}
+  .cta-band h2{font-size:1.9rem;margin-bottom:10px;font-family:${t.heading}}
+  .cta-band p{opacity:.9;max-width:560px;margin:0 auto 22px}
+`
+  );
+}
+
 function renderBlock(block, pageId) {
   switch (block.type) {
     case 'hero':
@@ -77,6 +115,31 @@ function renderBlock(block, pageId) {
           <button class="btn" type="submit">${esc(block.button || 'Submit')}</button>
         </form></div>`;
     }
+    case 'testimonials': {
+      const cards = (block.items || [])
+        .map((t) => `<div class="t-card"><div class="t-text">“${esc(t.text)}”</div><div class="t-name">— ${esc(t.name)}</div></div>`)
+        .join('');
+      return `<div class="section"><h2>${esc(block.headline || 'Opiniones')}</h2><div class="t-grid">${cards}</div></div>`;
+    }
+    case 'pricing': {
+      const cards = (block.items || [])
+        .map(
+          (p) => `<div class="p-card"><h3>${esc(p.name)}</h3><div class="p-price">${esc(p.price)}</div>
+            <ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+            <a class="btn" href="#lead-form">${esc(block.button || 'Empezar')}</a></div>`
+        )
+        .join('');
+      return `<div class="section"><h2>${esc(block.headline || 'Planes')}</h2><div class="p-grid">${cards}</div></div>`;
+    }
+    case 'faq': {
+      const items = (block.items || [])
+        .map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`)
+        .join('');
+      return `<div class="section"><h2>${esc(block.headline || 'Preguntas frecuentes')}</h2>${items}</div>`;
+    }
+    case 'cta':
+      return `<div class="cta-band"><h2>${esc(block.headline)}</h2><p>${esc(block.body || '')}</p>
+        <a class="btn" href="#lead-form">${esc(block.button || 'Empezar ahora')}</a></div>`;
     default:
       return '';
   }
@@ -92,7 +155,7 @@ router.get('/f/:funnelSlug{/:pageSlug}', async (req, res) => {
   ]);
   if (!page) return res.status(404).send('Page not found or not published');
   const loc = await db.get('SELECT * FROM locations WHERE id = ?', [funnel.location_id]);
-  const css = PAGE_CSS.replaceAll('#4f46e5', (loc && loc.brand_color) || '#4f46e5');
+  const css = themeCss(page.theme || 'clean', (loc && loc.brand_color) || '#4f46e5');
   const blocks = JSON.parse(page.content || '[]');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(page.name)}</title>

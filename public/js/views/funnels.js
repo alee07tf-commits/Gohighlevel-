@@ -1,7 +1,11 @@
 import { api } from '../api.js';
 import { esc, openModal, closeOverlay, toast, fmtDate, fullName } from '../ui.js';
 
-const BLOCK_TYPES = { hero: '🎬 Hero', text: '📄 Text', features: '✨ Features', form: '📩 Lead Form' };
+const BLOCK_TYPES = {
+  hero: '🎬 Hero', text: '📄 Texto', features: '✨ Features', testimonials: '💬 Testimonios',
+  pricing: '💰 Precios', faq: '❓ FAQ', cta: '📢 CTA', form: '📩 Formulario',
+};
+const THEMES = { clean: 'Clean (claro)', bold: 'Bold (oscuro)', warm: 'Warm (cálido)', elegant: 'Elegant (serif)' };
 
 export async function renderFunnels(view, rest = []) {
   if (rest[0]) return renderBuilder(view, Number(rest[0]));
@@ -11,7 +15,8 @@ export async function renderFunnels(view, rest = []) {
   <div class="page-header">
     <h1>Sites & Funnels</h1>
     <div class="spacer"></div>
-    <button class="btn" id="new-funnel">+ Funnel</button>
+    <button class="btn" id="ai-funnel">✨ Crear con IA (Claude design)</button>
+    <button class="btn secondary" id="new-funnel">+ Funnel en blanco</button>
   </div>
   ${
     funnels.length
@@ -36,6 +41,51 @@ export async function renderFunnels(view, rest = []) {
       : '<div class="empty card" style="padding:60px"><div class="big">🌐</div>No funnels yet. Build landing pages that capture leads straight into your CRM.</div>'
   }`;
 
+  view.querySelector('#ai-funnel').addEventListener('click', () => {
+    const modal = openModal(`
+      <h2>✨ Claude design — genera tu landing</h2>
+      <p class="muted" style="margin-bottom:12px">Describe el negocio y la oferta; la IA diseña la página completa (estructura, textos y tema). Después podrás <strong>editar cada bloque</strong> antes de publicar.</p>
+      <label class="field"><span class="label">Negocio</span><input class="input" id="ai-business" placeholder="Clínica dental en Madrid especializada en estética"></label>
+      <label class="field"><span class="label">Oferta / servicio a promocionar</span><input class="input" id="ai-offer" placeholder="Blanqueamiento dental con 20% de descuento este mes"></label>
+      <div class="form-row">
+        <label class="field"><span class="label">Público objetivo</span><input class="input" id="ai-audience" placeholder="Adultos 25-50 de la zona"></label>
+        <label class="field"><span class="label">Objetivo</span><select class="input" id="ai-goal">
+          <option value="captar leads">Captar leads</option><option value="booking">Reservar citas</option>
+          <option value="vender">Vender directamente</option></select></label>
+      </div>
+      <label class="field"><span class="label">Tono</span><select class="input" id="ai-tone">
+        <option>cercano y profesional</option><option>premium y elegante</option><option>directo y urgente</option><option>divertido y fresco</option>
+      </select></label>
+      <div class="modal-actions">
+        <button class="btn secondary" id="cancel">Cancelar</button>
+        <button class="btn" id="gen">✨ Generar landing</button>
+      </div>`);
+    modal.querySelector('#cancel').addEventListener('click', closeOverlay);
+    modal.querySelector('#gen').addEventListener('click', async () => {
+      const btn = modal.querySelector('#gen');
+      btn.disabled = true;
+      btn.textContent = 'Diseñando… (10-20s)';
+      try {
+        const result = await api('/ai/funnel', {
+          method: 'POST',
+          body: {
+            business: modal.querySelector('#ai-business').value,
+            offer: modal.querySelector('#ai-offer').value,
+            audience: modal.querySelector('#ai-audience').value,
+            goal: modal.querySelector('#ai-goal').value,
+            tone: modal.querySelector('#ai-tone').value,
+          },
+        });
+        closeOverlay();
+        toast(result.generated_by === 'claude' ? 'Landing diseñada por Claude ✨' : 'Landing generada con plantilla (conecta ANTHROPIC_API_KEY para diseño IA real)');
+        location.hash = `#/funnels/${result.funnel_id}`;
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+        btn.textContent = '✨ Generar landing';
+      }
+    });
+  });
   view.querySelector('#new-funnel').addEventListener('click', async () => {
     const name = prompt('Funnel name:');
     if (!name) return;
@@ -71,6 +121,10 @@ async function renderBuilder(view, funnelId) {
     <button class="btn secondary small" id="new-page">+ Page</button>
     <button class="btn secondary small" id="view-subs">Submissions</button>
     <div class="spacer"></div>
+    <select class="input" id="theme-select" style="width:150px" title="Tema visual">
+      ${Object.entries(THEMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
+    </select>
+    <button class="btn secondary small" id="ai-redesign" title="La IA rediseña esta página (podrás editarla después)">✨ Rediseñar</button>
     <label class="flex" style="font-size:13px"><input type="checkbox" id="published"> Published</label>
     <a class="btn secondary" target="_blank" id="preview-link">Open ↗</a>
     <button class="btn" id="save-page">Save</button>
@@ -95,6 +149,7 @@ async function renderBuilder(view, funnelId) {
     sessionStorage.setItem('lf_page', page.id);
     blocks = structuredClone(page.content || []);
     view.querySelector('#published').checked = !!page.published;
+    view.querySelector('#theme-select').value = page.theme || 'clean';
     view.querySelector('#preview-link').href = `/f/${funnel.slug}/${page.slug}`;
     renderBlocks();
     refreshPreview();
@@ -114,6 +169,23 @@ async function renderBuilder(view, funnelId) {
           `<textarea class="input" data-i="${i}" data-k="items_raw" rows="3" placeholder="One per line: Title | Description">${esc(
             (b.items || []).map((f) => `${f.title} | ${f.body}`).join('\n')
           )}</textarea>`;
+      case 'testimonials':
+        return input('headline', 'Título de la sección', b.headline) +
+          `<textarea class="input" data-i="${i}" data-k="t_items_raw" rows="3" placeholder="Una por línea: Nombre | Testimonio">${esc(
+            (b.items || []).map((t) => `${t.name} | ${t.text}`).join('\n')
+          )}</textarea>`;
+      case 'pricing':
+        return input('headline', 'Título de la sección', b.headline) + input('button', 'Texto del botón', b.button) +
+          `<textarea class="input" data-i="${i}" data-k="p_items_raw" rows="3" placeholder="Uno por línea: Plan | Precio | característica; característica; …">${esc(
+            (b.items || []).map((p) => `${p.name} | ${p.price} | ${(p.features || []).join('; ')}`).join('\n')
+          )}</textarea>`;
+      case 'faq':
+        return input('headline', 'Título de la sección', b.headline) +
+          `<textarea class="input" data-i="${i}" data-k="f_items_raw" rows="4" placeholder="Una por línea: ¿Pregunta? | Respuesta">${esc(
+            (b.items || []).map((f) => `${f.q} | ${f.a}`).join('\n')
+          )}</textarea>`;
+      case 'cta':
+        return input('headline', 'Titular', b.headline) + input('body', 'Texto de apoyo', b.body) + input('button', 'Texto del botón', b.button);
       case 'form':
         return input('headline', 'Form headline', b.headline) + input('button', 'Button text', b.button) +
           input('tag', 'Tag applied to leads (fires automations)', b.tag) +
@@ -168,6 +240,22 @@ async function renderBuilder(view, funnelId) {
             const [title, ...restParts] = line.split('|');
             return { title: (title || '').trim(), body: restParts.join('|').trim() };
           });
+        } else if (input.dataset.k === 't_items_raw') {
+          b.items = input.value.split('\n').filter(Boolean).map((line) => {
+            const [name, ...restParts] = line.split('|');
+            return { name: (name || '').trim(), text: restParts.join('|').trim() };
+          });
+        } else if (input.dataset.k === 'p_items_raw') {
+          b.items = input.value.split('\n').filter(Boolean).map((line) => {
+            const [name, price, feats] = line.split('|');
+            return { name: (name || '').trim(), price: (price || '').trim(),
+              features: (feats || '').split(';').map((f) => f.trim()).filter(Boolean) };
+          });
+        } else if (input.dataset.k === 'f_items_raw') {
+          b.items = input.value.split('\n').filter(Boolean).map((line) => {
+            const [q, ...restParts] = line.split('|');
+            return { q: (q || '').trim(), a: restParts.join('|').trim() };
+          });
         } else b[input.dataset.k] = input.value;
         refreshPreviewDebounced();
       })
@@ -207,7 +295,7 @@ async function renderBuilder(view, funnelId) {
   async function savePage(silent = false) {
     const updated = await api(`/funnels/${funnel.id}/pages/${page.id}`, {
       method: 'PUT',
-      body: { content: blocks, published: view.querySelector('#published').checked },
+      body: { content: blocks, published: view.querySelector('#published').checked, theme: view.querySelector('#theme-select').value },
     });
     page = updated;
     const idx = funnel.pages.findIndex((p) => p.id === page.id);
@@ -234,6 +322,10 @@ async function renderBuilder(view, funnelId) {
       text: { type, headline: 'Section title', body: 'Write something persuasive here.' },
       features: { type, headline: 'Why choose us', items: [{ title: 'Fast', body: 'We deliver quickly.' }] },
       form: { type, headline: 'Get your free quote', button: 'Submit', fields: ['first_name', 'email', 'phone'], success_message: 'Thanks! We will reach out soon.', tag: '' },
+      testimonials: { type, headline: 'Lo que dicen nuestros clientes', items: [{ name: 'María G.', text: 'Servicio excelente, lo recomiendo.' }] },
+      pricing: { type, headline: 'Planes y precios', button: 'Empezar', items: [{ name: 'Básico', price: '49€/mes', features: ['Incluye A', 'Incluye B'] }] },
+      faq: { type, headline: 'Preguntas frecuentes', items: [{ q: '¿Cómo funciona?', a: 'Muy sencillo: nos dejas tus datos y te contactamos.' }] },
+      cta: { type, headline: '¿Listo para empezar?', body: 'Da el primer paso hoy.', button: 'Quiero empezar' },
     };
     blocks.push(defaults[type]);
     renderBlocks();
@@ -244,6 +336,27 @@ async function renderBuilder(view, funnelId) {
     refreshPreview();
   });
   view.querySelector('#published').addEventListener('change', () => savePage());
+  view.querySelector('#theme-select').addEventListener('change', async () => {
+    await savePage(true);
+    toast('Tema aplicado');
+    refreshPreview();
+  });
+  view.querySelector('#ai-redesign').addEventListener('click', async () => {
+    if (!confirm('La IA rediseñará esta página (estructura y textos). Podrás editar el resultado. ¿Continuar?')) return;
+    const btn = view.querySelector('#ai-redesign');
+    btn.disabled = true;
+    btn.textContent = 'Diseñando…';
+    try {
+      const offer = prompt('¿Qué quieres promocionar en esta página?', funnel.name) || funnel.name;
+      await api('/ai/funnel', { method: 'POST', body: { offer, funnel_id: funnel.id, page_id: page.id } });
+      toast('Página rediseñada — revisa y edita antes de guardar');
+      renderBuilder(view, funnelId);
+    } catch (err) {
+      toast(err.message, true);
+      btn.disabled = false;
+      btn.textContent = '✨ Rediseñar';
+    }
+  });
   view.querySelector('#view-subs').addEventListener('click', async () => {
     const subs = await api(`/funnels/${funnel.id}/submissions`);
     openModal(`
