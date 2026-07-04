@@ -139,8 +139,8 @@ async function enrich(results, concurrency = 6) {
   return results;
 }
 
-// Server-side filters: sector goes in the query itself; the rest here.
-// filters: { min_reviews, max_reviews, min_rating, website: any|with|without, ads: any|with|without }
+// Server-side filters. `active_ads` = running ads right now on Meta
+// (Facebook/Instagram), the only real-time source we trust.
 function applyFilters(results, filters = {}) {
   return results.filter((r) => {
     if (filters.min_reviews != null && (r.reviews || 0) < Number(filters.min_reviews)) return false;
@@ -148,8 +148,6 @@ function applyFilters(results, filters = {}) {
     if (filters.min_rating != null && filters.min_rating !== '' && (r.rating || 0) < Number(filters.min_rating)) return false;
     if (filters.website === 'with' && !r.website) return false;
     if (filters.website === 'without' && r.website) return false;
-    if (filters.ads === 'with' && r.runs_ads !== true) return false;
-    if (filters.ads === 'without' && r.runs_ads !== false) return false;
     if (filters.active_ads === 'with' && r.active_ads !== true) return false;
     if (filters.active_ads === 'without' && r.active_ads !== false) return false;
     return true;
@@ -157,16 +155,52 @@ function applyFilters(results, filters = {}) {
 }
 
 module.exports = { provider, search, enrich, applyFilters, scanWebsite };
-// ---- Real-time active-ads check (Ad transparency libraries) ----
-// The website pixel only proves a business *has set up* ads. To know whether
-// it is *running ads right now*, we query public ad-transparency sources:
-//   Meta Ad Library API (official, ACTIVE status) — needs META_AD_LIBRARY_TOKEN
-//   Google Ads Transparency Center — public HTML, best-effort, no key
-// Returns { meta_active: number|null, google_active: boolean|null, live: bool }.
+
+// ===================================================================
+// Real-time active-ads detection (NOT pixels).
+// We report whether a business is running ads RIGHT NOW on Meta
+// (Facebook/Instagram) using the official Meta Ad Library API
+// [META_AD_LIBRARY_TOKEN] — the one source that is free, official and
+// accurate enough to sell on. Google Ads/Maps have no reliable free source,
+// so we deliberately do NOT claim ad status for them; Google Places/Maps is
+// used only for normal business discovery (see provider() above).
+// Meta returns null = "unknown" when unreachable — never a false no.
+// ===================================================================
 function adsProvider() {
-  return process.env.META_AD_LIBRARY_TOKEN ? 'meta_ad_library' : 'simulated';
+  return process.env.META_AD_LIBRARY_TOKEN ? 'meta' : 'simulated';
+}
+function adsEnabled() {
+  return Boolean(process.env.META_AD_LIBRARY_TOKEN);
 }
 
+function normName(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\b(clinica|dental|centro|grupo|estudio|the|de|la|el|los|las|and|y)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+// True when a Facebook page name plausibly IS this business (not just a text
+// match), so we only count ads that really belong to it.
+function pageMatchesBusiness(business, pageName) {
+  const b = normName(business);
+  const p = normName(pageName);
+  if (!b || !p) return false;
+  if (p.includes(b) || b.includes(p)) return true;
+  const bt = new Set(b.split(' ').filter((w) => w.length > 2));
+  const pt = new Set(p.split(' ').filter((w) => w.length > 2));
+  if (!bt.size) return false;
+  let hit = 0;
+  for (const w of bt) if (pt.has(w)) hit++;
+  return hit / bt.size >= 0.6; // most distinctive words shared
+}
+
+// ---- Meta Ad Library (official) → currently ACTIVE ads that really belong
+// to this business (filtered by page-name match for accuracy). Returns
+// { count, pages } or null when unavailable. ----
 async function checkMetaActiveAds(name, country = process.env.ADS_COUNTRY || 'ES') {
   if (!process.env.META_AD_LIBRARY_TOKEN) return null;
   const params = new URLSearchParams({
@@ -175,37 +209,19 @@ async function checkMetaActiveAds(name, country = process.env.ADS_COUNTRY || 'ES
     ad_active_status: 'ACTIVE',
     ad_reached_countries: `["${country}"]`,
     ad_type: 'ALL',
-    fields: 'id',
-    limit: '50',
+    fields: 'id,page_name',
+    limit: '100',
   });
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 7000);
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(`https://graph.facebook.com/v19.0/ads_archive?${params}`, { signal: controller.signal });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error?.message || `Meta ${res.status}`);
-    return Array.isArray(data.data) ? data.data.length : 0;
-  } catch {
-    return null; // unknown
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Google Ads Transparency Center has no free API. Best-effort public check;
-// returns null (unknown) if it can't determine it — never a false claim.
-async function checkGoogleActiveAds(name) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 7000);
-  try {
-    const res = await fetch(
-      `https://adstransparency.google.com/anji/lookup?region=anywhere&query=${encodeURIComponent(name)}`,
-      { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } }
-    );
-    if (!res.ok) return null;
-    const text = await res.text();
-    // Presence of advertiser records in the transparency payload.
-    return /advertiser|creativeId|"AR\d/i.test(text) ? true : false;
+    const rows = Array.isArray(data.data) ? data.data : [];
+    const matched = rows.filter((a) => pageMatchesBusiness(name, a.page_name));
+    const pages = [...new Set(matched.map((a) => a.page_name).filter(Boolean))];
+    return { count: matched.length, pages };
   } catch {
     return null;
   } finally {
@@ -213,27 +229,37 @@ async function checkGoogleActiveAds(name) {
   }
 }
 
-// Adds live active-ads status to prospects (bounded concurrency). Runs after
-// enrich(); demo rows get deterministic values so the filter is testable.
+// Adds real-time Meta ad status to prospects (bounded concurrency).
+// Demo rows get deterministic values so filters stay testable without a token.
 async function checkActiveAds(results, concurrency = 5) {
-  const live = adsProvider() !== 'simulated';
   const queue = [...results.entries()];
   async function worker() {
     while (queue.length) {
       const [i, r] = queue.shift();
       if (r.demo) {
-        const metaActive = i % 3 === 0 ? (i % 2) + 1 : 0;
-        results[i] = { ...r, ads_live: true, meta_active_ads: metaActive, google_active_ads: i % 4 === 0, active_ads: metaActive > 0 || i % 4 === 0 };
+        const count = i % 3 === 0 ? (i % 2) + 1 : 0;
+        results[i] = {
+          ...r,
+          ads_live: true,
+          meta_active_ads: count,
+          meta_pages: count ? [`${r.name}`] : [],
+          live: { meta: count > 0, meta_count: count },
+          active_ads: count > 0,
+        };
         continue;
       }
-      const [meta, google] = await Promise.all([checkMetaActiveAds(r.name), checkGoogleActiveAds(r.name)]);
-      const active = (meta || 0) > 0 || google === true;
+      const meta = await checkMetaActiveAds(r.name);
+      const known = meta !== null;
       results[i] = {
         ...r,
-        ads_live: meta !== null || google !== null,
-        meta_active_ads: meta,
-        google_active_ads: google,
-        active_ads: meta !== null || google !== null ? active : null,
+        ads_live: known,
+        meta_active_ads: known ? meta.count : null,
+        meta_pages: known ? meta.pages : [],
+        live: {
+          meta: known ? meta.count > 0 : null,
+          meta_count: known ? meta.count : null,
+        },
+        active_ads: known ? meta.count > 0 : null,
       };
     }
   }
@@ -242,5 +268,6 @@ async function checkActiveAds(results, concurrency = 5) {
 }
 
 module.exports.adsProvider = adsProvider;
+module.exports.adsEnabled = adsEnabled;
 module.exports.checkActiveAds = checkActiveAds;
 module.exports.checkMetaActiveAds = checkMetaActiveAds;

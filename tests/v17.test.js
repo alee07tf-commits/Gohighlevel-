@@ -237,28 +237,24 @@ test('prospecting ads detection: scans real HTML for Google Ads / Meta Pixel tag
   assert.equal(results[1].runs_ads, false, 'clean site → not advertising');
   assert.equal(results[2].runs_ads, false, 'no website → not advertising');
 
-  // Filters
-  const conAds = prospecting.applyFilters(results, { ads: 'with' });
-  assert.deepEqual(conAds.map((r) => r.name), ['Anunciante SL']);
-  const sinAdsConWeb = prospecting.applyFilters(results, { ads: 'without', website: 'with' });
-  assert.deepEqual(sinAdsConWeb.map((r) => r.name), ['Orgánico SL']);
+  // Filters (website + reviews; ads pixel filter removed in favour of live ads)
   const muchasResenas = prospecting.applyFilters(results, { min_reviews: 50 });
   assert.deepEqual(muchasResenas.map((r) => r.name), ['Anunciante SL']);
   const sinWeb = prospecting.applyFilters(results, { website: 'without' });
   assert.deepEqual(sinWeb.map((r) => r.name), ['Sin Web SL']);
 });
 
-test('prospecting search API: enriched results + server-side filters', async () => {
+test('prospecting search API: auto live-ads check + server-side filters', async () => {
   const filtered = await request(app).post('/api/prospecting/search').set(headers).send({
     query: 'clinicas en Sevilla',
-    filters: { ads: 'without', website: 'with' },
+    filters: { website: 'with' },
   });
   assert.equal(filtered.status, 200);
-  assert.ok(filtered.body.total_before_filters > filtered.body.results.length, 'filters reduced the set');
+  assert.ok(filtered.body.total_before_filters >= filtered.body.results.length);
   for (const r of filtered.body.results) {
-    assert.equal(r.runs_ads, false);
-    assert.ok(r.website);
-    assert.ok(r.tech, 'tech detection attached');
+    assert.ok(r.website, 'website filter applied');
+    assert.ok(r.live, 'live ad status attached automatically');
+    assert.ok('active_ads' in r, 'active_ads computed');
   }
 });
 
@@ -286,7 +282,12 @@ test('prospecting live ads: checkMetaActiveAds hits the ad_archive endpoint', as
     assert.match(req.url, /ad_active_status=ACTIVE/);
     assert.match(req.url, /search_terms=/);
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ data: [{ id: '1' }, { id: '2' }, { id: '3' }] }));
+    res.end(JSON.stringify({ data: [
+      { id: '1', page_name: 'Clinica Test' },
+      { id: '2', page_name: 'Clinica Test Madrid' },
+      { id: '3', page_name: 'Clinica Test' },
+      { id: '4', page_name: 'Otra Empresa Distinta' },
+    ] }));
   });
   await new Promise((r) => stub.listen(0, r));
   const port = stub.address().port;
@@ -298,8 +299,9 @@ test('prospecting live ads: checkMetaActiveAds hits the ad_archive endpoint', as
     realFetch(String(url).replace('https://graph.facebook.com/v19.0', `http://127.0.0.1:${port}`), opts);
   try {
     const prospecting = require('../server/services/prospecting');
-    const count = await prospecting.checkMetaActiveAds('Clinica Test', 'ES');
-    assert.equal(count, 3, 'counts ACTIVE ads returned by the API');
+    const meta = await prospecting.checkMetaActiveAds('Clinica Test', 'ES');
+    assert.equal(meta.count, 3, 'counts only ACTIVE ads from the matching business page');
+    assert.ok(meta.pages.includes('Clinica Test'));
   } finally {
     global.fetch = realFetch;
     delete process.env.META_AD_LIBRARY_TOKEN;

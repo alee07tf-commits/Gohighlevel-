@@ -14,13 +14,11 @@ router.get('/status', (req, res) =>
 router.post('/search', async (req, res) => {
   const query = String(req.body?.query || '').trim();
   const filters = req.body?.filters || {};
-  const enrich = req.body?.enrich !== false; // pixel/tech detection on by default
-  const liveAds = req.body?.live_ads === true; // real-time active-ads check (opt-in, slower)
   if (query.length < 3) return res.status(400).json({ error: 'Escribe qué buscar (ej: "dentistas en Madrid")' });
   try {
     const out = await prospecting.search(query);
-    if (enrich) out.results = await prospecting.enrich(out.results);
-    if (liveAds) out.results = await prospecting.checkActiveAds(out.results);
+    // Real-time ad detection runs automatically on every search.
+    out.results = await prospecting.checkActiveAds(out.results);
     const total = out.results.length;
     out.results = prospecting.applyFilters(out.results, filters);
     out.total_before_filters = total;
@@ -85,9 +83,8 @@ router.post('/import', async (req, res) => {
           web: p.website || '',
           rating_google: p.rating != null ? String(p.rating) : '',
           resenas_google: String(p.reviews || ''),
-          hace_anuncios: p.runs_ads === true ? 'sí' : p.runs_ads === false ? 'no' : 'desconocido',
           anuncios_activos_ahora: p.active_ads === true ? 'sí' : p.active_ads === false ? 'no' : 'desconocido',
-          anuncios_meta_activos: p.meta_active_ads != null ? String(p.meta_active_ads) : '',
+          anuncios_meta: p.live?.meta === true ? `sí (${p.meta_active_ads || 0})` : p.live?.meta === false ? 'no' : 'desconocido',
         }),
       ]
     );
@@ -96,7 +93,7 @@ router.post('/import', async (req, res) => {
       req.location.id,
       id,
       'contact',
-      `Prospecto importado de Google${p.rating ? ` (${p.rating}★, ${p.reviews} reseñas)` : ''}${p.runs_ads === true ? ' · 📢 hace anuncios' : p.runs_ads === false ? ' · sin anuncios 🎯' : ''}${p.maps_url ? ` — ${p.maps_url}` : ''}`
+      `Prospecto importado de Google${p.rating ? ` (${p.rating}★, ${p.reviews} reseñas)` : ''}${p.active_ads === true ? ` · anuncios activos en Meta (${p.meta_active_ads || 0})` : p.active_ads === false ? ' · sin anuncios activos en Meta' : ''}${p.maps_url ? ` — ${p.maps_url}` : ''}`
     );
     if (pipeline && stage) {
       await db.run(
