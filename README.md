@@ -66,6 +66,7 @@ Cada push a la rama conectada redespliega automáticamente en Vercel. La rama de
 | **Informe del cliente (v1.2)** | Informe white-label con link público (`/r/<token>`), narrativa escrita por IA (o plantilla), envío por email al cliente. |
 | **Content AI (v1.2)** | Botón "✨ Generar con IA" en campañas: redacta emails/SMS/WhatsApp con Claude (`ANTHROPIC_API_KEY`). |
 | **CSV (v1.2)** | Importación/exportación de contactos con deduplicación (sin disparar automatizaciones en masa). |
+| **Plantillas + alta automática (v1.8)** | Biblioteca de snapshots a nivel agencia: guarda la config de una sub-cuenta como plantilla reutilizable y marca una por defecto. Al crear una sub-cuenta nueva se carga la plantilla automáticamente (pipelines, workflows, funnels, calendarios, plantillas, campos) y se siembran sus **Valores del negocio** (`{{custom_values.business_name}}`…) — lista para trabajar en segundos. |
 
 ## Arquitectura
 

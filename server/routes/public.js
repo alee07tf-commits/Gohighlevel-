@@ -5,6 +5,7 @@ const db = require('../db');
 const automation = require('../services/automation');
 const scheduler = require('../services/scheduler');
 const scoring = require('../services/scoring');
+const customValues = require('../services/customValues');
 
 const router = express.Router();
 
@@ -157,10 +158,14 @@ router.get('/f/:funnelSlug{/:pageSlug}', async (req, res) => {
   const loc = await db.get('SELECT * FROM locations WHERE id = ?', [funnel.location_id]);
   const css = themeCss(page.theme || 'clean', (loc && loc.brand_color) || '#4f46e5');
   const blocks = JSON.parse(page.content || '[]');
+  // Resolve account-level {{custom_values.KEY}} tokens so one template renders
+  // per-client (business name, phone, etc.).
+  const cv = await customValues.getMap(funnel.location_id);
+  const body = customValues.apply(blocks.map((b) => renderBlock(b, page.id)).join('\n'), cv);
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(page.name)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(customValues.apply(page.name, cv))}</title>
 <style>${css}</style></head><body>
-${blocks.map((b) => renderBlock(b, page.id)).join('\n')}
+${body}
 <div class="footer">Powered by LeadFlow</div>
 <script>
 async function submitLead(e){e.preventDefault();const f=e.target;

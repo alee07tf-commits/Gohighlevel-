@@ -2,11 +2,13 @@ import { api, state, loadMe, setLocation } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast } from '../ui.js';
 
 export async function renderSettings(view) {
-  const [locations, team, integrations, customFields] = await Promise.all([
+  const [locations, team, integrations, customFields, snapshotList, customVals] = await Promise.all([
     api('/locations'),
     api('/locations/team/users'),
     api('/system/integrations'),
     api('/custom-fields'),
+    api('/snapshots'),
+    api('/custom-values'),
   ]);
   const current = locations.find((l) => l.id === state.locationId) || locations[0];
 
@@ -120,12 +122,43 @@ export async function renderSettings(view) {
       </div>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="card-title">Snapshots (plantillas de sub-cuenta)</div>
+      <div class="card-title">Valores del negocio (Custom Values)</div>
       <div class="card-body">
-        <p class="muted" style="margin-bottom:10px;font-size:12px">Exporta toda la configuración de esta sub-cuenta (pipelines, workflows, funnels, calendarios, plantillas y campos) e impórtala en otra para desplegar un cliente nuevo en minutos.</p>
-        <div class="flex">
-          <button class="btn secondary" id="snap-export">Exportar snapshot</button>
-          <button class="btn secondary" id="snap-import">Importar snapshot</button>
+        <p class="muted" style="margin-bottom:10px;font-size:12px">Rellena estos datos una vez. Las plantillas (funnels, emails, SMS) usan <code class="inline">{{custom_values.clave}}</code> y se rellenan solos para este cliente.</p>
+        ${customVals.length
+          ? customVals.map((v) => `<div class="flex cv-row" style="margin:6px 0;gap:8px" data-id="${v.id}">
+              <div style="flex:0 0 42%"><strong style="font-size:13px">${esc(v.label || v.key)}</strong>
+                <div class="muted" style="font-size:11px"><code class="inline">{{custom_values.${esc(v.key)}}}</code></div></div>
+              <input class="input cv-val" value="${esc(v.value || '')}" placeholder="—" style="flex:1">
+              <button class="btn ghost small del-cv" data-id="${v.id}" title="Eliminar">✕</button></div>`).join('')
+          : '<p class="muted">Aún no hay valores. Se crean solos al dar de alta una sub-cuenta con plantilla.</p>'}
+        <div class="flex" style="margin-top:10px;gap:8px">
+          <input class="input" id="cv-label" placeholder="Etiqueta (ej. Horario)" style="flex:0 0 42%">
+          <input class="input" id="cv-value" placeholder="Valor" style="flex:1">
+          <button class="btn secondary" id="cv-add">+ Añadir</button>
+        </div>
+        <button class="btn" id="cv-save" style="margin-top:10px">Guardar valores</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Plantillas (Snapshots)</div>
+      <div class="card-body">
+        <p class="muted" style="margin-bottom:10px;font-size:12px">Guarda la configuración de una sub-cuenta como plantilla reutilizable. La marcada <strong>por defecto</strong> se carga automáticamente al crear una sub-cuenta nueva.</p>
+        ${snapshotList.length
+          ? snapshotList.map((s) => {
+              const total = Object.values(s.counts || {}).reduce((a, b) => a + b, 0);
+              return `<div class="appt-row"><div style="flex:1"><strong>${esc(s.name)}</strong>
+                ${s.is_default ? '<span class="badge indigo" style="margin-left:6px">por defecto</span>' : ''}
+                <div class="muted" style="font-size:11px">${esc(s.description || '')} · ${total} elementos</div></div>
+                ${!s.is_default ? `<button class="btn ghost small snap-default" data-id="${s.id}">Hacer por defecto</button>` : ''}
+                <button class="btn secondary small snap-apply" data-id="${s.id}" data-name="${esc(s.name)}">Aplicar aquí</button>
+                <button class="btn ghost small snap-del" data-id="${s.id}">✕</button></div>`;
+            }).join('')
+          : '<p class="muted">Sin plantillas todavía.</p>'}
+        <button class="btn secondary" id="snap-create" style="margin-top:12px">+ Crear plantilla desde esta sub-cuenta</button>
+        <div class="flex" style="margin-top:10px">
+          <button class="btn ghost small" id="snap-export">Exportar JSON</button>
+          <button class="btn ghost small" id="snap-import">Importar JSON</button>
           <input type="file" id="snap-file" accept=".json,application/json" style="display:none">
         </div>
       </div>
@@ -193,6 +226,74 @@ export async function renderSettings(view) {
       renderSettings(view);
     })
   );
+  // ---- Custom values ----
+  view.querySelector('#cv-save').addEventListener('click', async () => {
+    try {
+      await Promise.all(
+        [...view.querySelectorAll('.cv-row')].map((row) =>
+          api(`/custom-values/${row.dataset.id}`, { method: 'PUT', body: { value: row.querySelector('.cv-val').value } })
+        )
+      );
+      toast('Valores guardados');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+  view.querySelector('#cv-add').addEventListener('click', async () => {
+    const label = view.querySelector('#cv-label').value.trim();
+    if (!label) return toast('Escribe una etiqueta', true);
+    await api('/custom-values', { method: 'POST', body: { label, value: view.querySelector('#cv-value').value } });
+    toast('Valor añadido');
+    renderSettings(view);
+  });
+  view.querySelectorAll('.del-cv').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar este valor?')) return;
+      await api(`/custom-values/${b.dataset.id}`, { method: 'DELETE' });
+      renderSettings(view);
+    })
+  );
+
+  // ---- Snapshot library ----
+  view.querySelector('#snap-create').addEventListener('click', async () => {
+    const name = prompt(`Nombre de la plantilla (desde "${current?.name}"):`);
+    if (!name) return;
+    const makeDefault = confirm('¿Marcarla como plantilla por defecto (se cargará al crear sub-cuentas nuevas)?');
+    try {
+      const r = await api('/snapshots', { method: 'POST', body: { name, from_location_id: current.id, is_default: makeDefault } });
+      toast(`Plantilla creada: ${Object.values(r.counts).reduce((a, b) => a + b, 0)} elementos`);
+      renderSettings(view);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+  view.querySelectorAll('.snap-default').forEach((b) =>
+    b.addEventListener('click', async () => {
+      await api(`/snapshots/${b.dataset.id}`, { method: 'PUT', body: { is_default: true } });
+      toast('Plantilla por defecto actualizada');
+      renderSettings(view);
+    })
+  );
+  view.querySelectorAll('.snap-apply').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm(`¿Aplicar la plantilla "${b.dataset.name}" en la sub-cuenta actual (${current?.name})? Se añadirá su contenido.`)) return;
+      try {
+        const r = await api(`/snapshots/${b.dataset.id}/apply`, { method: 'POST', body: { location_id: current.id } });
+        toast(`Aplicado: ${Object.entries(r.applied).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(', ') || 'nada nuevo'}`);
+        renderSettings(view);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    })
+  );
+  view.querySelectorAll('.snap-del').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar esta plantilla?')) return;
+      await api(`/snapshots/${b.dataset.id}`, { method: 'DELETE' });
+      renderSettings(view);
+    })
+  );
+
   view.querySelector('#snap-export').addEventListener('click', async () => {
     const snap = await api('/snapshots/export');
     const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
@@ -223,18 +324,53 @@ export async function renderSettings(view) {
     })
   );
 
-  view.querySelector('#new-loc').addEventListener('click', async () => {
-    const name = prompt('Sub-account name (e.g. client business name):');
-    if (!name) return;
-    try {
-      const loc = await api('/locations', { method: 'POST', body: { name } });
-      await loadMe();
-      setLocation(loc.id);
-      toast('Sub-account created');
-      location.reload();
-    } catch (err) {
-      toast(err.message, true);
-    }
+  view.querySelector('#new-loc').addEventListener('click', () => {
+    const defaultSnap = snapshotList.find((s) => s.is_default);
+    const modal = openModal(`
+      <h2>Nueva sub-cuenta (cliente)</h2>
+      <p class="muted" style="margin-bottom:10px;font-size:12px">Al crearla se cargará automáticamente la plantilla elegida y se rellenarán sus datos del negocio. Todo listo para trabajar.</p>
+      <form id="loc-new-form">
+        <label class="field"><span class="label">Nombre del negocio *</span><input class="input" name="name" required></label>
+        <div class="form-row">
+          <label class="field"><span class="label">Teléfono</span><input class="input" name="phone"></label>
+          <label class="field"><span class="label">Email</span><input class="input" name="email" type="email"></label>
+        </div>
+        <label class="field"><span class="label">Sitio web</span><input class="input" name="website"></label>
+        <label class="field"><span class="label">Plantilla a cargar</span>
+          <select class="input" name="snapshot_id">
+            <option value="">${defaultSnap ? `Por defecto — ${esc(defaultSnap.name)}` : 'Ninguna (vacía)'}</option>
+            ${snapshotList.map((s) => `<option value="${s.id}">${esc(s.name)}${s.is_default ? ' (por defecto)' : ''}</option>`).join('')}
+            <option value="0">Ninguna (vacía)</option>
+          </select></label>
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn">Crear sub-cuenta</button>
+        </div>
+      </form>`);
+    modal.querySelector('#cancel').addEventListener('click', closeOverlay);
+    modal.querySelector('#loc-new-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = formData(e.target);
+      if (body.snapshot_id === '') delete body.snapshot_id;
+      else body.snapshot_id = Number(body.snapshot_id);
+      const btn = e.target.querySelector('button.btn:not(.secondary)');
+      btn.disabled = true;
+      btn.textContent = 'Creando…';
+      try {
+        const loc = await api('/locations', { method: 'POST', body });
+        const p = loc.provisioned || {};
+        const summary = Object.entries(p).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(', ');
+        await loadMe();
+        setLocation(loc.id);
+        closeOverlay();
+        toast(`Sub-cuenta creada${summary ? ` · ${summary}` : ''}`);
+        location.reload();
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+        btn.textContent = 'Crear sub-cuenta';
+      }
+    });
   });
 
   view.querySelector('#new-user').addEventListener('click', () => {

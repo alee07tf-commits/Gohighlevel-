@@ -1,136 +1,127 @@
-// Snapshots: export a sub-account's full configuration (pipelines, workflows,
-// funnels, calendars, email templates, custom fields) as portable JSON and
-// import it into any other sub-account — the "deploy a client in minutes"
-// feature agencies use to productize their setups.
+// Snapshots: an agency-level library of reusable sub-account templates. Create
+// a snapshot from any sub-account, mark one as the default (auto-loaded when a
+// new sub-account is created), and apply a snapshot into any sub-account — the
+// "deploy a client in minutes" feature agencies use to productize their setup.
+// JSON export/import is kept for portability between deployments.
 const express = require('express');
-const crypto = require('crypto');
 const db = require('../db');
 const { requireAuth, requireLocation } = require('../auth');
+const snapshots = require('../services/snapshots');
 
 const router = express.Router();
-router.use(requireAuth, requireLocation);
+router.use(requireAuth);
 
-router.get('/export', async (req, res) => {
-  const loc = req.location.id;
-  const pipelines = await db.all('SELECT * FROM pipelines WHERE location_id = ?', [loc]);
-  const snapshot = {
-    kind: 'leadflow-snapshot',
-    version: 1,
-    name: req.location.name,
-    exported_at: new Date().toISOString(),
-    pipelines: await Promise.all(
-      pipelines.map(async (p) => ({
-        name: p.name,
-        stages: (await db.all('SELECT name, position FROM stages WHERE pipeline_id = ? ORDER BY position', [p.id])).map(
-          (s) => s.name
-        ),
-      }))
-    ),
-    workflows: await Promise.all(
-      (await db.all('SELECT * FROM workflows WHERE location_id = ?', [loc])).map(async (w) => ({
-        name: w.name,
-        trigger_type: w.trigger_type,
-        trigger_config: JSON.parse(w.trigger_config || '{}'),
-        active: !!w.active,
-        actions: (
-          await db.all('SELECT type, config FROM workflow_actions WHERE workflow_id = ? ORDER BY position', [w.id])
-        ).map((a) => ({ type: a.type, config: JSON.parse(a.config || '{}') })),
-      }))
-    ),
-    funnels: await Promise.all(
-      (await db.all('SELECT * FROM funnels WHERE location_id = ?', [loc])).map(async (f) => ({
-        name: f.name,
-        pages: (
-          await db.all('SELECT name, slug, position, published, content FROM funnel_pages WHERE funnel_id = ? ORDER BY position', [f.id])
-        ).map((p) => ({ ...p, content: JSON.parse(p.content || '[]') })),
-      }))
-    ),
-    calendars: (
-      await db.all('SELECT name, description, duration_minutes, start_hour, end_hour, days, reminder_hours FROM calendars WHERE location_id = ?', [loc])
-    ).map((c) => ({ ...c, days: JSON.parse(c.days || '[]') })),
-    email_templates: await db.all('SELECT name, subject, body FROM email_templates WHERE location_id = ?', [loc]),
-    custom_fields: await db.all('SELECT name, key, type FROM custom_fields WHERE location_id = ?', [loc]),
-  };
-  res.json(snapshot);
-});
-
-function slugify(text, fallback) {
-  return (
-    String(text || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') || fallback
-  );
+// Resolve a location id and verify it belongs to the caller's agency.
+async function ownedLocation(req, id) {
+  if (!id) return null;
+  return db.get('SELECT * FROM locations WHERE id = ? AND agency_id = ?', [id, req.user.agency_id]);
 }
 
-router.post('/import', async (req, res) => {
-  const snap = req.body || {};
-  if (snap.kind !== 'leadflow-snapshot' || !snap.version)
-    return res.status(400).json({ error: 'Not a valid LeadFlow snapshot' });
-  const loc = req.location.id;
-  const counts = { pipelines: 0, workflows: 0, funnels: 0, calendars: 0, email_templates: 0, custom_fields: 0 };
+function assetCounts(data = {}) {
+  return {
+    pipelines: (data.pipelines || []).length,
+    workflows: (data.workflows || []).length,
+    funnels: (data.funnels || []).length,
+    calendars: (data.calendars || []).length,
+    email_templates: (data.email_templates || []).length,
+    custom_fields: (data.custom_fields || []).length,
+    custom_values: (data.custom_values || []).length,
+    trigger_links: (data.trigger_links || []).length,
+  };
+}
 
-  await db.tx(async (t) => {
-    for (const p of snap.pipelines || []) {
-      const pid = await t.insert('INSERT INTO pipelines (location_id, name) VALUES (?, ?)', [loc, p.name || 'Pipeline']);
-      (p.stages || []).forEach(() => {});
-      for (let i = 0; i < (p.stages || []).length; i++) {
-        await t.run('INSERT INTO stages (pipeline_id, name, position) VALUES (?, ?, ?)', [pid, p.stages[i], i]);
-      }
-      counts.pipelines++;
-    }
-    for (const w of snap.workflows || []) {
-      const wid = await t.insert(
-        'INSERT INTO workflows (location_id, name, trigger_type, trigger_config, active) VALUES (?, ?, ?, ?, ?)',
-        [loc, w.name || 'Workflow', w.trigger_type || 'contact_created', JSON.stringify(w.trigger_config || {}), w.active === false ? 0 : 1]
-      );
-      for (let i = 0; i < (w.actions || []).length; i++) {
-        await t.run('INSERT INTO workflow_actions (workflow_id, position, type, config) VALUES (?, ?, ?, ?)', [
-          wid, i, w.actions[i].type, JSON.stringify(w.actions[i].config || {}),
-        ]);
-      }
-      counts.workflows++;
-    }
-    for (const f of snap.funnels || []) {
-      let slug = slugify(f.name, 'funnel');
-      let i = 1;
-      while (await t.get('SELECT id FROM funnels WHERE slug = ?', [slug])) slug = `${slugify(f.name, 'funnel')}-${i++}`;
-      const fid = await t.insert('INSERT INTO funnels (location_id, name, slug) VALUES (?, ?, ?)', [loc, f.name || 'Funnel', slug]);
-      for (const page of f.pages || []) {
-        await t.run(
-          'INSERT INTO funnel_pages (funnel_id, name, slug, position, published, content) VALUES (?, ?, ?, ?, ?, ?)',
-          [fid, page.name || 'Page', page.slug || 'home', page.position || 0, page.published ? 1 : 0, JSON.stringify(page.content || [])]
-        );
-      }
-      counts.funnels++;
-    }
-    for (const c of snap.calendars || []) {
-      let slug = slugify(c.name, 'calendar');
-      let i = 1;
-      while (await t.get('SELECT id FROM calendars WHERE slug = ?', [slug])) slug = `${slugify(c.name, 'calendar')}-${i++}`;
-      await t.run(
-        `INSERT INTO calendars (location_id, name, slug, description, duration_minutes, start_hour, end_hour, days, reminder_hours)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [loc, c.name || 'Calendar', slug, c.description || '', c.duration_minutes || 30, c.start_hour ?? 9, c.end_hour ?? 17, JSON.stringify(c.days || [1, 2, 3, 4, 5]), c.reminder_hours ?? 24]
-      );
-      counts.calendars++;
-    }
-    for (const tpl of snap.email_templates || []) {
-      await t.run('INSERT INTO email_templates (location_id, name, subject, body) VALUES (?, ?, ?, ?)', [
-        loc, tpl.name || 'Template', tpl.subject || '', tpl.body || '',
-      ]);
-      counts.email_templates++;
-    }
-    for (const cf of snap.custom_fields || []) {
-      const exists = await t.get('SELECT id FROM custom_fields WHERE location_id = ? AND key = ?', [loc, cf.key]);
-      if (exists) continue;
-      await t.run('INSERT INTO custom_fields (location_id, name, key, type) VALUES (?, ?, ?, ?)', [
-        loc, cf.name || cf.key, cf.key || crypto.randomBytes(4).toString('hex'), cf.type || 'text',
-      ]);
-      counts.custom_fields++;
-    }
+// ---- Agency snapshot library ----
+router.get('/', async (req, res) => {
+  const rows = await db.all(
+    'SELECT id, name, description, is_default, created_at, updated_at, data FROM snapshots WHERE agency_id = ? ORDER BY is_default DESC, id DESC',
+    [req.user.agency_id]
+  );
+  res.json(
+    rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      is_default: !!s.is_default,
+      created_at: s.created_at,
+      updated_at: s.updated_at,
+      counts: assetCounts((() => { try { return JSON.parse(s.data || '{}'); } catch { return {}; } })()),
+    }))
+  );
+});
+
+router.post('/', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
+  const { name, description, from_location_id, is_default } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  const loc = await ownedLocation(req, from_location_id);
+  if (!loc) return res.status(400).json({ error: 'from_location_id (a valid sub-account) is required' });
+  const data = await snapshots.serializeLocation(db, loc.id);
+  const id = await db.tx(async (t) => {
+    if (is_default) await t.run('UPDATE snapshots SET is_default = 0 WHERE agency_id = ?', [req.user.agency_id]);
+    return t.insert(
+      'INSERT INTO snapshots (agency_id, name, description, data, is_default) VALUES (?, ?, ?, ?, ?)',
+      [req.user.agency_id, name, description || '', JSON.stringify(data), is_default ? 1 : 0]
+    );
   });
+  res.status(201).json({ id, counts: assetCounts(data) });
+});
 
+router.put('/:id', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
+  const snap = await db.get('SELECT * FROM snapshots WHERE id = ? AND agency_id = ?', [req.params.id, req.user.agency_id]);
+  if (!snap) return res.status(404).json({ error: 'Snapshot not found' });
+  const { name, description, is_default, recapture_from_location_id } = req.body || {};
+  let data = snap.data;
+  if (recapture_from_location_id) {
+    const loc = await ownedLocation(req, recapture_from_location_id);
+    if (!loc) return res.status(400).json({ error: 'recapture_from_location_id is not a valid sub-account' });
+    data = JSON.stringify(await snapshots.serializeLocation(db, loc.id));
+  }
+  await db.tx(async (t) => {
+    if (is_default) await t.run('UPDATE snapshots SET is_default = 0 WHERE agency_id = ?', [req.user.agency_id]);
+    await t.run(
+      'UPDATE snapshots SET name = ?, description = ?, data = ?, is_default = ?, updated_at = now() WHERE id = ?',
+      [
+        name ?? snap.name,
+        description ?? snap.description,
+        data,
+        is_default != null ? (is_default ? 1 : 0) : snap.is_default,
+        snap.id,
+      ]
+    );
+  });
+  res.json({ ok: true });
+});
+
+router.delete('/:id', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
+  const info = await db.run('DELETE FROM snapshots WHERE id = ? AND agency_id = ?', [req.params.id, req.user.agency_id]);
+  if (!info.changes) return res.status(404).json({ error: 'Snapshot not found' });
+  res.json({ ok: true });
+});
+
+// Apply a stored snapshot into a target sub-account.
+router.post('/:id/apply', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
+  const snap = await db.get('SELECT * FROM snapshots WHERE id = ? AND agency_id = ?', [req.params.id, req.user.agency_id]);
+  if (!snap) return res.status(404).json({ error: 'Snapshot not found' });
+  const loc = await ownedLocation(req, req.body?.location_id);
+  if (!loc) return res.status(400).json({ error: 'location_id (a valid sub-account) is required' });
+  const data = (() => { try { return JSON.parse(snap.data || '{}'); } catch { return {}; } })();
+  const counts = await db.tx((t) => snapshots.applySnapshot(t, loc.id, data));
+  res.json({ ok: true, applied: counts });
+});
+
+// ---- JSON portability (between deployments) ----
+router.get('/export', requireLocation, async (req, res) => {
+  const data = await snapshots.serializeLocation(db, req.location.id);
+  res.json({ ...data, name: req.location.name, exported_at: new Date().toISOString() });
+});
+
+router.post('/import', requireLocation, async (req, res) => {
+  const snap = req.body || {};
+  if (snap.kind !== 'leadflow-snapshot') return res.status(400).json({ error: 'Not a valid LeadFlow snapshot' });
+  const counts = await db.tx((t) => snapshots.applySnapshot(t, req.location.id, snap));
   res.json({ ok: true, imported: counts });
 });
 

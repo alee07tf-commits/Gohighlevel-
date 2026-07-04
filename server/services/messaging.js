@@ -4,6 +4,7 @@
 // 'simulated' | 'sent' | 'failed'.
 const db = require('../db');
 const providers = require('./providers');
+const customValues = require('./customValues');
 
 async function getOrCreateConversation(locationId, contactId) {
   let conv = await db.get('SELECT * FROM conversations WHERE location_id = ? AND contact_id = ?', [
@@ -34,11 +35,14 @@ async function recordMessage({ locationId, contactId, direction, channel, subjec
   return db.get('SELECT * FROM messages WHERE id = ?', [id]);
 }
 
-// Replaces {{first_name}}, {{last_name}}, {{email}}, {{phone}} and custom
-// field merge tokens. {{link:slug}} expands to a per-contact trigger link.
-function mergeFields(text, contact) {
+// Replaces {{first_name}}, {{last_name}}, {{email}}, {{phone}}, contact custom
+// field tokens, and account-level {{custom_values.KEY}} tokens. {{link:slug}}
+// expands to a per-contact trigger link. `cvMap` is an optional { key: value }
+// map from customValues.getMap() (callers that have it pass it in).
+function mergeFields(text, contact, cvMap = {}) {
   if (!text) return '';
-  let out = text
+  let out = customValues.apply(text, cvMap);
+  out = out
     .replaceAll('{{first_name}}', contact.first_name || '')
     .replaceAll('{{last_name}}', contact.last_name || '')
     .replaceAll('{{email}}', contact.email || '')
@@ -61,8 +65,9 @@ async function locationName(locationId) {
 
 async function sendEmail(locationId, contact, subject, body) {
   if (contact.dnd) return null;
-  const mergedSubject = mergeFields(subject, contact);
-  const mergedBody = mergeFields(body, contact);
+  const cv = await customValues.getMap(locationId);
+  const mergedSubject = mergeFields(subject, contact, cv);
+  const mergedBody = mergeFields(body, contact, cv);
   const result = await providers.deliverEmail({
     to: contact.email,
     subject: mergedSubject,
@@ -82,7 +87,7 @@ async function sendEmail(locationId, contact, subject, body) {
 
 async function sendSms(locationId, contact, body) {
   if (contact.dnd) return null;
-  const merged = mergeFields(body, contact);
+  const merged = mergeFields(body, contact, await customValues.getMap(locationId));
   const result = await providers.deliverSms({ to: contact.phone, body: merged });
   return recordMessage({
     locationId,
@@ -96,7 +101,7 @@ async function sendSms(locationId, contact, body) {
 
 async function sendWhatsapp(locationId, contact, body) {
   if (contact.dnd) return null;
-  const merged = mergeFields(body, contact);
+  const merged = mergeFields(body, contact, await customValues.getMap(locationId));
   const result = await providers.deliverWhatsapp({ to: contact.phone, body: merged });
   return recordMessage({
     locationId,
@@ -116,7 +121,7 @@ async function sendByChannel(channel, locationId, contact, { subject = '', body 
     // Web chat lives in our own widget — no external provider, just the inbox.
     return recordMessage({
       locationId, contactId: contact.id, direction: 'outbound', channel: 'chat',
-      body: mergeFields(body, contact),
+      body: mergeFields(body, contact, await customValues.getMap(locationId)),
     });
   return sendSms(locationId, contact, body);
 }

@@ -334,6 +334,32 @@ CREATE TABLE IF NOT EXISTS trigger_links (
   clicks INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Snapshots: an agency-level library of reusable sub-account templates
+-- (structural config serialized as JSON). One can be marked default and is
+-- auto-loaded when a new sub-account is created.
+CREATE TABLE IF NOT EXISTS snapshots (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  data TEXT NOT NULL DEFAULT '{}',
+  is_default INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Custom Values: account-level constants ({{custom_values.KEY}}) that let one
+-- snapshot template be reused across clients — filled in per sub-account.
+CREATE TABLE IF NOT EXISTS custom_values (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  label TEXT DEFAULT '',
+  value TEXT DEFAULT '',
+  UNIQUE (location_id, key)
+);
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS onboarded INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS source_snapshot_id INTEGER;
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -406,7 +432,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 let readyPromise = null;
 function ensureReady() {
