@@ -10,15 +10,20 @@ function emailProvider() {
   if (process.env.SENDGRID_API_KEY) return 'sendgrid';
   return 'simulated';
 }
+// Twilio accepts two auth styles: Account SID + Auth Token, or an API Key
+// (SK…) + its Secret used as Basic-Auth credentials while the Account SID
+// still identifies the account in the request URL.
+function twilioAuthReady() {
+  return (
+    process.env.TWILIO_ACCOUNT_SID &&
+    (process.env.TWILIO_AUTH_TOKEN || (process.env.TWILIO_API_KEY_SID && process.env.TWILIO_API_KEY_SECRET))
+  );
+}
 function smsProvider() {
-  return process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER
-    ? 'twilio'
-    : 'simulated';
+  return twilioAuthReady() && process.env.TWILIO_FROM_NUMBER ? 'twilio' : 'simulated';
 }
 function whatsappProvider() {
-  return process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_FROM
-    ? 'twilio'
-    : 'simulated';
+  return twilioAuthReady() && process.env.TWILIO_WHATSAPP_FROM ? 'twilio' : 'simulated';
 }
 
 function paymentsProvider() {
@@ -120,11 +125,14 @@ async function deliverEmail({ to, subject, text, fromName }) {
 
 // ---- SMS / WhatsApp via Twilio ----
 async function twilioSend({ from, to, body }) {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+  const account = process.env.TWILIO_ACCOUNT_SID;
+  // Basic-auth user/pass: API Key SID + Secret when present, else Account SID + Auth Token.
+  const user = process.env.TWILIO_API_KEY_SID || account;
+  const pass = process.env.TWILIO_API_KEY_SECRET || process.env.TWILIO_AUTH_TOKEN;
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${account}/Messages.json`, {
     method: 'POST',
     headers: {
-      Authorization: 'Basic ' + Buffer.from(`${sid}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64'),
+      Authorization: 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64'),
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({ From: from, To: to, Body: body }),
