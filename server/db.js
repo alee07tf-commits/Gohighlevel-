@@ -360,6 +360,28 @@ CREATE TABLE IF NOT EXISTS custom_values (
 );
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS onboarded INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS source_snapshot_id INTEGER;
+
+-- Per-scope integration credentials (Phase 2). Credentials resolve in a
+-- cascade: location_integrations then agency_integrations then env vars.
+-- The config column is an encrypted JSON blob (see services/secretbox.js).
+CREATE TABLE IF NOT EXISTS agency_integrations (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  config TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (agency_id, provider)
+);
+CREATE TABLE IF NOT EXISTS location_integrations (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  config TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (location_id, provider)
+);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -432,7 +454,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 let readyPromise = null;
 function ensureReady() {

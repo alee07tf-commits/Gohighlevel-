@@ -58,6 +58,18 @@ async function deliveryStatus(result) {
   return result.ok ? 'sent' : 'failed';
 }
 
+// SaaS rebilling hook: meter a delivered message against the sub-account wallet
+// when it's on a SaaS plan with rebilling. No-op until the billing service is
+// present (Phase 3) and only bills real (non-simulated) sends.
+async function meterUsage(locationId, category, result) {
+  if (!result || result.provider === 'simulated' || result.ok === false) return;
+  try {
+    await require('./billing').recordUsage(locationId, category, 1);
+  } catch {
+    /* billing not enabled */
+  }
+}
+
 async function locationName(locationId) {
   const loc = await db.get('SELECT name, company FROM locations WHERE id = ?', [locationId]);
   return loc ? loc.name || loc.company : '';
@@ -68,12 +80,11 @@ async function sendEmail(locationId, contact, subject, body) {
   const cv = await customValues.getMap(locationId);
   const mergedSubject = mergeFields(subject, contact, cv);
   const mergedBody = mergeFields(body, contact, cv);
-  const result = await providers.deliverEmail({
-    to: contact.email,
-    subject: mergedSubject,
-    text: mergedBody,
-    fromName: await locationName(locationId),
-  });
+  const result = await providers.deliverEmail(
+    { to: contact.email, subject: mergedSubject, text: mergedBody, fromName: await locationName(locationId) },
+    { locationId }
+  );
+  await meterUsage(locationId, 'email', result);
   return recordMessage({
     locationId,
     contactId: contact.id,
@@ -88,7 +99,8 @@ async function sendEmail(locationId, contact, subject, body) {
 async function sendSms(locationId, contact, body) {
   if (contact.dnd) return null;
   const merged = mergeFields(body, contact, await customValues.getMap(locationId));
-  const result = await providers.deliverSms({ to: contact.phone, body: merged });
+  const result = await providers.deliverSms({ to: contact.phone, body: merged }, { locationId });
+  await meterUsage(locationId, 'sms', result);
   return recordMessage({
     locationId,
     contactId: contact.id,
@@ -102,7 +114,8 @@ async function sendSms(locationId, contact, body) {
 async function sendWhatsapp(locationId, contact, body) {
   if (contact.dnd) return null;
   const merged = mergeFields(body, contact, await customValues.getMap(locationId));
-  const result = await providers.deliverWhatsapp({ to: contact.phone, body: merged });
+  const result = await providers.deliverWhatsapp({ to: contact.phone, body: merged }, { locationId });
+  await meterUsage(locationId, 'whatsapp', result);
   return recordMessage({
     locationId,
     contactId: contact.id,

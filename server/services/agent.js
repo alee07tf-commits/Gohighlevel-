@@ -106,8 +106,9 @@ async function respond({ location, contact, conversationId, inbound }) {
     )
   ).reverse();
 
+  const aiCtx = { locationId: location.id, agencyId: location.agency_id };
   let decision;
-  if (!ai.enabled()) {
+  if (!(await ai.ready(aiCtx))) {
     decision = await scriptedReply(location, calendar, slots, history, inbound);
   } else {
     const system = `Eres el asistente virtual de "${location.name}"${location.company ? ` (${location.company})` : ''}. Respondes a clientes y leads por chat/WhatsApp en el idioma del cliente (por defecto español): cercano, útil, respuestas CORTAS (1-3 frases, sin markdown).
@@ -118,7 +119,7 @@ Tu objetivo: resolver dudas, cualificar al lead y llevarle a reservar cita. Si e
 Responde SOLO JSON válido: {"reply":"...", "book": "YYYY-MM-DDTHH:MM" | null, "tags": ["..."] opcional}. "book" SOLO si el cliente aceptó claramente ese hueco exacto de la lista.`;
     const convo = history.map((m) => `${m.direction === 'inbound' ? 'CLIENTE' : 'ASISTENTE'}: ${m.body}`).join('\n');
     try {
-      const text = await ai.complete(system, `${convo}\nCLIENTE: ${inbound}\n\nJSON:`, 700);
+      const text = await ai.complete(system, `${convo}\nCLIENTE: ${inbound}\n\nJSON:`, 700, aiCtx);
       const start = text.indexOf('{');
       decision = JSON.parse(text.slice(start, text.lastIndexOf('}') + 1));
     } catch (err) {

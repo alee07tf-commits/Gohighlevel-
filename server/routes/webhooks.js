@@ -72,11 +72,19 @@ router.post('/twilio/:locationId', express.urlencoded({ extended: false }), asyn
 router.post('/stripe', express.json(), async (req, res) => {
   const event = req.body || {};
   if (event.type !== 'checkout.session.completed') return res.json({ received: true });
-  const sessionId = event.data && event.data.object && event.data.object.id;
+  const obj = (event.data && event.data.object) || {};
+  const sessionId = obj.id;
   if (!sessionId) return res.status(400).json({ error: 'Missing session id' });
   try {
     const providers = require('../services/providers');
-    const session = await providers.retrieveCheckoutSession(sessionId);
+    // Resolve which sub-account's Stripe key to use from the session metadata
+    // (the same key that created the session) before re-fetching it.
+    let ctx = {};
+    if (obj.metadata && obj.metadata.invoice_id) {
+      const inv0 = await db.get('SELECT location_id FROM invoices WHERE id = ?', [obj.metadata.invoice_id]);
+      if (inv0) ctx = { locationId: inv0.location_id };
+    }
+    const session = await providers.retrieveCheckoutSession(sessionId, ctx);
     if (session.payment_status === 'paid' && session.metadata && session.metadata.invoice_id) {
       const inv = await db.get('SELECT * FROM invoices WHERE id = ? AND token = ?', [
         session.metadata.invoice_id,

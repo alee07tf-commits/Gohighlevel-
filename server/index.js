@@ -40,6 +40,7 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/custom-fields', require('./routes/custom-fields'));
 app.use('/api/custom-values', require('./routes/custom-values'));
+app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/reputation', require('./routes/reputation'));
 app.use('/api/snapshots', require('./routes/snapshots'));
 app.use('/api/prospecting', require('./routes/prospecting'));

@@ -1,53 +1,67 @@
-// Real delivery providers with graceful fallback.
-// Everything works out of the box in "simulated" mode (messages recorded in
-// the inbox only); adding env keys switches channels to live delivery:
-//   Email:    RESEND_API_KEY  (or SENDGRID_API_KEY) + MAIL_FROM
-//   SMS:      TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM_NUMBER
-//   WhatsApp: same Twilio account + TWILIO_WHATSAPP_FROM (e.g. "whatsapp:+14155238886")
+// Real delivery providers with graceful fallback. Every channel works in
+// "simulated" mode (recorded in the inbox only) until credentials exist.
+// Credentials resolve per context via services/integrations.js in the cascade
+//   location override → agency default → deployment env var
+// so each sub-account (or the agency) can bring its own Stripe/Twilio/email/AI.
+// `ctx` is { locationId } or { agencyId } (or both); omitted → env only.
+const integrations = require('./integrations');
 
-function emailProvider() {
-  if (process.env.RESEND_API_KEY) return 'resend';
-  if (process.env.SENDGRID_API_KEY) return 'sendgrid';
-  return 'simulated';
-}
-// Twilio accepts two auth styles: Account SID + Auth Token, or an API Key
-// (SK…) + its Secret used as Basic-Auth credentials while the Account SID
-// still identifies the account in the request URL.
-function twilioAuthReady() {
-  return (
-    process.env.TWILIO_ACCOUNT_SID &&
-    (process.env.TWILIO_AUTH_TOKEN || (process.env.TWILIO_API_KEY_SID && process.env.TWILIO_API_KEY_SECRET))
-  );
-}
-function smsProvider() {
-  return twilioAuthReady() && process.env.TWILIO_FROM_NUMBER ? 'twilio' : 'simulated';
-}
-function whatsappProvider() {
-  return twilioAuthReady() && process.env.TWILIO_WHATSAPP_FROM ? 'twilio' : 'simulated';
+async function cfg(provider, ctx) {
+  return (await integrations.resolve(provider, ctx || {})).config;
 }
 
-function paymentsProvider() {
-  return process.env.STRIPE_SECRET_KEY ? 'stripe' : 'simulated';
+function emailVendor(c) {
+  return c.vendor || (c.api_key ? 'resend' : '');
+}
+// Twilio accepts Account SID + Auth Token, or an API Key (SK…) + Secret used as
+// Basic-Auth credentials while the Account SID still identifies the account.
+function twilioReady(c) {
+  return c.account_sid && (c.auth_token || (c.api_key_sid && c.api_key_secret));
 }
 
-function status() {
+async function emailProvider(ctx) {
+  const c = await cfg('email', ctx);
+  return c.api_key ? emailVendor(c) || 'resend' : 'simulated';
+}
+async function smsProvider(ctx) {
+  const c = await cfg('twilio', ctx);
+  return twilioReady(c) && c.from_number ? 'twilio' : 'simulated';
+}
+async function whatsappProvider(ctx) {
+  const c = await cfg('twilio', ctx);
+  return twilioReady(c) && c.whatsapp_from ? 'twilio' : 'simulated';
+}
+async function paymentsProvider(ctx) {
+  const c = await cfg('stripe', ctx);
+  return c.secret_key ? 'stripe' : 'simulated';
+}
+
+// Effective per-context status for the Settings → Integraciones card, with the
+// resolution source of each provider.
+async function status(ctx) {
+  const [email, twilio, stripe, ai, places] = await Promise.all([
+    integrations.resolve('email', ctx || {}),
+    integrations.resolve('twilio', ctx || {}),
+    integrations.resolve('stripe', ctx || {}),
+    integrations.resolve('ai', ctx || {}),
+    integrations.resolve('places', ctx || {}),
+  ]);
   return {
-    email: emailProvider(),
-    sms: smsProvider(),
-    whatsapp: whatsappProvider(),
-    payments: paymentsProvider(),
-    prospecting: process.env.GOOGLE_PLACES_API_KEY ? 'google_places' : process.env.SERPER_API_KEY ? 'serper' : 'simulated',
-    ai: Boolean(process.env.ANTHROPIC_API_KEY),
-    mail_from: process.env.MAIL_FROM || null,
+    email: email.config.api_key ? emailVendor(email.config) || 'resend' : 'simulated',
+    sms: twilioReady(twilio.config) && twilio.config.from_number ? 'twilio' : 'simulated',
+    whatsapp: twilioReady(twilio.config) && twilio.config.whatsapp_from ? 'twilio' : 'simulated',
+    payments: stripe.config.secret_key ? 'stripe' : 'simulated',
+    prospecting: places.config.google_places_api_key ? 'google_places' : places.config.serper_api_key ? 'serper' : 'simulated',
+    ai: Boolean(ai.config.api_key),
+    mail_from: email.config.mail_from || null,
+    sources: { email: email.source, sms: twilio.source, whatsapp: twilio.source, payments: stripe.source, ai: ai.source, prospecting: places.source },
   };
 }
 
-// ---- Stripe (payments) ----
-// Creates a Checkout Session for an invoice. Returns { url } to redirect the
-// payer to, or null in simulated mode (the pay page then offers a
-// mark-as-paid test button instead).
-async function createCheckoutSession({ invoice, successUrl, cancelUrl }) {
-  if (paymentsProvider() !== 'stripe') return null;
+// ---- Stripe ----
+async function createCheckoutSession({ invoice, successUrl, cancelUrl }, ctx) {
+  const c = await cfg('stripe', ctx);
+  if (!c.secret_key) return null;
   const params = new URLSearchParams({
     mode: 'payment',
     success_url: successUrl,
@@ -61,10 +75,7 @@ async function createCheckoutSession({ invoice, successUrl, cancelUrl }) {
   });
   const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers: { Authorization: `Bearer ${c.secret_key}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
   });
   const data = await res.json();
@@ -72,11 +83,10 @@ async function createCheckoutSession({ invoice, successUrl, cancelUrl }) {
   return { url: data.url, id: data.id };
 }
 
-// Confirms a Checkout Session is actually paid — the webhook re-fetches from
-// Stripe instead of trusting the inbound payload.
-async function retrieveCheckoutSession(sessionId) {
+async function retrieveCheckoutSession(sessionId, ctx) {
+  const c = await cfg('stripe', ctx);
   const res = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
-    headers: { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` },
+    headers: { Authorization: `Bearer ${c.secret_key}` },
   });
   const data = await res.json();
   if (!res.ok) throw new Error((data.error && data.error.message) || 'Stripe session retrieve failed');
@@ -84,31 +94,25 @@ async function retrieveCheckoutSession(sessionId) {
 }
 
 // ---- Email ----
-async function deliverEmail({ to, subject, text, fromName }) {
-  const provider = emailProvider();
-  if (provider === 'simulated' || !to) return { ok: true, provider: 'simulated' };
-  const from = process.env.MAIL_FROM || 'onboarding@resend.dev';
+async function deliverEmail({ to, subject, text, fromName }, ctx) {
+  const c = await cfg('email', ctx);
+  const vendor = c.api_key ? emailVendor(c) || 'resend' : 'simulated';
+  if (vendor === 'simulated' || !to) return { ok: true, provider: 'simulated' };
+  const from = c.mail_from || 'onboarding@resend.dev';
   const fromHeader = fromName ? `${fromName} <${from}>` : from;
   try {
-    if (provider === 'resend') {
+    if (vendor === 'resend') {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${c.api_key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: fromHeader, to: [to], subject: subject || '(no subject)', text }),
       });
       if (!res.ok) throw new Error(`Resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      return { ok: true, provider };
+      return { ok: true, provider: vendor };
     }
-    // SendGrid
     const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${c.api_key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: to }] }],
         from: { email: from, name: fromName || undefined },
@@ -117,18 +121,17 @@ async function deliverEmail({ to, subject, text, fromName }) {
       }),
     });
     if (!(res.status === 202 || res.ok)) throw new Error(`SendGrid ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    return { ok: true, provider };
+    return { ok: true, provider: vendor };
   } catch (err) {
-    return { ok: false, provider, error: err.message };
+    return { ok: false, provider: vendor, error: err.message };
   }
 }
 
 // ---- SMS / WhatsApp via Twilio ----
-async function twilioSend({ from, to, body }) {
-  const account = process.env.TWILIO_ACCOUNT_SID;
-  // Basic-auth user/pass: API Key SID + Secret when present, else Account SID + Auth Token.
-  const user = process.env.TWILIO_API_KEY_SID || account;
-  const pass = process.env.TWILIO_API_KEY_SECRET || process.env.TWILIO_AUTH_TOKEN;
+async function twilioSend({ from, to, body }, c) {
+  const account = c.account_sid;
+  const user = c.api_key_sid || account;
+  const pass = c.api_key_secret || c.auth_token;
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${account}/Messages.json`, {
     method: 'POST',
     headers: {
@@ -140,24 +143,22 @@ async function twilioSend({ from, to, body }) {
   if (!res.ok) throw new Error(`Twilio ${res.status}: ${(await res.text()).slice(0, 200)}`);
 }
 
-async function deliverSms({ to, body }) {
-  if (smsProvider() === 'simulated' || !to) return { ok: true, provider: 'simulated' };
+async function deliverSms({ to, body }, ctx) {
+  const c = await cfg('twilio', ctx);
+  if (!(twilioReady(c) && c.from_number) || !to) return { ok: true, provider: 'simulated' };
   try {
-    await twilioSend({ from: process.env.TWILIO_FROM_NUMBER, to, body });
+    await twilioSend({ from: c.from_number, to, body }, c);
     return { ok: true, provider: 'twilio' };
   } catch (err) {
     return { ok: false, provider: 'twilio', error: err.message };
   }
 }
 
-async function deliverWhatsapp({ to, body }) {
-  if (whatsappProvider() === 'simulated' || !to) return { ok: true, provider: 'simulated' };
+async function deliverWhatsapp({ to, body }, ctx) {
+  const c = await cfg('twilio', ctx);
+  if (!(twilioReady(c) && c.whatsapp_from) || !to) return { ok: true, provider: 'simulated' };
   try {
-    await twilioSend({
-      from: process.env.TWILIO_WHATSAPP_FROM,
-      to: to.startsWith('whatsapp:') ? to : `whatsapp:${to}`,
-      body,
-    });
+    await twilioSend({ from: c.whatsapp_from, to: to.startsWith('whatsapp:') ? to : `whatsapp:${to}`, body }, c);
     return { ok: true, provider: 'twilio' };
   } catch (err) {
     return { ok: false, provider: 'twilio', error: err.message };
@@ -166,6 +167,9 @@ async function deliverWhatsapp({ to, body }) {
 
 module.exports = {
   status,
+  emailProvider,
+  smsProvider,
+  whatsappProvider,
   deliverEmail,
   deliverSms,
   deliverWhatsapp,

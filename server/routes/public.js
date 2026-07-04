@@ -426,7 +426,7 @@ ${paid || justPaid
       : inv.kind === 'quote'
         ? `<form method="post" action="/api/public/pay/${esc(inv.token)}/accept-quote"><button class="btn">✓ Aceptar presupuesto (${inv.total.toFixed(2)} ${esc(inv.currency)})</button></form>
            <p class="muted" style="text-align:center;margin-top:10px">Al aceptarlo se convierte en factura y podrás pagarla.</p>`
-        : providers.paymentsProvider() === 'stripe'
+        : (await providers.paymentsProvider({ locationId: inv.location_id })) === 'stripe'
         ? `<form method="post" action="/api/public/pay/${esc(inv.token)}/checkout"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} 💳</button></form>
            <p class="muted" style="text-align:center;margin-top:10px">Pago seguro procesado por Stripe</p>`
         : `<form method="post" action="/api/public/pay/${esc(inv.token)}/simulate-paid"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} (modo prueba)</button></form>
@@ -457,11 +457,10 @@ router.post('/pay/:token/checkout', async (req, res) => {
   const providers = require('../services/providers');
   const base = `${req.protocol}://${req.get('host')}`;
   try {
-    const session = await providers.createCheckoutSession({
-      invoice: inv,
-      successUrl: `${base}/pay/${inv.token}?paid=1`,
-      cancelUrl: `${base}/pay/${inv.token}`,
-    });
+    const session = await providers.createCheckoutSession(
+      { invoice: inv, successUrl: `${base}/pay/${inv.token}?paid=1`, cancelUrl: `${base}/pay/${inv.token}` },
+      { locationId: inv.location_id }
+    );
     if (!session) return res.redirect(`/pay/${inv.token}`);
     res.redirect(303, session.url);
   } catch (err) {
@@ -473,7 +472,7 @@ router.post('/pay/:token/simulate-paid', async (req, res) => {
   const inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
   if (!inv) return res.status(404).send('Invoice not found');
   const providers = require('../services/providers');
-  if (providers.paymentsProvider() === 'stripe')
+  if ((await providers.paymentsProvider({ locationId: inv.location_id })) === 'stripe')
     return res.status(400).send('Simulated payments are disabled when Stripe is connected');
   await require('./payments').settleInvoice(inv.id, 'simulated');
   res.redirect(`/pay/${inv.token}?paid=1`);

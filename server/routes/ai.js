@@ -7,7 +7,9 @@ const ai = require('../services/ai');
 const router = express.Router();
 router.use(requireAuth, requireLocation);
 
-router.get('/status', (req, res) => res.json({ enabled: ai.enabled() }));
+router.get('/status', async (req, res) =>
+  res.json({ enabled: await ai.ready({ locationId: req.location.id, agencyId: req.user.agency_id }) })
+);
 
 // kind: email | sms | whatsapp | funnel
 router.post('/generate', async (req, res) => {
@@ -15,7 +17,7 @@ router.post('/generate', async (req, res) => {
   if (!prompt) return res.status(400).json({ error: 'prompt is required' });
   try {
     const business = `${req.location.name}${req.location.company ? ` (${req.location.company})` : ''}`;
-    const result = await ai.generateCopy({ kind, prompt, business });
+    const result = await ai.generateCopy({ kind, prompt, business, ctx: { locationId: req.location.id, agencyId: req.user.agency_id } });
     res.json(result);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -50,6 +52,7 @@ router.post('/funnel', async (req, res) => {
       goal,
       tone,
       locationName: req.location.name,
+      ctx: { locationId: req.location.id, agencyId: req.user.agency_id },
     });
 
     // Regenerate an existing page in place (kept unpublished changes editable).
@@ -95,6 +98,7 @@ router.post('/workflow', async (req, res) => {
     const design = await ai.generateWorkflow({
       goal,
       business: `${req.location.name}${req.location.company ? ` (${req.location.company})` : ''}`,
+      ctx: { locationId: req.location.id, agencyId: req.user.agency_id },
     });
     const wfId = await db.tx(async (t) => {
       const id = await t.insert(

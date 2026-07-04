@@ -72,7 +72,7 @@ router.get('/', async (req, res) => {
 router.post('/generate', async (req, res) => {
   const days = Math.min(Math.max(Number(req.body?.period_days) || 30, 1), 365);
   const stats = await computeStats(req.location.id, days);
-  const narrative = await ai.reportNarrative(req.location.name, stats, days);
+  const narrative = await ai.reportNarrative(req.location.name, stats, days, { locationId: req.location.id, agencyId: req.user.agency_id });
   const token = crypto.randomBytes(12).toString('hex');
   const id = await db.insert(
     'INSERT INTO reports (location_id, token, period_days, narrative, data) VALUES (?, ?, ?, ?, ?)',

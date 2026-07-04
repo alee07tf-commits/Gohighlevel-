@@ -59,6 +59,7 @@ router.post('/:id/suggest-reply', async (req, res) => {
     rating: rr.rating,
     comment: rr.comment,
     contactName: rr.first_name,
+    ctx: { locationId: req.location.id, agencyId: req.user.agency_id },
   }));
 });
 

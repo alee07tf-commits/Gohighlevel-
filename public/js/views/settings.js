@@ -1,14 +1,62 @@
 import { api, state, loadMe, setLocation } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast } from '../ui.js';
 
+// Editable integration providers (per sub-account, inheriting agency → server).
+const PROVIDERS = [
+  { key: 'email', label: 'Email', fields: [
+    { k: 'vendor', label: 'Proveedor', type: 'select', opts: ['resend', 'sendgrid'] },
+    { k: 'api_key', label: 'API key', secret: true },
+    { k: 'mail_from', label: 'Remitente (from)', placeholder: 'tu@dominio.com' } ] },
+  { key: 'twilio', label: 'SMS / WhatsApp (Twilio)', fields: [
+    { k: 'account_sid', label: 'Account SID (AC…)' },
+    { k: 'auth_token', label: 'Auth Token', secret: true },
+    { k: 'from_number', label: 'Número SMS (from)', placeholder: '+34…' },
+    { k: 'whatsapp_from', label: 'WhatsApp from', placeholder: 'whatsapp:+14155238886' } ] },
+  { key: 'stripe', label: 'Pagos (Stripe)', fields: [{ k: 'secret_key', label: 'Secret key (sk_…)', secret: true }] },
+  { key: 'ai', label: 'IA (Claude)', fields: [
+    { k: 'api_key', label: 'Anthropic API key', secret: true },
+    { k: 'model', label: 'Modelo (opcional)', placeholder: 'claude-sonnet-5' } ] },
+  { key: 'places', label: 'Prospección (Google)', fields: [
+    { k: 'google_places_api_key', label: 'Google Places API key', secret: true },
+    { k: 'serper_api_key', label: 'Serper API key (alternativa)', secret: true } ] },
+];
+
+function sourceBadge(src) {
+  const m = { estancia: ['green', 'esta sub-cuenta'], agencia: ['indigo', 'agencia'], plataforma: ['gray', 'servidor'], none: ['amber', 'sin configurar'] };
+  const [c, t] = m[src] || m.none;
+  return `<span class="badge ${c}">${t}</span>`;
+}
+function fieldValue(cfg, k) {
+  const f = (cfg?.fields || []).find((x) => x.key === k);
+  return f ? f.value : '';
+}
+function providerBlock(p, cfg) {
+  return `<div class="integ-block" data-provider="${p.key}" style="border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:12px;margin-bottom:10px">
+    <div class="flex" style="justify-content:space-between;align-items:center"><strong>${esc(p.label)}</strong> ${sourceBadge(cfg?.source)}</div>
+    ${p.fields.map((f) => {
+      const val = fieldValue(cfg, f.key);
+      if (f.type === 'select')
+        return `<label class="field" style="margin-top:8px"><span class="label">${esc(f.label)}</span>
+          <select class="input integ-f" data-k="${f.key}"><option value="">—</option>${f.opts.map((o) => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+      return `<label class="field" style="margin-top:8px"><span class="label">${esc(f.label)}</span>
+        <input class="input integ-f" data-k="${f.key}" ${f.secret ? 'type="password"' : ''} value="${esc(val)}" placeholder="${esc(f.placeholder || (f.secret ? '••••' : ''))}"></label>`;
+    }).join('')}
+    <div class="flex" style="margin-top:8px;gap:8px">
+      <button class="btn secondary small integ-save">Guardar</button>
+      ${cfg?.has_override ? '<button class="btn ghost small integ-inherit">Heredar de agencia</button>' : ''}
+    </div>
+  </div>`;
+}
+
 export async function renderSettings(view) {
-  const [locations, team, integrations, customFields, snapshotList, customVals] = await Promise.all([
+  const [locations, team, integrations, customFields, snapshotList, customVals, integCfg] = await Promise.all([
     api('/locations'),
     api('/locations/team/users'),
     api('/system/integrations'),
     api('/custom-fields'),
     api('/snapshots'),
     api('/custom-values'),
+    api('/integrations'),
   ]);
   const current = locations.find((l) => l.id === state.locationId) || locations[0];
 
@@ -68,25 +116,10 @@ export async function renderSettings(view) {
     </div>
     <div>
     <div class="card" style="margin-bottom:16px">
-      <div class="card-title">Integraciones (canales de envío)</div>
+      <div class="card-title">Integraciones de esta sub-cuenta</div>
       <div class="card-body">
-        <div class="appt-row"><div style="flex:1"><strong>Email</strong>
-          <div class="muted" style="font-size:12px">${esc(integrations.recommended.email)}</div></div>${integBadge(integrations.email)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>SMS</strong>
-          <div class="muted" style="font-size:12px">${esc(integrations.recommended.sms)}</div></div>${integBadge(integrations.sms)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>WhatsApp</strong>
-          <div class="muted" style="font-size:12px">${esc(integrations.recommended.whatsapp)}</div></div>${integBadge(integrations.whatsapp)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>Pagos (Stripe)</strong>
-          <div class="muted" style="font-size:12px">Stripe (stripe.com) — STRIPE_SECRET_KEY · webhook: /api/webhooks/stripe</div></div>${integBadge(integrations.payments)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>Prospección (Google)</strong>
-          <div class="muted" style="font-size:12px">GOOGLE_PLACES_API_KEY (oficial, capa gratuita) o SERPER_API_KEY</div></div>${integBadge(integrations.prospecting)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>IA (Claude)</strong>
-          <div class="muted" style="font-size:12px">${esc(integrations.recommended.ai)}</div></div>${integBadge(integrations.ai)}</div>
-        <p class="muted" style="margin-top:10px;font-size:12px">
-          En modo <strong>simulado</strong> todo funciona y queda registrado en el inbox, pero no sale al mundo real.
-          Para activar un canal añade sus variables de entorno (en Vercel: Settings → Environment Variables) y redespliega.
-          Webhook para SMS/WhatsApp entrantes de Twilio: <code class="inline">POST /api/webhooks/twilio/${state.locationId}</code>
-        </p>
+        <p class="muted" style="margin-bottom:10px;font-size:12px">Cada sub-cuenta puede tener sus propias claves. Si las dejas vacías, hereda las de la <strong>agencia</strong> y, si tampoco hay, las del <strong>servidor</strong>. Los secretos se guardan cifrados.</p>
+        ${PROVIDERS.map((p) => providerBlock(p, integCfg[p.key])).join('')}
       </div>
     </div>
     <div class="card" style="margin-bottom:16px">
@@ -195,6 +228,32 @@ export async function renderSettings(view) {
     } catch (err) {
       toast(err.message, true);
     }
+  });
+
+  // Per-sub-account integration credentials.
+  view.querySelectorAll('.integ-block').forEach((block) => {
+    const provider = block.dataset.provider;
+    block.querySelector('.integ-save').addEventListener('click', async () => {
+      const body = {};
+      block.querySelectorAll('.integ-f').forEach((i) => {
+        const v = i.value.trim();
+        if (v && !v.startsWith('••••')) body[i.dataset.k] = v;
+      });
+      try {
+        await api(`/integrations/${provider}`, { method: 'PUT', body });
+        toast('Integración guardada');
+        renderSettings(view);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+    const inh = block.querySelector('.integ-inherit');
+    if (inh)
+      inh.addEventListener('click', async () => {
+        await api(`/integrations/${provider}`, { method: 'PUT', body: { use_agency: true } });
+        toast('Ahora hereda de la agencia');
+        renderSettings(view);
+      });
   });
 
   view.querySelector('#ai-agent-save').addEventListener('click', async () => {

@@ -34,9 +34,10 @@ router.post('/seed-demo', async (req, res) => {
 
 router.use(requireAuth);
 
-router.get('/integrations', (req, res) => {
+router.get('/integrations', async (req, res) => {
+  const locationId = Number(req.headers['x-location-id']) || undefined;
   res.json({
-    ...providers.status(),
+    ...(await providers.status({ locationId, agencyId: req.user.agency_id })),
     cron_secret: Boolean(process.env.CRON_SECRET),
     recommended: {
       email: 'Resend (resend.com) — RESEND_API_KEY + MAIL_FROM',
