@@ -2,7 +2,7 @@
 // Strategy: pre-cache the app shell; cache-first for static assets with
 // background refresh; network-only for API calls (never cache business data)
 // with a friendly offline fallback page for navigations.
-const VERSION = 'leadflow-v1';
+const VERSION = 'leadflow-v2';
 const SHELL = [
   '/',
   '/index.html',
@@ -56,29 +56,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell + static assets: cache first, refresh in background.
+  // App shell + static assets: NETWORK-FIRST so deploys are picked up
+  // immediately; fall back to cache only when offline. (Cache-first was
+  // serving stale JS/CSS after each redeploy.)
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const refresh = fetch(event.request)
-        .then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(VERSION).then((cache) => cache.put(event.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      if (cached) {
-        refresh.catch(() => {});
-        return cached;
-      }
-      return refresh.then(
-        (res) =>
-          res ||
-          (event.request.mode === 'navigate'
-            ? new Response(OFFLINE_PAGE, { headers: { 'Content-Type': 'text/html' } })
-            : Response.error())
-      );
-    })
+    fetch(event.request)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(VERSION).then((cache) => cache.put(event.request, copy));
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(event.request).then(
+          (cached) =>
+            cached ||
+            (event.request.mode === 'navigate'
+              ? new Response(OFFLINE_PAGE, { headers: { 'Content-Type': 'text/html' } })
+              : Response.error())
+        )
+      )
   );
 });

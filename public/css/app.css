@@ -205,14 +205,81 @@ label.field .label { display: block; font-size: 11.5px; font-weight: 600; color:
 .progress.bad > i { background: var(--danger); }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-@media (max-width: 900px) {
-  .grid-2 { grid-template-columns: 1fr; }
-  .sidebar { width: 62px; }
-  .sidebar .logo span.logo-text, .sidebar nav a .nav-label, .sidebar .sidebar-footer,
-  .sidebar .nav-section, .sidebar .search-box { display: none; }
-  .main { margin-left: 62px; }
-  .content { padding: 14px; }
-  .topbar { padding: 10px 14px 0; }
+
+/* Hamburger button + drawer backdrop: only shown on mobile (see media query). */
+.mobile-only { display: none; }
+@media (max-width: 768px) { .mobile-only { display: inline-flex; } }
+.mobile-menu-btn { display: none; align-items: center; justify-content: center; width: 40px; height: 40px;
+  border-radius: 10px; border: 1px solid var(--border); background: #fff; box-shadow: var(--shadow);
+  font-size: 18px; cursor: pointer; flex-shrink: 0; }
+.sidebar-scrim { display: none; }
+
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+@media (max-width: 768px) {
+  /* Sidebar becomes an off-canvas drawer */
+  .sidebar { width: 264px; transform: translateX(-100%); transition: transform .22s ease;
+    box-shadow: 0 0 40px rgba(0,0,0,.25); }
+  .sidebar.open { transform: none; }
+  .sidebar-scrim.show { display: block; position: fixed; inset: 0; background: rgba(20,21,26,.45);
+    z-index: 19; animation: fadein .18s ease; }
+  @keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
+  .main { margin-left: 0; }
+  .mobile-menu-btn { display: inline-flex; }
+
+  /* Compact topbar that never overflows */
+  .topbar { padding: 10px 14px 0; gap: 8px; }
+  .topbar select { min-width: 0; flex: 1; font-size: 12px; padding: 8px 10px; }
+  .topbar .user-chip { padding: 4px; border: none; box-shadow: none; background: transparent; }
+  .topbar .user-chip .chip-name { display: none; }
+  #logout-btn { display: none; } /* logout lives in the drawer on mobile */
+
+  .content { padding: 14px 14px 90px; }
+  .page-header h1 { font-size: 18px; }
+  .page-header { gap: 8px; margin-bottom: 14px; }
+
+  /* Stats: two compact columns */
+  .stats-grid { grid-template-columns: 1fr 1fr !important; gap: 10px; }
+  .stat { padding: 12px; }
+  .stat .stat-value { font-size: 19px; }
+
+  /* Hero banner: value smaller, cards two-up */
+  .hero-banner { padding: 18px 18px; border-radius: 16px; }
+  .hero-banner .hb-value { font-size: 27px; }
+  .hero-banner .hb-cards { gap: 8px; }
+  .hero-banner .hb-card { min-width: calc(50% - 4px); flex: 1 1 calc(50% - 4px); padding: 10px 12px; }
+  .hero-banner .hb-card .v { font-size: 17px; }
+
+  /* Wide tables scroll horizontally instead of overflowing the page */
+  .card > .table, .card .table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+
+  /* Conversations: single column; thread hidden until one is opened */
+  .conv-layout { grid-template-columns: 1fr; height: calc(100vh - 130px); }
+  .conv-layout.thread-open .conv-list { display: none; }
+  .conv-layout:not(.thread-open) .conv-thread { display: none; }
+  .conv-list { border-right: none; }
+
+  /* Funnel builder stacks */
+  .builder { grid-template-columns: 1fr; }
+  .preview-frame { height: 60vh; }
+
+  /* Modals & drawers use the full width comfortably */
+  .modal { width: 96vw; padding: 20px; border-radius: 16px; }
+  .drawer { width: 100%; }
+  .form-row { flex-direction: column; gap: 0; }
+
+  /* Bigger touch targets */
+  .btn { padding: 9px 15px; }
+  .table td, .table th { padding: 11px 12px; }
+
+  /* Conversation thread head + compose: tidy on narrow screens */
+  .thread-head { gap: 8px; padding: 10px 12px; }
+  .thread-head .th-email, .thread-head .th-view { display: none; }
+  .thread-head .th-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thread-compose { padding: 10px 12px; gap: 8px; }
+  .thread-compose select { width: 76px !important; font-size: 11px; padding: 8px 6px; }
+  .thread-compose textarea { min-width: 0; }
+  .thread-compose .btn { padding: 9px 14px; }
 }
 
 /* ---------- Kanban ---------- */

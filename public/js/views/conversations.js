@@ -8,7 +8,7 @@ export async function renderConversations(view, rest = []) {
   view.innerHTML = `
   <div class="page-header"><h1>Conversations</h1>
     <span class="badge indigo">${convs.filter((c) => c.unread > 0).length} unread</span></div>
-  <div class="conv-layout">
+  <div class="conv-layout ${activeId ? 'thread-open' : ''}">
     <div class="conv-list">
       ${
         convs.length
@@ -43,10 +43,11 @@ async function renderThread(threadEl, conv) {
 
   threadEl.innerHTML = `
     <div class="thread-head">
-      <span class="avatar">${initials(conv)}</span> ${esc(fullName(conv))}
-      <span class="muted" style="font-weight:400;font-size:12px">${esc(conv.email || conv.phone || '')}</span>
-      <button class="btn secondary small right" id="ai-toggle">${conv.ai_paused ? '▶ Reactivar IA' : '🤖 IA activa — pausar'}</button>
-      <a href="#/contacts/${conv.contact_id}">Ver contacto →</a>
+      <a href="#/conversations" class="btn secondary small mobile-only" style="margin-right:2px">←</a>
+      <span class="avatar">${initials(conv)}</span> <span class="th-name">${esc(fullName(conv))}</span>
+      <span class="muted th-email" style="font-weight:400;font-size:12px">${esc(conv.email || conv.phone || '')}</span>
+      <button class="btn secondary small right" id="ai-toggle">${conv.ai_paused ? '▶ IA' : '🤖 IA'}</button>
+      <a href="#/contacts/${conv.contact_id}" class="th-view">Ver contacto →</a>
     </div>
     <div class="thread-msgs" id="msgs">
       ${messages
@@ -61,8 +62,8 @@ async function renderThread(threadEl, conv) {
       <select class="input" name="channel" style="width:120px">
         ${['sms', 'whatsapp', 'email', 'chat'].map((c) => `<option value="${c}" ${(conv.last_channel || 'sms') === c ? 'selected' : ''}>${c.toUpperCase()}</option>`).join('')}
       </select>
-      <textarea class="input" name="body" rows="2" placeholder="Type a message… ({{first_name}} works here too)" required></textarea>
-      <button class="btn">Send</button>
+      <textarea class="input" name="body" rows="2" placeholder="Escribe un mensaje… ({{first_name}} funciona aquí)" required></textarea>
+      <button class="btn">Enviar</button>
     </form>`;
 
   const msgs = threadEl.querySelector('#msgs');

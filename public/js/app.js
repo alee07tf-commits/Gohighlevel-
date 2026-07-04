@@ -64,7 +64,8 @@ function renderShell(activePath) {
 
   app.innerHTML = `
   <div class="layout">
-    <aside class="sidebar">
+    <div class="sidebar-scrim" id="sidebar-scrim"></div>
+    <aside class="sidebar" id="sidebar">
       <div class="logo"><span class="logo-chip">⚡</span>
         <span class="logo-text">LeadFlow<span class="logo-sub">${esc(state.agency?.name || '')}</span></span></div>
       <div class="search-box" id="global-search">🔍 Buscar contactos… <span class="kbd">⌘K</span></div>
@@ -74,32 +75,51 @@ function renderShell(activePath) {
             s.items.map((key) => navLink(NAV.find((n) => n.path === key))).join('')
         ).join('')}
       </nav>
-      <div class="sidebar-footer">v1.5 · plataforma de agencia</div>
+      <div class="sidebar-footer">
+        <a href="#" id="drawer-logout" style="color:var(--danger);font-weight:600">Cerrar sesión</a>
+        <div style="margin-top:6px">v1.10 · plataforma de agencia</div>
+      </div>
     </aside>
     <div class="main">
       <header class="topbar">
+        <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menú">☰</button>
         <select id="location-switcher" title="Sub-account">
           ${state.locations
             .map((l) => `<option value="${l.id}" ${l.id === state.locationId ? 'selected' : ''}>${esc(l.name)}</option>`)
             .join('')}
         </select>
         <div class="spacer"></div>
-        <div class="user-chip"><span class="avatar">${initials(state.user || {})}</span> ${esc(firstName)}</div>
+        <div class="user-chip"><span class="avatar">${initials(state.user || {})}</span> <span class="chip-name">${esc(firstName)}</span></div>
         <button class="btn secondary small" id="logout-btn">Salir</button>
       </header>
       <main class="content" id="view"></main>
     </div>
   </div>`;
 
+  const sidebar = document.getElementById('sidebar');
+  const scrim = document.getElementById('sidebar-scrim');
+  const closeDrawer = () => { sidebar.classList.remove('open'); scrim.classList.remove('show'); };
+  document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+    const open = sidebar.classList.toggle('open');
+    scrim.classList.toggle('show', open);
+  });
+  scrim.addEventListener('click', closeDrawer);
+  // Tapping any nav link closes the drawer on mobile.
+  sidebar.querySelectorAll('nav a').forEach((a) => a.addEventListener('click', closeDrawer));
+
   document.getElementById('location-switcher').addEventListener('change', (e) => {
     setLocation(e.target.value);
     route();
   });
-  document.getElementById('logout-btn').addEventListener('click', () => {
+  const doLogout = (e) => {
+    e?.preventDefault();
     clearSession();
     location.hash = '#/login';
-  });
+  };
+  document.getElementById('logout-btn').addEventListener('click', doLogout);
+  document.getElementById('drawer-logout').addEventListener('click', doLogout);
   document.getElementById('global-search').addEventListener('click', () => {
+    closeDrawer();
     location.hash = '#/contacts';
     setTimeout(() => document.getElementById('search')?.focus(), 350);
   });
