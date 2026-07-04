@@ -2,8 +2,8 @@ import { api } from '../api.js';
 import { esc, openModal, closeOverlay, toast, fmtDate, fullName } from '../ui.js';
 
 const BLOCK_TYPES = {
-  hero: '🎬 Hero', text: '📄 Texto', features: '✨ Features', testimonials: '💬 Testimonios',
-  pricing: '💰 Precios', faq: '❓ FAQ', cta: '📢 CTA', form: '📩 Formulario',
+  hero: 'Hero', text: 'Texto', features: 'Features', testimonials: 'Testimonios',
+  pricing: 'Precios', faq: 'FAQ', cta: 'CTA', form: 'Formulario',
 };
 const THEMES = { clean: 'Clean (claro)', bold: 'Bold (oscuro)', warm: 'Warm (cálido)', elegant: 'Elegant (serif)' };
 
@@ -15,7 +15,7 @@ export async function renderFunnels(view, rest = []) {
   <div class="page-header">
     <h1>Sites & Funnels</h1>
     <div class="spacer"></div>
-    <button class="btn" id="ai-funnel">✨ Crear con IA (Claude design)</button>
+    <button class="btn" id="ai-funnel">Crear con IA (Claude design)</button>
     <button class="btn secondary" id="new-funnel">+ Funnel en blanco</button>
   </div>
   ${
@@ -31,19 +31,19 @@ export async function renderFunnels(view, rest = []) {
               ${f.pages
                 .map(
                   (p) => `<div style="font-size:13px;margin:3px 0">
-                    ${p.published ? '🟢' : '⚪'} ${esc(p.name)} —
+                    ${p.published ? '' : ''} ${esc(p.name)} —
                     <a href="/f/${esc(f.slug)}/${esc(p.slug)}" target="_blank"><code class="inline">/f/${esc(f.slug)}/${esc(p.slug)}</code> ↗</a></div>`
                 )
                 .join('')}
             </div></div>`
           )
           .join('')}</div>`
-      : '<div class="empty card" style="padding:60px"><div class="big">🌐</div>No funnels yet. Build landing pages that capture leads straight into your CRM.</div>'
+      : '<div class="empty card" style="padding:60px"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>No funnels yet. Build landing pages that capture leads straight into your CRM.</div>'
   }`;
 
   view.querySelector('#ai-funnel').addEventListener('click', () => {
     const modal = openModal(`
-      <h2>✨ Claude design — genera tu landing</h2>
+      <h2>Claude design — genera tu landing</h2>
       <p class="muted" style="margin-bottom:12px">Describe el negocio y la oferta; la IA diseña la página completa (estructura, textos y tema). Después podrás <strong>editar cada bloque</strong> antes de publicar.</p>
       <label class="field"><span class="label">Negocio</span><input class="input" id="ai-business" placeholder="Clínica dental en Madrid especializada en estética"></label>
       <label class="field"><span class="label">Oferta / servicio a promocionar</span><input class="input" id="ai-offer" placeholder="Blanqueamiento dental con 20% de descuento este mes"></label>
@@ -58,7 +58,7 @@ export async function renderFunnels(view, rest = []) {
       </select></label>
       <div class="modal-actions">
         <button class="btn secondary" id="cancel">Cancelar</button>
-        <button class="btn" id="gen">✨ Generar landing</button>
+        <button class="btn" id="gen">Generar landing</button>
       </div>`);
     modal.querySelector('#cancel').addEventListener('click', closeOverlay);
     modal.querySelector('#gen').addEventListener('click', async () => {
@@ -77,12 +77,12 @@ export async function renderFunnels(view, rest = []) {
           },
         });
         closeOverlay();
-        toast(result.generated_by === 'claude' ? 'Landing diseñada por Claude ✨' : 'Landing generada con plantilla (conecta ANTHROPIC_API_KEY para diseño IA real)');
+        toast(result.generated_by === 'claude' ? 'Landing diseñada por Claude' : 'Landing generada con plantilla (conecta ANTHROPIC_API_KEY para diseño IA real)');
         location.hash = `#/funnels/${result.funnel_id}`;
       } catch (err) {
         toast(err.message, true);
         btn.disabled = false;
-        btn.textContent = '✨ Generar landing';
+        btn.textContent = 'Generar landing';
       }
     });
   });
@@ -124,7 +124,7 @@ async function renderBuilder(view, funnelId) {
     <select class="input" id="theme-select" style="width:150px" title="Tema visual">
       ${Object.entries(THEMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
     </select>
-    <button class="btn secondary small" id="ai-redesign" title="La IA rediseña esta página (podrás editarla después)">✨ Rediseñar</button>
+    <button class="btn secondary small" id="ai-redesign" title="La IA rediseña esta página (podrás editarla después)">Rediseñar</button>
     <label class="flex" style="font-size:13px"><input type="checkbox" id="published"> Published</label>
     <a class="btn secondary" target="_blank" id="preview-link">Open ↗</a>
     <button class="btn" id="save-page">Save</button>
@@ -354,7 +354,7 @@ async function renderBuilder(view, funnelId) {
     } catch (err) {
       toast(err.message, true);
       btn.disabled = false;
-      btn.textContent = '✨ Rediseñar';
+      btn.textContent = 'Rediseñar';
     }
   });
   view.querySelector('#view-subs').addEventListener('click', async () => {

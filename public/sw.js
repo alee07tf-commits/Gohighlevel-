@@ -2,7 +2,7 @@
 // Strategy: pre-cache the app shell; cache-first for static assets with
 // background refresh; network-only for API calls (never cache business data)
 // with a friendly offline fallback page for navigations.
-const VERSION = 'leadflow-v2';
+const VERSION = 'leadflow-v3';
 const SHELL = [
   '/',
   '/index.html',

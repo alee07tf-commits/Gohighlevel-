@@ -34,12 +34,12 @@ export async function renderTasks(view) {
                       ${esc(t.user_name || '')}${t.notes ? ` · ${esc(t.notes)}` : ''}
                     </div>
                   </div>
-                  ${t.due_at ? `<span class="badge ${overdue ? 'red' : 'gray'}">${overdue ? '⏰ ' : ''}${fmtDate(t.due_at)}</span>` : ''}
+                  ${t.due_at ? `<span class="badge ${overdue ? 'red' : 'gray'}">${overdue ? '' : ''}${fmtDate(t.due_at)}</span>` : ''}
                   <button class="btn ghost small del-task" data-id="${t.id}">✕</button>
                 </div>`;
               })
               .join('')
-          : '<div class="empty"><div class="big">✅</div>Sin tareas. Créalas a mano o desde automatizaciones (acción "Crear tarea").</div>'
+          : '<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>Sin tareas. Créalas a mano o desde automatizaciones (acción "Crear tarea").</div>'
       }
     </div>`;
 

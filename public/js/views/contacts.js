@@ -1,7 +1,7 @@
 import { api } from '../api.js';
-import { esc, openModal, closeOverlay, formData, toast, fmtDate, fmtMoney, fullName, initials } from '../ui.js';
+import { esc, openModal, closeOverlay, formData, toast, fmtDate, fmtMoney, fullName, initials, icon } from '../ui.js';
 
-const ICONS = { contact: '👤', tag: '🏷️', note: '📝', appointment: '📅', form: '📩', automation: '⚙️', opportunity: '🎯' };
+const ICONS = { contact: 'contact', tag: 'tag', note: 'note', appointment: 'appointment', form: 'form', automation: 'automation', opportunity: 'opportunity' };
 
 export async function renderContacts(view, rest = []) {
   if (rest[0]) return renderContactDetail(view, rest[0]);
@@ -28,20 +28,20 @@ export async function renderContacts(view, rest = []) {
         <option value="">All tags</option>
         ${tags.map((t) => `<option value="${esc(t.tag)}" ${t.tag === tag ? 'selected' : ''}>${esc(t.tag)} (${t.count})</option>`).join('')}
       </select>
-      <button class="btn secondary" id="export-csv" title="Exportar CSV">⬇ CSV</button>
-      <button class="btn secondary" id="import-csv" title="Importar CSV">⬆ CSV</button>
+      <button class="btn secondary" id="export-csv" title="Exportar CSV">CSV</button>
+      <button class="btn secondary" id="import-csv" title="Importar CSV">CSV</button>
       <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
-      <button class="btn secondary" id="find-dupes" title="Buscar duplicados">👥²</button>
+      <button class="btn secondary" id="find-dupes" title="Buscar duplicados">²</button>
       <button class="btn" id="add-contact">+ Add Contact</button>
     </div>
     <div class="flex" style="margin-bottom:12px;flex-wrap:wrap">
       ${smartLists
         .map(
-          (l) => `<span class="tag" style="cursor:pointer;padding:5px 12px" data-sl='${esc(JSON.stringify(l.filters))}'>📋 ${esc(l.name)}
+          (l) => `<span class="tag" style="cursor:pointer;padding:5px 12px" data-sl='${esc(JSON.stringify(l.filters))}'>${esc(l.name)}
             <a href="#" class="sl-del" data-id="${l.id}" style="color:inherit;margin-left:4px">×</a></span>`
         )
         .join('')}
-      ${(q || tag) ? `<button class="btn secondary small" id="save-sl">💾 Guardar filtro como lista</button>` : ''}
+      ${(q || tag) ? `<button class="btn secondary small" id="save-sl">Guardar filtro como lista</button>` : ''}
     </div>
     <div class="card">
       ${
@@ -57,7 +57,7 @@ export async function renderContacts(view, rest = []) {
                 <td class="muted">${fmtDate(c.created_at)}</td></tr>`
             )
             .join('')}</tbody></table>`
-          : `<div class="empty"><div class="big">👥</div>No contacts yet. Add one or capture leads with a funnel.</div>`
+          : `<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>No contacts yet. Add one or capture leads with a funnel.</div>`
       }
     </div>`;
 
@@ -98,13 +98,13 @@ export async function renderContacts(view, rest = []) {
     view.querySelector('#find-dupes').addEventListener('click', async () => {
       const groups = await api('/contacts/meta/duplicates');
       const modal = openModal(`
-        <h2>👥 Contactos duplicados</h2>
+        <h2>Contactos duplicados</h2>
         ${
           groups.length
             ? groups
                 .map(
                   (g, gi) => `<div class="block-item">
-                    <div class="b-head"><span>${g.kind === 'email' ? '📧' : '📱'} ${esc(g.value)}</span></div>
+                    <div class="b-head"><span>${g.kind === 'email' ? '' : ''} ${esc(g.value)}</span></div>
                     ${g.contacts
                       .map(
                         (c, ci) => `<div class="flex" style="margin:4px 0">
@@ -116,7 +116,7 @@ export async function renderContacts(view, rest = []) {
                   </div>`
                 )
                 .join('')
-            : '<div class="empty">🎉 No hay duplicados por email ni teléfono.</div>'
+            : '<div class="empty">No hay duplicados por email ni teléfono.</div>'
         }`);
       modal.querySelectorAll('.merge-btn').forEach((b) =>
         b.addEventListener('click', async () => {
@@ -223,10 +223,10 @@ async function renderContactDetail(view, id) {
     <a href="#/contacts" class="btn secondary small">← Contacts</a>
     <span class="avatar" style="width:40px;height:40px">${initials(c)}</span>
     <h1>${esc(fullName(c))}</h1>
-    ${c.score >= 20 ? `<span class="badge amber">🔥 ${c.score} pts</span>` : c.score > 0 ? `<span class="badge gray">${c.score} pts</span>` : ''}
+    ${c.score >= 20 ? `<span class="badge amber">${c.score} pts</span>` : c.score > 0 ? `<span class="badge gray">${c.score} pts</span>` : ''}
     ${c.dnd ? '<span class="badge red">DND</span>' : ''}
     <div class="spacer"></div>
-    <button class="btn secondary" id="msg-btn">💬 Message</button>
+    <button class="btn secondary" id="msg-btn">Message</button>
     <button class="btn secondary" id="edit-btn">Edit</button>
     <button class="btn danger" id="del-btn">Delete</button>
   </div>
@@ -249,7 +249,7 @@ async function renderContactDetail(view, id) {
           c.opportunities.length
             ? c.opportunities
                 .map(
-                  (o) => `<div class="timeline-item"><div class="t-icon">🎯</div>
+                  (o) => `<div class="timeline-item"><div class="t-icon"></div>
                   <div><strong>${esc(o.title)}</strong> · ${fmtMoney(o.value)} <span class="badge ${o.status === 'won' ? 'green' : o.status === 'lost' ? 'red' : 'indigo'}">${o.status}</span>
                   <div class="t-time">${esc(o.pipeline_name)} → ${esc(o.stage_name)}</div></div></div>`
                 )
@@ -259,7 +259,7 @@ async function renderContactDetail(view, id) {
       </div></div>
       <div class="card" style="margin-bottom:16px"><div class="card-title">Tareas</div><div class="card-body">
         ${(c.tasks || []).length
-          ? c.tasks.map((t) => `<div class="timeline-item"><div class="t-icon">${t.status === 'done' ? '✅' : '⬜'}</div>
+          ? c.tasks.map((t) => `<div class="timeline-item"><div class="t-icon">${t.status === 'done' ? '' : ''}</div>
               <div style="${t.status === 'done' ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(t.title)}
               ${t.due_at ? `<div class="t-time">vence ${fmtDate(t.due_at)}</div>` : ''}</div></div>`).join('')
           : '<span class="muted">Sin tareas</span>'}
@@ -272,7 +272,7 @@ async function renderContactDetail(view, id) {
         </form>
         ${c.notes
           .map(
-            (n) => `<div class="timeline-item"><div class="t-icon">📝</div>
+            (n) => `<div class="timeline-item"><div class="t-icon"></div>
             <div>${esc(n.body)}<div class="t-time">${esc(n.user_name || 'System')} · ${fmtDate(n.created_at)}</div></div></div>`
           )
           .join('')}
@@ -283,7 +283,7 @@ async function renderContactDetail(view, id) {
         c.activities.length
           ? c.activities
               .map(
-                (a) => `<div class="timeline-item"><div class="t-icon">${ICONS[a.type] || '•'}</div>
+                (a) => `<div class="timeline-item"><div class="t-icon">${icon(ICONS[a.type] || 'note', 14)}</div>
                 <div>${esc(a.description)}<div class="t-time">${fmtDate(a.created_at)}</div></div></div>`
               )
               .join('')

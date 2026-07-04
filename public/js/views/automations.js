@@ -2,15 +2,15 @@ import { api } from '../api.js';
 import { esc, openModal, closeOverlay, toast, fmtDate, fullName } from '../ui.js';
 
 const TRIGGER_LABELS = {
-  review_received: '⭐ Reseña recibida',
-  invoice_paid: '💳 Factura pagada',
-  appointment_status_changed: '📅 Cambio de estado de cita',
-  contact_created: '👤 Contact created',
-  tag_added: '🏷️ Tag added',
-  form_submitted: '📩 Form submitted',
-  appointment_booked: '📅 Appointment booked',
-  opportunity_stage_changed: '🎯 Opportunity stage changed',
-  message_received: '💬 Message received (SMS/WhatsApp)',
+  review_received: '★ Reseña recibida',
+  invoice_paid: 'Factura pagada',
+  appointment_status_changed: 'Cambio de estado de cita',
+  contact_created: 'Contact created',
+  tag_added: 'Tag added',
+  form_submitted: 'Form submitted',
+  appointment_booked: 'Appointment booked',
+  opportunity_stage_changed: 'Opportunity stage changed',
+  message_received: 'Message received (SMS/WhatsApp)',
 };
 const ACTION_LABELS = {
   add_tag: 'Add tag',
@@ -20,11 +20,11 @@ const ACTION_LABELS = {
   send_whatsapp: 'Send WhatsApp',
   add_note: 'Add note',
   create_opportunity: 'Create opportunity',
-  wait: '⏳ Wait / Esperar',
-  create_task: '✅ Crear tarea',
-  send_review_request: '⭐ Pedir reseña',
-  branch: '🔀 Rama If/Else',
-  webhook: '🌐 Webhook saliente',
+  wait: 'Wait / Esperar',
+  create_task: 'Crear tarea',
+  send_review_request: '★ Pedir reseña',
+  branch: 'Rama If/Else',
+  webhook: 'Webhook saliente',
 };
 
 export async function renderAutomations(view) {
@@ -34,8 +34,8 @@ export async function renderAutomations(view) {
   <div class="page-header">
     <h1>Automations</h1>
     <div class="spacer"></div>
-    <button class="btn secondary" id="ai-wf-btn">✨ Crear con IA</button>
-    <button class="btn secondary" id="recipes-btn">📦 Recetas</button>
+    <button class="btn secondary" id="ai-wf-btn">Crear con IA</button>
+    <button class="btn secondary" id="recipes-btn">Recetas</button>
     <button class="btn" id="new-wf">+ Workflow</button>
   </div>
   ${
@@ -65,7 +65,7 @@ export async function renderAutomations(view) {
             </div></div>`
           )
           .join('')
-      : '<div class="empty card" style="padding:60px"><div class="big">⚙️</div>No workflows yet. Automate follow-ups, tagging and pipeline updates.</div>'
+      : '<div class="empty card" style="padding:60px"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>No workflows yet. Automate follow-ups, tagging and pipeline updates.</div>'
   }`;
 
   function workflowModal(wf = null) {
@@ -233,12 +233,12 @@ export async function renderAutomations(view) {
   view.querySelector('#new-wf').addEventListener('click', () => workflowModal());
   view.querySelector('#ai-wf-btn').addEventListener('click', () => {
     const modal = openModal(`
-      <h2>✨ Workflow AI</h2>
+      <h2>Workflow AI</h2>
       <p class="muted" style="margin-bottom:10px">Describe qué quieres automatizar y la IA monta el workflow (se crea en pausa para que lo revises).</p>
       <textarea class="input" id="wf-goal" rows="3" placeholder="Ej: cuando alguien reserve una cita, mándale un WhatsApp de confirmación, espera 1 día tras la cita y pídele una reseña"></textarea>
       <div class="modal-actions">
         <button class="btn secondary" id="cancel">Cancelar</button>
-        <button class="btn" id="gen">✨ Generar</button>
+        <button class="btn" id="gen">Generar</button>
       </div>`);
     modal.querySelector('#cancel').addEventListener('click', () => (document.getElementById('modal-root').innerHTML = ''));
     modal.querySelector('#gen').addEventListener('click', async () => {
@@ -255,14 +255,14 @@ export async function renderAutomations(view) {
       } catch (err) {
         toast(err.message, true);
         btn.disabled = false;
-        btn.textContent = '✨ Generar';
+        btn.textContent = 'Generar';
       }
     });
   });
   view.querySelector('#recipes-btn').addEventListener('click', async () => {
     const recipes = await api('/workflows/recipes');
     const modal = openModal(`
-      <h2>📦 Recetas de automatización</h2>
+      <h2>Recetas de automatización</h2>
       <p class="muted" style="margin-bottom:12px">Workflows probados listos para instalar con un clic. Luego puedes editarlos.</p>
       ${recipes
         .map(

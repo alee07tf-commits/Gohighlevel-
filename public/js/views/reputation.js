@@ -10,7 +10,7 @@ export async function renderReputation(view) {
   <div class="page-header">
     <h1>Reputación</h1>
     <div class="spacer"></div>
-    <button class="btn secondary" id="edit-links">⚙ Links de reseña</button>
+    <button class="btn secondary" id="edit-links">Links de reseña</button>
     <button class="btn" id="new-request">+ Pedir reseña</button>
   </div>
   <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
@@ -21,7 +21,7 @@ export async function renderReputation(view) {
     <div class="stat"><div class="stat-label">A mejorar (1-3★)</div><div class="stat-value" style="color:var(--danger)">${stats.detractors}</div></div>
   </div>
   ${!links.google ? `<div class="card" style="margin-bottom:16px;border-left:4px solid var(--warning)"><div class="card-body">
-    ⚠️ <strong>Configura tu link de reseñas de Google</strong> para que los clientes contentos (4-5★) sean redirigidos
+   <strong>Configura tu link de reseñas de Google</strong> para que los clientes contentos (4-5★) sean redirigidos
     automáticamente a dejar la reseña pública. <a href="#" id="cfg-now">Configurar ahora</a></div></div>` : ''}
   <div class="card">
     ${
@@ -35,10 +35,10 @@ export async function renderReputation(view) {
                 <td><span class="badge ${r.status === 'reviewed' ? 'green' : r.status === 'opened' ? 'amber' : 'gray'}">${r.status}</span></td>
                 <td style="color:#f59e0b;font-size:15px">${stars(r.rating)}</td>
                 <td class="muted" style="max-width:260px">${esc(r.comment || '')}
-                  ${r.rating ? `<div><button class="btn secondary small suggest-reply" data-id="${r.id}" style="margin-top:4px">✨ Sugerir respuesta</button></div>` : ''}</td></tr>`
+                  ${r.rating ? `<div><button class="btn secondary small suggest-reply" data-id="${r.id}" style="margin-top:4px">Sugerir respuesta</button></div>` : ''}</td></tr>`
             )
             .join('')}</tbody></table>`
-        : '<div class="empty"><div class="big">⭐</div>Aún no has pedido reseñas. Pídelas manualmente o automatiza con el workflow "Pedir reseña tras la cita".</div>'
+        : '<div class="empty"><div class="big">★</div>Aún no has pedido reseñas. Pídelas manualmente o automatiza con el workflow "Pedir reseña tras la cita".</div>'
     }
   </div>`;
 
@@ -76,7 +76,7 @@ export async function renderReputation(view) {
       try {
         const r = await api(`/reputation/${b.dataset.id}/suggest-reply`, { method: 'POST' });
         const modal = openModal(`
-          <h2>✨ Respuesta sugerida</h2>
+          <h2>Respuesta sugerida</h2>
           <textarea class="input" id="sr-text" rows="5">${esc(r.reply)}</textarea>
           <p class="muted" style="font-size:11px;margin-top:6px">Cópiala y publícala en Google/Facebook, o úsala como mensaje directo al cliente.</p>
           <div class="modal-actions">
@@ -89,7 +89,7 @@ export async function renderReputation(view) {
         });
       } catch (err) { toast(err.message, true); }
       b.disabled = false;
-      b.textContent = '✨ Sugerir respuesta';
+      b.textContent = 'Sugerir respuesta';
     })
   );
   view.querySelector('#edit-links').addEventListener('click', linksModal);

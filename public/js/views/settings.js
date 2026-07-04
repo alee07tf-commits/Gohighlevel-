@@ -36,7 +36,7 @@ export async function renderSettings(view) {
               <label class="field"><span class="label">Logo URL (opcional)</span>
                 <input class="input" name="logo_url" value="${esc(current?.logo_url || '')}" placeholder="https://…/logo.png"></label>
             </div>
-            <div class="card-title" style="padding:8px 0 6px">☀️ Briefing diario</div>
+            <div class="card-title" style="padding:8px 0 6px">Briefing diario</div>
             <div class="form-row">
               <label class="field" style="flex:0 0 auto;display:flex;align-items:center;gap:8px;margin-top:20px">
                 <input type="checkbox" name="briefing_enabled" ${current?.briefing_enabled ? 'checked' : ''}> Activado</label>
@@ -68,17 +68,17 @@ export async function renderSettings(view) {
     <div class="card" style="margin-bottom:16px">
       <div class="card-title">Integraciones (canales de envío)</div>
       <div class="card-body">
-        <div class="appt-row"><div style="flex:1"><strong>📧 Email</strong>
+        <div class="appt-row"><div style="flex:1"><strong>Email</strong>
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.email)}</div></div>${integBadge(integrations.email)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>📱 SMS</strong>
+        <div class="appt-row"><div style="flex:1"><strong>SMS</strong>
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.sms)}</div></div>${integBadge(integrations.sms)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>💬 WhatsApp</strong>
+        <div class="appt-row"><div style="flex:1"><strong>WhatsApp</strong>
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.whatsapp)}</div></div>${integBadge(integrations.whatsapp)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>💳 Pagos (Stripe)</strong>
+        <div class="appt-row"><div style="flex:1"><strong>Pagos (Stripe)</strong>
           <div class="muted" style="font-size:12px">Stripe (stripe.com) — STRIPE_SECRET_KEY · webhook: /api/webhooks/stripe</div></div>${integBadge(integrations.payments)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>🔎 Prospección (Google)</strong>
+        <div class="appt-row"><div style="flex:1"><strong>Prospección (Google)</strong>
           <div class="muted" style="font-size:12px">GOOGLE_PLACES_API_KEY (oficial, capa gratuita) o SERPER_API_KEY</div></div>${integBadge(integrations.prospecting)}</div>
-        <div class="appt-row"><div style="flex:1"><strong>✨ IA (Claude)</strong>
+        <div class="appt-row"><div style="flex:1"><strong>IA (Claude)</strong>
           <div class="muted" style="font-size:12px">${esc(integrations.recommended.ai)}</div></div>${integBadge(integrations.ai)}</div>
         <p class="muted" style="margin-top:10px;font-size:12px">
           En modo <strong>simulado</strong> todo funciona y queda registrado en el inbox, pero no sale al mundo real.
@@ -88,14 +88,14 @@ export async function renderSettings(view) {
       </div>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="card-title">🤖 Conversation AI (chat + WhatsApp/SMS)</div>
+      <div class="card-title">Conversation AI (chat + WhatsApp/SMS)</div>
       <div class="card-body">
         <label class="flex" style="margin-bottom:10px"><input type="checkbox" id="ai-agent-enabled" ${current?.ai_agent_enabled ? 'checked' : ''}>
           <strong>Responder automáticamente a los leads</strong></label>
         <p class="muted" style="font-size:12px;margin-bottom:8px">La IA responde con los datos del negocio y puede <strong>agendar citas</strong> en tu primer calendario. Puedes pausarla por conversación desde el inbox. Sin ANTHROPIC_API_KEY funciona en modo guiado (ofrece huecos y captura al lead).</p>
         <label class="field"><span class="label">Instrucciones extra para la IA (servicios, precios, horario…)</span>
           <textarea class="input" id="ai-agent-prompt" rows="3" placeholder="Ej: Somos una clínica dental. Limpieza 45€, blanqueamiento 250€. No damos precios de implantes por chat, ofrece cita.">${esc(current?.ai_agent_prompt || '')}</textarea></label>
-        <label class="field" style="margin-top:8px"><span class="label">📞 Missed-call text-back (SMS automático si no coges una llamada — requiere Twilio Voice apuntando a /api/webhooks/twilio-voice/${state.locationId})</span>
+        <label class="field" style="margin-top:8px"><span class="label">Missed-call text-back (SMS automático si no coges una llamada — requiere Twilio Voice apuntando a /api/webhooks/twilio-voice/${state.locationId})</span>
           <input class="input" id="missed-call-text" placeholder="Hola, vimos tu llamada. ¿En qué podemos ayudarte?" value="${esc(current?.missed_call_text || '')}"></label>
         <button class="btn" id="ai-agent-save">Guardar IA</button>
         <div class="card-title" style="padding:14px 0 6px">Widget de chat para la web del cliente</div>
@@ -124,8 +124,8 @@ export async function renderSettings(view) {
       <div class="card-body">
         <p class="muted" style="margin-bottom:10px;font-size:12px">Exporta toda la configuración de esta sub-cuenta (pipelines, workflows, funnels, calendarios, plantillas y campos) e impórtala en otra para desplegar un cliente nuevo en minutos.</p>
         <div class="flex">
-          <button class="btn secondary" id="snap-export">⬇ Exportar snapshot</button>
-          <button class="btn secondary" id="snap-import">⬆ Importar snapshot</button>
+          <button class="btn secondary" id="snap-export">Exportar snapshot</button>
+          <button class="btn secondary" id="snap-import">Importar snapshot</button>
           <input type="file" id="snap-file" accept=".json,application/json" style="display:none">
         </div>
       </div>

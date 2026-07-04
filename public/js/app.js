@@ -1,5 +1,5 @@
 import { state, loadMe, clearSession, setLocation } from './api.js';
-import { esc, initials, toast } from './ui.js';
+import { esc, initials, toast, icon } from './ui.js';
 import { renderLogin, renderRegister } from './views/auth.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderContacts } from './views/contacts.js';
@@ -38,19 +38,19 @@ const NAV_SECTIONS = [
 ];
 
 const NAV = [
-  { path: 'dashboard', label: 'Dashboard', icon: '📊', view: renderDashboard },
-  { path: 'conversations', label: 'Conversations', icon: '💬', view: renderConversations },
-  { path: 'contacts', label: 'Contacts', icon: '👥', view: renderContacts },
-  { path: 'pipelines', label: 'Opportunities', icon: '🎯', view: renderPipelines },
-  { path: 'calendar', label: 'Calendar', icon: '📅', view: renderCalendar },
-  { path: 'payments', label: 'Pagos', icon: '💳', view: renderPayments },
-  { path: 'prospecting', label: 'Prospección', icon: '🔎', view: renderProspecting },
-  { path: 'marketing', label: 'Marketing', icon: '📣', view: renderMarketing },
-  { path: 'automations', label: 'Automations', icon: '⚙️', view: renderAutomations },
-  { path: 'funnels', label: 'Sites & Funnels', icon: '🌐', view: renderFunnels },
-  { path: 'reputation', label: 'Reputación', icon: '⭐', view: renderReputation },
-  { path: 'tasks', label: 'Tareas', icon: '✅', view: renderTasks },
-  { path: 'settings', label: 'Settings', icon: '🛠️', view: renderSettings },
+  { path: 'dashboard', label: 'Dashboard', icon: '', view: renderDashboard },
+  { path: 'conversations', label: 'Conversations', icon: '', view: renderConversations },
+  { path: 'contacts', label: 'Contacts', icon: '', view: renderContacts },
+  { path: 'pipelines', label: 'Opportunities', icon: '', view: renderPipelines },
+  { path: 'calendar', label: 'Calendar', icon: '', view: renderCalendar },
+  { path: 'payments', label: 'Pagos', icon: '', view: renderPayments },
+  { path: 'prospecting', label: 'Prospección', icon: '', view: renderProspecting },
+  { path: 'marketing', label: 'Marketing', icon: '', view: renderMarketing },
+  { path: 'automations', label: 'Automations', icon: '', view: renderAutomations },
+  { path: 'funnels', label: 'Sites & Funnels', icon: '', view: renderFunnels },
+  { path: 'reputation', label: 'Reputación', icon: '★', view: renderReputation },
+  { path: 'tasks', label: 'Tareas', icon: '', view: renderTasks },
+  { path: 'settings', label: 'Settings', icon: '', view: renderSettings },
 ];
 
 function renderShell(activePath) {
@@ -66,9 +66,9 @@ function renderShell(activePath) {
   <div class="layout">
     <div class="sidebar-scrim" id="sidebar-scrim"></div>
     <aside class="sidebar" id="sidebar">
-      <div class="logo"><span class="logo-chip">⚡</span>
+      <div class="logo"><span class="logo-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 10-12h-7z"/></svg></span>
         <span class="logo-text">LeadFlow<span class="logo-sub">${esc(state.agency?.name || '')}</span></span></div>
-      <div class="search-box" id="global-search">🔍 Buscar contactos… <span class="kbd">⌘K</span></div>
+      <div class="search-box" id="global-search">${icon('search', 15)} <span style="flex:1">Buscar contactos…</span> <span class="kbd">⌘K</span></div>
       <nav>
         ${NAV_SECTIONS.map(
           (s) => `<div class="nav-section">${s.title}</div>` +
@@ -82,7 +82,7 @@ function renderShell(activePath) {
     </aside>
     <div class="main">
       <header class="topbar">
-        <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menú">☰</button>
+        <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menú"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
         <select id="location-switcher" title="Sub-account">
           ${state.locations
             .map((l) => `<option value="${l.id}" ${l.id === state.locationId ? 'selected' : ''}>${esc(l.name)}</option>`)
@@ -154,7 +154,7 @@ async function route() {
     await nav.view(view, rest);
   } catch (err) {
     toast(err.message, true);
-    view.innerHTML = `<div class="empty"><div class="big">⚠️</div>${esc(err.message)}</div>`;
+    view.innerHTML = `<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>${esc(err.message)}</div>`;
   }
 }
 

@@ -29,14 +29,14 @@ export async function renderMarketing(view) {
                     <td><strong>${esc(c.name)}</strong><div class="muted" style="font-size:11px">${esc(c.subject)}</div></td>
                     <td><span class="badge gray">${c.channel}</span></td>
                     <td>${c.tag_filter ? `<span class="tag">${esc(c.tag_filter)}</span>` : '<span class="muted">Everyone</span>'}</td>
-                    <td>${c.status === 'sent' ? `<span class="badge green">sent to ${c.recipient_count}</span><div class="muted" style="font-size:10px">${fmtDate(c.sent_at)}</div>` : c.status === 'scheduled' ? `<span class="badge indigo">📅 ${fmtDate(c.send_at)}</span>` : '<span class="badge amber">draft</span>'}</td>
+                    <td>${c.status === 'sent' ? `<span class="badge green">sent to ${c.recipient_count}</span><div class="muted" style="font-size:10px">${fmtDate(c.sent_at)}</div>` : c.status === 'scheduled' ? `<span class="badge indigo">${fmtDate(c.send_at)}</span>` : '<span class="badge amber">draft</span>'}</td>
                     <td style="text-align:right">
                       ${c.status === 'draft' ? `<button class="btn small send-camp" data-id="${c.id}">Send</button>` : ''}
                       <button class="btn ghost small del-camp" data-id="${c.id}">✕</button></td>
                   </tr>`
                 )
                 .join('')}</tbody></table>`
-            : '<div class="empty"><div class="big">📣</div>No campaigns yet</div>'
+            : '<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>No campaigns yet</div>'
         }
       </div>
     </div>
@@ -63,7 +63,7 @@ export async function renderMarketing(view) {
     </div>
   </div>
   <div class="card" style="margin-top:16px">
-    <div class="card-title">🔗 Trigger Links (con QR)</div>
+    <div class="card-title">Trigger Links (con QR)</div>
     <div class="card-body">
       <p class="muted" style="font-size:12px;margin-bottom:10px">Enlaces con seguimiento: cuentan clics, etiquetan al contacto (disparando automatizaciones) y redirigen. En mensajes usa <code class="inline">{{link:slug}}</code> para personalizarlo por contacto.</p>
       <div class="flex" style="margin-bottom:12px">
@@ -166,7 +166,7 @@ export async function renderMarketing(view) {
         </select></label>` : ''}
         <label class="field" id="subject-field"><span class="label">Subject</span><input class="input" name="subject"></label>
         <label class="field"><span class="label">Message
-          <button type="button" class="btn secondary small" id="ai-gen" style="margin-left:8px">✨ Generar con IA</button></span>
+          <button type="button" class="btn secondary small" id="ai-gen" style="margin-left:8px">Generar con IA</button></span>
           <textarea class="input" name="body" rows="7" required placeholder="Hi {{first_name}}, …"></textarea></label>
         <div class="modal-actions">
           <button type="button" class="btn secondary" id="cancel">Cancel</button>
@@ -182,7 +182,7 @@ export async function renderMarketing(view) {
       if (!desc) return;
       const btn = modal.querySelector('#ai-gen');
       btn.disabled = true;
-      btn.textContent = '✨ Generando…';
+      btn.textContent = 'Generando…';
       try {
         const kind = modal.querySelector('#channel-sel').value === 'email' ? 'email' : modal.querySelector('#channel-sel').value;
         const gen = await api('/ai/generate', { method: 'POST', body: { kind, prompt: desc } });
@@ -193,7 +193,7 @@ export async function renderMarketing(view) {
         toast(err.message, true);
       } finally {
         btn.disabled = false;
-        btn.textContent = '✨ Generar con IA';
+        btn.textContent = 'Generar con IA';
       }
     });
     modal.querySelector('#tpl-sel')?.addEventListener('change', (e) => {
@@ -211,7 +211,7 @@ export async function renderMarketing(view) {
         else delete data.send_at;
         await api('/marketing/campaigns', { method: 'POST', body: data });
         closeOverlay();
-        toast(data.send_at ? 'Campaña programada 📅' : 'Campaign saved as draft');
+        toast(data.send_at ? 'Campaña programada' : 'Campaign saved as draft');
         renderMarketing(view);
       } catch (err) {
         toast(err.message, true);

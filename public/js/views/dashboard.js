@@ -1,7 +1,7 @@
 import { api } from '../api.js';
-import { esc, fmtMoney, fmtDate, fullName, openModal, closeOverlay, toast } from '../ui.js';
+import { esc, fmtMoney, fmtDate, fullName, openModal, closeOverlay, toast, icon } from '../ui.js';
 
-const ICONS = { contact: '👤', tag: '🏷️', note: '📝', appointment: '📅', form: '📩', automation: '⚙️', opportunity: '🎯' };
+const ICONS = { contact: 'contact', tag: 'tag', note: 'note', appointment: 'appointment', form: 'form', automation: 'automation', opportunity: 'opportunity' };
 
 export async function renderDashboard(view) {
   const data = await api('/dashboard');
@@ -11,7 +11,7 @@ export async function renderDashboard(view) {
   <div class="page-greeting">${esc(window.__greeting || 'Hola')} — ${s.unread_conversations > 0 ? `${s.unread_conversations} conversación(es) sin leer` : 'todo al día'} · ${s.upcoming_appointments} cita(s) próximas</div>
   <div class="page-header"><h1>Dashboard</h1>
     <div class="spacer"></div>
-    <button class="btn secondary" id="report-btn">📊 Informe del cliente</button>
+    <button class="btn secondary" id="report-btn">Informe del cliente</button>
   </div>
   <div class="hero-banner">
     <div class="hb-label">◎ Pipeline abierto</div>
@@ -19,7 +19,7 @@ export async function renderDashboard(view) {
     <div class="hb-sub">${s.open_opportunities} oportunidades abiertas en el pipeline</div>
     <div class="hb-badges">
       <span class="hb-badge">↗ +${s.contacts_this_week} contactos esta semana</span>
-      <span class="hb-badge">📩 ${s.form_submissions_week} formularios (7 días)</span>
+      <span class="hb-badge">${s.form_submissions_week} formularios (7 días)</span>
     </div>
     <div class="hb-cards">
       <div class="hb-card"><div class="l">Ganado</div><div class="v">${fmtMoney(s.won_value)}</div><div class="s">oportunidades cerradas</div></div>
@@ -31,7 +31,7 @@ export async function renderDashboard(view) {
   ${
     data.hotLeads?.length
       ? `<div class="card" style="margin-bottom:18px;border-left:4px solid #f59e0b"><div class="card-body">
-          <strong>🔥 Leads calientes — llámalos hoy</strong>
+          <strong>Leads calientes — llámalos hoy</strong>
           <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px">
           ${data.hotLeads
             .map(
@@ -56,7 +56,7 @@ export async function renderDashboard(view) {
             ? data.recentActivity
                 .map(
                   (a) => `<div class="timeline-item">
-                    <div class="t-icon">${ICONS[a.type] || '•'}</div>
+                    <div class="t-icon">${icon(ICONS[a.type] || 'note', 14)}</div>
                     <div><div>${esc(a.description)} ${a.first_name ? `— <a href="#/contacts/${a.contact_id}">${esc(fullName(a))}</a>` : ''}</div>
                     <div class="t-time">${fmtDate(a.created_at)}</div></div></div>`
                 )
@@ -104,7 +104,7 @@ export async function renderDashboard(view) {
   view.querySelector('#report-btn').addEventListener('click', async () => {
     const reports = await api('/reports');
     const modal = openModal(`
-      <h2>📊 Informe para el cliente</h2>
+      <h2>Informe para el cliente</h2>
       <p class="muted" style="margin-bottom:12px">Genera un informe white-label con los resultados del periodo y compártelo con tu cliente por link o email.</p>
       <div class="flex">
         <select class="input" id="rep-days" style="width:170px">

@@ -3,7 +3,7 @@ import { formData, toast, esc } from '../ui.js';
 
 function authShell(inner) {
   return `<div class="auth-wrap"><div class="auth-card">
-    <div class="logo">⚡ Lead<span>Flow</span></div>${inner}</div></div>`;
+    <div class="logo">Lead<span>Flow</span></div>${inner}</div></div>`;
 }
 
 export function renderLogin(root) {
