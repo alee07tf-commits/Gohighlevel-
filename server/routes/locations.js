@@ -2,23 +2,10 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { requireAuth } = require('../auth');
-const snapshots = require('../services/snapshots');
+const provisioning = require('../services/provisioning');
 
 const router = express.Router();
 router.use(requireAuth);
-
-// Default account-level custom values seeded from the sub-account profile, so
-// snapshot templates ({{custom_values.business_name}}, …) resolve immediately.
-function defaultCustomValues({ name, company, phone, email, website }) {
-  return [
-    { key: 'business_name', label: 'Nombre del negocio', value: name || company || '' },
-    { key: 'main_phone', label: 'Teléfono principal', value: phone || '' },
-    { key: 'business_email', label: 'Email del negocio', value: email || '' },
-    { key: 'website', label: 'Sitio web', value: website || '' },
-    { key: 'address', label: 'Dirección', value: '' },
-    { key: 'booking_link', label: 'Enlace de reservas', value: '' },
-  ];
-}
 
 router.get('/', async (req, res) => {
   res.json(await db.all('SELECT * FROM locations WHERE agency_id = ? ORDER BY id', [req.user.agency_id]));
@@ -29,51 +16,14 @@ router.post('/', async (req, res) => {
   const { name, company, phone, email, website, timezone } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });
 
-  // Resolve the snapshot to auto-load: explicit snapshot_id, else the agency's
-  // default. `snapshot_id: 0/null` with no default → provision an empty account.
-  let snap = null;
-  if (req.body?.snapshot_id) {
-    snap = await db.get('SELECT * FROM snapshots WHERE id = ? AND agency_id = ?', [req.body.snapshot_id, req.user.agency_id]);
-  } else if (req.body?.snapshot_id !== 0) {
-    snap = await db.get('SELECT * FROM snapshots WHERE agency_id = ? AND is_default = 1 ORDER BY id DESC LIMIT 1', [req.user.agency_id]);
-  }
-  const snapData = snap ? (() => { try { return JSON.parse(snap.data || '{}'); } catch { return {}; } })() : null;
-
-  const result = await db.tx(async (t) => {
-    const locId = await t.insert(
-      `INSERT INTO locations (agency_id, name, company, phone, email, website, timezone, source_snapshot_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.agency_id, name, company || '', phone || '', email || '', website || '', timezone || 'UTC', snap ? snap.id : null]
-    );
-
-    // Auto-load the snapshot's structural config.
-    const provisioned = snapData ? await snapshots.applySnapshot(t, locId, snapData) : {};
-
-    // Seed default custom values (business profile), skipping any the snapshot
-    // already provided so we don't clobber template-specific values.
-    let cvSeeded = provisioned.custom_values || 0;
-    for (const cv of defaultCustomValues({ name, company, phone, email, website })) {
-      const exists = await t.get('SELECT id FROM custom_values WHERE location_id = ? AND key = ?', [locId, cv.key]);
-      if (exists) continue;
-      await t.run('INSERT INTO custom_values (location_id, key, label, value) VALUES (?, ?, ?, ?)', [
-        locId, cv.key, cv.label, cv.value,
-      ]);
-      cvSeeded++;
-    }
-
-    // Optionally create the client user and scope them to this sub-account.
-    if (req.body?.client_email && req.body?.client_password) {
-      const dupe = await t.get('SELECT id FROM users WHERE email = ?', [req.body.client_email]);
-      if (!dupe) {
-        const uid = await t.insert(
-          'INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-          [req.user.agency_id, req.body.client_name || name, req.body.client_email, bcrypt.hashSync(req.body.client_password, 10), 'member']
-        );
-        await t.run('INSERT INTO user_locations (user_id, location_id) VALUES (?, ?)', [uid, locId]);
-      }
-    }
-
-    return { locId, provisioned: { ...provisioned, custom_values: cvSeeded }, snapshot: snap ? snap.name : null };
+  const result = await provisioning.provisionSubAccount({
+    agencyId: req.user.agency_id,
+    profile: { name, company, phone, email, website, timezone },
+    snapshotId: req.body?.snapshot_id, // undefined → agency default; 0 → empty
+    client:
+      req.body?.client_email && req.body?.client_password
+        ? { name: req.body.client_name, email: req.body.client_email, password: req.body.client_password }
+        : null,
   });
 
   const location = await db.get('SELECT * FROM locations WHERE id = ?', [result.locId]);

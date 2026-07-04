@@ -583,4 +583,94 @@ router.get('/l/:slug', async (req, res) => {
   res.redirect(link.target_url);
 });
 
+// ---- SaaS Mode: branded self-serve signup ----
+// Public plan-selection + signup page for an agency (`/signup/<agencySlug>`).
+router.get('/signup/:slug', async (req, res) => {
+  const agency = await db.get('SELECT * FROM agencies WHERE slug = ?', [req.params.slug]);
+  if (!agency) return res.status(404).send('Página de registro no encontrada');
+  const plans = await db.all('SELECT * FROM plans WHERE agency_id = ? AND is_public = 1 ORDER BY price', [agency.id]);
+  const brand = agency.brand_color || '#4f46e5';
+  const planCards = plans.length
+    ? plans
+        .map(
+          (p) => `<label class="plan"><input type="radio" name="plan_id" value="${p.id}" ${p.id === plans[0].id ? 'checked' : ''}>
+        <div class="pc"><div class="pn">${esc(p.name)}</div>
+          <div class="pp">${Number(p.price).toFixed(2)} ${esc(p.currency)}<span>/${p.interval === 'yearly' ? 'año' : 'mes'}</span></div>
+          <div class="pd">${esc(p.description || '')}</div></div></label>`
+        )
+        .join('')
+    : '<p>Este agencia aún no tiene planes disponibles.</p>';
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(agency.name)} — Crea tu cuenta</title>
+<style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f8fafc;color:#0f172a}
+.head{background:${brand};color:#fff;padding:34px 20px;text-align:center}.head img{max-height:44px;margin-bottom:10px}
+.head h1{margin:0;font-size:26px}.head p{margin:8px 0 0;opacity:.9}
+.wrap{max-width:560px;margin:24px auto;padding:0 16px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:20px;margin-bottom:16px}
+.plan{display:block;margin-bottom:10px;cursor:pointer}.plan input{position:absolute;opacity:0}
+.pc{border:2px solid #e5e7eb;border-radius:10px;padding:14px}.plan input:checked+.pc{border-color:${brand};box-shadow:0 0 0 3px ${brand}22}
+.pn{font-weight:700}.pp{font-size:22px;font-weight:800;color:${brand};margin:4px 0}.pp span{font-size:13px;color:#64748b;font-weight:500}.pd{color:#64748b;font-size:13px}
+label.field{display:block;margin-bottom:12px}label.field span{display:block;font-size:13px;color:#475569;margin-bottom:4px}
+input.in{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px}
+.btn{width:100%;background:${brand};color:#fff;border:0;border-radius:9px;padding:13px;font-size:16px;font-weight:600;cursor:pointer}
+.msg{padding:12px;border-radius:8px;margin-bottom:12px;display:none}.err{background:#fef2f2;color:#b91c1c}.ok{background:#f0fdf4;color:#15803d}
+.foot{text-align:center;color:#94a3b8;font-size:12px;padding:20px}</style></head>
+<body><div class="head">${agency.logo_url ? `<img src="${esc(agency.logo_url)}" alt="">` : ''}
+<h1>${esc(agency.signup_headline || `Crea tu cuenta en ${agency.name}`)}</h1>
+<p>Empieza en menos de un minuto — tu cuenta se configura sola.</p></div>
+<div class="wrap"><form id="f">
+  <div class="msg" id="msg"></div>
+  <div class="card"><strong>Elige tu plan</strong><div style="margin-top:12px">${planCards}</div></div>
+  <div class="card">
+    <label class="field"><span>Tu nombre</span><input class="in" name="name" required></label>
+    <label class="field"><span>Nombre del negocio</span><input class="in" name="business_name" required></label>
+    <label class="field"><span>Email</span><input class="in" type="email" name="email" required></label>
+    <button class="btn" id="sb">Crear mi cuenta</button>
+  </div>
+</form><div class="foot">Powered by LeadFlow</div></div>
+<script>
+const f=document.getElementById('f'),msg=document.getElementById('msg');
+f.addEventListener('submit',async e=>{e.preventDefault();const b=document.getElementById('sb');b.disabled=true;b.textContent='Creando…';
+const data=Object.fromEntries(new FormData(f).entries());
+try{const r=await fetch('/api/public/saas/${esc(agency.slug)}/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+const j=await r.json();if(!r.ok)throw new Error(j.error||'Error');
+if(j.mode==='stripe'&&j.url){location.href=j.url;return;}
+msg.className='msg ok';msg.style.display='block';msg.textContent='¡Cuenta creada! Revisa tu email para acceder.';f.reset();
+}catch(err){msg.className='msg err';msg.style.display='block';msg.textContent=err.message;}
+b.disabled=false;b.textContent='Crear mi cuenta';});
+</script></body></html>`);
+});
+
+// Self-serve signup submit. Simulated when the agency has no Stripe connected;
+// otherwise redirects to a Stripe subscription checkout (provisioned on paid).
+router.post('/saas/:slug/signup', async (req, res) => {
+  const agency = await db.get('SELECT * FROM agencies WHERE slug = ?', [req.params.slug]);
+  if (!agency) return res.status(404).json({ error: 'Agencia no encontrada' });
+  const { plan_id, name, email, business_name } = req.body || {};
+  if (!name || !email || !business_name) return res.status(400).json({ error: 'Completa todos los campos' });
+  const plan = await db.get('SELECT * FROM plans WHERE id = ? AND agency_id = ? AND is_public = 1', [plan_id, agency.id]);
+  if (!plan) return res.status(400).json({ error: 'Plan no válido' });
+  if (await db.get('SELECT id FROM users WHERE email = ?', [email]))
+    return res.status(409).json({ error: 'Ese email ya tiene una cuenta' });
+
+  const providers = require('../services/providers');
+  const stripeOn = (await providers.paymentsProvider({ agencyId: agency.id })) === 'stripe';
+  if (stripeOn) {
+    const base = `${req.protocol}://${req.get('host')}`;
+    const session = await providers.createSubscriptionCheckout(
+      {
+        plan, customerEmail: email,
+        successUrl: `${base}/signup/${agency.slug}?welcome=1`,
+        cancelUrl: `${base}/signup/${agency.slug}`,
+        metadata: { saas_plan: plan.id, saas_agency: agency.id, saas_name: name, saas_email: email, saas_business: business_name },
+      },
+      { agencyId: agency.id }
+    );
+    return res.json({ mode: 'stripe', url: session ? session.url : null });
+  }
+
+  const saas = require('../services/saas');
+  const out = await saas.provisionFromPlan({ agency, plan, client: { name, email, business_name } });
+  res.status(201).json({ mode: 'simulated', ok: true, location_id: out.locationId, login_url: '/', temp_password: out.password });
+});
+
 module.exports = router;

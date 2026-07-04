@@ -382,6 +382,66 @@ CREATE TABLE IF NOT EXISTS location_integrations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (location_id, provider)
 );
+
+-- SaaS Mode (Phase 3): the agency resells LeadFlow. Plans are the products a
+-- client buys; a subscription ties a sub-account to a plan; wallets + usage
+-- power rebilling of metered channels with an agency markup.
+CREATE TABLE IF NOT EXISTS plans (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  price DOUBLE PRECISION NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'EUR',
+  interval TEXT NOT NULL DEFAULT 'monthly',
+  snapshot_id INTEGER,
+  features TEXT NOT NULL DEFAULT '{}',
+  rebilling TEXT NOT NULL DEFAULT '{}',
+  is_public INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  plan_id INTEGER REFERENCES plans(id) ON DELETE SET NULL,
+  client_user_id INTEGER REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'active',
+  stripe_subscription_id TEXT DEFAULT '',
+  stripe_customer_id TEXT DEFAULT '',
+  current_period_end TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS wallets (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL UNIQUE REFERENCES locations(id) ON DELETE CASCADE,
+  balance DOUBLE PRECISION NOT NULL DEFAULT 0,
+  auto_recharge INTEGER NOT NULL DEFAULT 0,
+  threshold DOUBLE PRECISION NOT NULL DEFAULT 5,
+  recharge_amount DOUBLE PRECISION NOT NULL DEFAULT 20
+);
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  amount DOUBLE PRECISION NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'usage',
+  description TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS usage_events (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  qty DOUBLE PRECISION NOT NULL DEFAULT 1,
+  base_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+  billed_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS brand_color TEXT DEFAULT '#4f46e5';
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT '';
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS signup_headline TEXT DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agencies_slug ON agencies(slug) WHERE slug IS NOT NULL;
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -454,7 +514,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 let readyPromise = null;
 function ensureReady() {

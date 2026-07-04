@@ -67,6 +67,8 @@ Cada push a la rama conectada redespliega automáticamente en Vercel. La rama de
 | **Content AI (v1.2)** | Botón "✨ Generar con IA" en campañas: redacta emails/SMS/WhatsApp con Claude (`ANTHROPIC_API_KEY`). |
 | **CSV (v1.2)** | Importación/exportación de contactos con deduplicación (sin disparar automatizaciones en masa). |
 | **Plantillas + alta automática (v1.8)** | Biblioteca de snapshots a nivel agencia: guarda la config de una sub-cuenta como plantilla reutilizable y marca una por defecto. Al crear una sub-cuenta nueva se carga la plantilla automáticamente (pipelines, workflows, funnels, calendarios, plantillas, campos) y se siembran sus **Valores del negocio** (`{{custom_values.business_name}}`…) — lista para trabajar en segundos. |
+| **Integraciones por sub-cuenta (v1.9)** | Cada sub-cuenta puede traer sus propias claves (Stripe, Twilio, email, IA, prospección) con herencia estilo GoHighLevel: **sub-cuenta → agencia → servidor**. Los secretos se guardan cifrados (AES-256-GCM). En Settings ves el origen efectivo de cada canal. |
+| **SaaS Mode (v2.0)** | Panel de **Agencia** (solo admin): resumen cross-sub-cuenta, **planes** con precio/plantilla/rebilling, y **página de registro con tu marca** (`/signup/<agencia>`). Al registrarse un cliente (pago con el Stripe de la agencia, o modo simulado) se **crea y configura su sub-cuenta sola** desde la plantilla del plan, se abre su **suscripción** y **wallet**, y se envían las credenciales. El **rebilling** mide el uso de canales y lo cobra al wallet con tu margen. White-label: color, logo y nombre de la agencia en la app. |
 
 ## Arquitectura
 

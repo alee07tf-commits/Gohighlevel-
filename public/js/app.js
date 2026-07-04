@@ -14,6 +14,7 @@ import { renderPayments } from './views/payments.js';
 import { renderReputation } from './views/reputation.js';
 import { renderTasks } from './views/tasks.js';
 import { renderProspecting } from './views/prospecting.js';
+import { renderAgency } from './views/agency.js';
 
 const IC = {
   dashboard: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -29,13 +30,17 @@ const IC = {
   reputation: '<svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
   tasks: '<svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+  agency: '<svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/></svg>',
 };
 
-const NAV_SECTIONS = [
-  { title: 'Workspace', items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
-  { title: 'Crecimiento', items: ['prospecting', 'marketing', 'funnels', 'automations', 'payments', 'reputation'] },
-  { title: 'Cuenta', items: ['settings'] },
-];
+function navSections() {
+  return [
+    { title: 'Workspace', items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
+    { title: 'Crecimiento', items: ['prospecting', 'marketing', 'funnels', 'automations', 'payments', 'reputation'] },
+    // The agency console is admin-only (SaaS plans, cross-account, white-label).
+    { title: 'Cuenta', items: [...(state.user?.role === 'admin' ? ['agency'] : []), 'settings'] },
+  ];
+}
 
 const NAV = [
   { path: 'dashboard', label: 'Dashboard', icon: '', view: renderDashboard },
@@ -50,10 +55,22 @@ const NAV = [
   { path: 'funnels', label: 'Sites & Funnels', icon: '', view: renderFunnels },
   { path: 'reputation', label: 'Reputación', icon: '★', view: renderReputation },
   { path: 'tasks', label: 'Tareas', icon: '', view: renderTasks },
+  { path: 'agency', label: 'Agencia', icon: '', view: renderAgency },
   { path: 'settings', label: 'Settings', icon: '', view: renderSettings },
 ];
 
+function applyBranding() {
+  // White-label: tint the app with the agency's brand color when set.
+  const color = state.agency?.brand_color;
+  if (color && /^#[0-9a-fA-F]{6}$/.test(color)) {
+    const root = document.documentElement.style;
+    root.setProperty('--primary', color);
+    root.setProperty('--primary-dark', color);
+  }
+}
+
 function renderShell(activePath) {
+  applyBranding();
   const app = document.getElementById('app');
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches';
@@ -66,11 +83,11 @@ function renderShell(activePath) {
   <div class="layout">
     <div class="sidebar-scrim" id="sidebar-scrim"></div>
     <aside class="sidebar" id="sidebar">
-      <div class="logo"><span class="logo-chip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 10-12h-7z"/></svg></span>
-        <span class="logo-text">LeadFlow<span class="logo-sub">${esc(state.agency?.name || '')}</span></span></div>
+      <div class="logo"><span class="logo-chip">${state.agency?.logo_url ? `<img src="${esc(state.agency.logo_url)}" alt="" style="width:18px;height:18px;object-fit:contain">` : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 10-12h-7z"/></svg>'}</span>
+        <span class="logo-text">${esc(state.agency?.name || 'LeadFlow')}<span class="logo-sub">${state.agency?.slug ? 'Agencia' : 'plataforma'}</span></span></div>
       <div class="search-box" id="global-search">${icon('search', 15)} <span style="flex:1">Buscar contactos…</span> <span class="kbd">⌘K</span></div>
       <nav>
-        ${NAV_SECTIONS.map(
+        ${navSections().map(
           (s) => `<div class="nav-section">${s.title}</div>` +
             s.items.map((key) => navLink(NAV.find((n) => n.path === key))).join('')
         ).join('')}

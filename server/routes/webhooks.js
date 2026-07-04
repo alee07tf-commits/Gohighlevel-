@@ -77,19 +77,35 @@ router.post('/stripe', express.json(), async (req, res) => {
   if (!sessionId) return res.status(400).json({ error: 'Missing session id' });
   try {
     const providers = require('../services/providers');
-    // Resolve which sub-account's Stripe key to use from the session metadata
-    // (the same key that created the session) before re-fetching it.
+    const meta = obj.metadata || {};
+    // Resolve which Stripe key created the session before re-fetching it: SaaS
+    // signups use the agency's key; invoice checkouts use the sub-account's.
     let ctx = {};
-    if (obj.metadata && obj.metadata.invoice_id) {
-      const inv0 = await db.get('SELECT location_id FROM invoices WHERE id = ?', [obj.metadata.invoice_id]);
+    if (meta.saas_plan) ctx = { agencyId: Number(meta.saas_agency) };
+    else if (meta.invoice_id) {
+      const inv0 = await db.get('SELECT location_id FROM invoices WHERE id = ?', [meta.invoice_id]);
       if (inv0) ctx = { locationId: inv0.location_id };
     }
     const session = await providers.retrieveCheckoutSession(sessionId, ctx);
-    if (session.payment_status === 'paid' && session.metadata && session.metadata.invoice_id) {
-      const inv = await db.get('SELECT * FROM invoices WHERE id = ? AND token = ?', [
-        session.metadata.invoice_id,
-        session.metadata.invoice_token || '',
-      ]);
+    const m = session.metadata || {};
+
+    // SaaS subscription: provision the client's sub-account on first payment.
+    if (m.saas_plan && (session.payment_status === 'paid' || session.status === 'complete')) {
+      const agency = await db.get('SELECT * FROM agencies WHERE id = ?', [m.saas_agency]);
+      const plan = await db.get('SELECT * FROM plans WHERE id = ? AND agency_id = ?', [m.saas_plan, m.saas_agency]);
+      const already = await db.get('SELECT id FROM users WHERE email = ?', [m.saas_email || '']);
+      if (agency && plan && !already) {
+        await require('../services/saas').provisionFromPlan({
+          agency, plan,
+          client: { name: m.saas_name, email: m.saas_email, business_name: m.saas_business },
+          stripe: { subscription_id: session.subscription || '', customer_id: session.customer || '' },
+        });
+      }
+      return res.json({ received: true });
+    }
+
+    if (session.payment_status === 'paid' && m.invoice_id) {
+      const inv = await db.get('SELECT * FROM invoices WHERE id = ? AND token = ?', [m.invoice_id, m.invoice_token || '']);
       if (inv) await require('./payments').settleInvoice(inv.id, 'stripe');
     }
     res.json({ received: true });

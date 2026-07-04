@@ -83,6 +83,33 @@ async function createCheckoutSession({ invoice, successUrl, cancelUrl }, ctx) {
   return { url: data.url, id: data.id };
 }
 
+// SaaS subscription checkout (recurring) using the agency's Stripe key. Uses
+// inline price_data so no pre-created Stripe Price is needed. Returns { url }.
+async function createSubscriptionCheckout({ plan, successUrl, cancelUrl, customerEmail, metadata = {} }, ctx) {
+  const c = await cfg('stripe', ctx);
+  if (!c.secret_key) return null;
+  const params = new URLSearchParams({
+    mode: 'subscription',
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    'line_items[0][quantity]': '1',
+    'line_items[0][price_data][currency]': (plan.currency || 'EUR').toLowerCase(),
+    'line_items[0][price_data][unit_amount]': String(Math.round(Number(plan.price) * 100)),
+    'line_items[0][price_data][recurring][interval]': plan.interval === 'yearly' ? 'year' : 'month',
+    'line_items[0][price_data][product_data][name]': plan.name || 'Plan',
+  });
+  if (customerEmail) params.set('customer_email', customerEmail);
+  for (const [k, v] of Object.entries(metadata)) params.set(`metadata[${k}]`, String(v));
+  const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${c.secret_key}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data.error && data.error.message) || 'Stripe subscription checkout failed');
+  return { url: data.url, id: data.id };
+}
+
 async function retrieveCheckoutSession(sessionId, ctx) {
   const c = await cfg('stripe', ctx);
   const res = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
@@ -175,5 +202,6 @@ module.exports = {
   deliverWhatsapp,
   paymentsProvider,
   createCheckoutSession,
+  createSubscriptionCheckout,
   retrieveCheckoutSession,
 };
