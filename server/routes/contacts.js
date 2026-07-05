@@ -3,6 +3,7 @@ const db = require('../db');
 const { requireAuth, requireLocation } = require('../auth');
 const automation = require('../services/automation');
 const scoring = require('../services/scoring');
+const messaging = require('../services/messaging');
 
 const router = express.Router();
 router.use(requireAuth, requireLocation);
@@ -88,6 +89,102 @@ async function getContact(req, res, next) {
   req.contact = contact;
   next();
 }
+
+// Returns the caller-owned contact rows for a set of ids (scopes to location).
+async function ownedContacts(ids, locationId) {
+  const clean = [...new Set((ids || []).map(Number).filter(Boolean))];
+  if (!clean.length) return [];
+  const ph = clean.map(() => '?').join(',');
+  return db.all(`SELECT * FROM contacts WHERE location_id = ? AND id IN (${ph})`, [locationId, ...clean]);
+}
+
+// ---- Bulk actions (defined before /:id/* so "bulk" is never read as an id) ----
+router.post('/bulk/tags', async (req, res) => {
+  const { ids, tag, op = 'add' } = req.body || {};
+  if (!tag) return res.status(400).json({ error: 'tag is required' });
+  const rows = await ownedContacts(ids, req.location.id);
+  for (const c of rows) {
+    if (op === 'remove') {
+      await db.run('DELETE FROM contact_tags WHERE contact_id = ? AND tag = ?', [c.id, tag]);
+    } else {
+      const info = await db.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [c.id, tag]);
+      if (info.changes) await automation.trigger(req.location.id, 'tag_added', await withTags(c), { tag });
+    }
+  }
+  res.json({ ok: true, affected: rows.length });
+});
+
+router.post('/bulk/delete', async (req, res) => {
+  const rows = await ownedContacts(req.body?.ids, req.location.id);
+  for (const c of rows) await db.run('DELETE FROM contacts WHERE id = ?', [c.id]);
+  res.json({ ok: true, affected: rows.length });
+});
+
+router.post('/bulk/message', async (req, res) => {
+  const { ids, channel = 'sms', subject = '', body } = req.body || {};
+  if (!body) return res.status(400).json({ error: 'body is required' });
+  const rows = await ownedContacts(ids, req.location.id);
+  let sent = 0, skipped = 0;
+  for (const c of rows) {
+    if (c.dnd) { skipped++; continue; }
+    try { await messaging.sendByChannel(channel, req.location.id, await withTags(c), { subject, body }); sent++; }
+    catch { skipped++; }
+  }
+  res.json({ ok: true, sent, skipped });
+});
+
+router.post('/bulk/workflow', async (req, res) => {
+  const { ids, workflow_id } = req.body || {};
+  if (!workflow_id) return res.status(400).json({ error: 'workflow_id is required' });
+  const rows = await ownedContacts(ids, req.location.id);
+  let enrolled = 0;
+  for (const c of rows) if (await automation.enroll(req.location.id, workflow_id, await withTags(c))) enrolled++;
+  res.json({ ok: true, enrolled });
+});
+
+// ---- Advanced filtered search (multi-condition; savable as a smart list) ----
+// filters: [{ field, op, value }]; match: 'all' | 'any'. Supported fields:
+// name, email, phone (contains); tag / no_tag; dnd; source; owner; score_gte;
+// created_before / created_after (ISO); has_opportunity; custom:<key>.
+function buildFilter(filters, match, locationId) {
+  const where = ['c.location_id = ?'];
+  const params = [locationId];
+  const conds = [];
+  for (const f of Array.isArray(filters) ? filters : []) {
+    const v = f.value;
+    switch (f.field) {
+      case 'name': conds.push(`(c.first_name || ' ' || c.last_name ILIKE ?)`); params.push(`%${v}%`); break;
+      case 'email': conds.push('c.email ILIKE ?'); params.push(`%${v}%`); break;
+      case 'phone': conds.push('c.phone ILIKE ?'); params.push(`%${v}%`); break;
+      case 'source': conds.push('c.source = ?'); params.push(v); break;
+      case 'dnd': conds.push('c.dnd = ?'); params.push(v ? 1 : 0); break;
+      case 'owner': conds.push('c.owner_user_id = ?'); params.push(Number(v) || 0); break;
+      case 'score_gte': conds.push('COALESCE(c.score,0) >= ?'); params.push(Number(v) || 0); break;
+      case 'created_after': conds.push('c.created_at >= ?'); params.push(v); break;
+      case 'created_before': conds.push('c.created_at <= ?'); params.push(v); break;
+      case 'tag': conds.push('EXISTS (SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag = ?)'); params.push(v); break;
+      case 'no_tag': conds.push('NOT EXISTS (SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id AND ct.tag = ?)'); params.push(v); break;
+      case 'has_opportunity': conds.push('EXISTS (SELECT 1 FROM opportunities o WHERE o.contact_id = c.id)'); break;
+      default:
+        if (typeof f.field === 'string' && f.field.startsWith('custom:')) {
+          // JSON text match on a custom field key (DB-agnostic LIKE).
+          conds.push('c.custom_fields LIKE ?'); params.push(`%${JSON.stringify(f.field.slice(7))}:%${v}%`);
+        }
+    }
+  }
+  if (conds.length) where.push(`(${conds.join(match === 'any' ? ' OR ' : ' AND ')})`);
+  return { where: where.join(' AND '), params };
+}
+
+router.post('/search', async (req, res) => {
+  const { filters, match = 'all', limit = 200, offset = 0 } = req.body || {};
+  const { where, params } = buildFilter(filters, match, req.location.id);
+  const rows = await db.all(
+    `SELECT c.* FROM contacts c WHERE ${where} ORDER BY c.created_at DESC LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+  res.json(await withTagsBulk(rows));
+});
 
 router.get('/:id', getContact, async (req, res) => {
   const contact = await withTags(req.contact);
@@ -185,6 +282,25 @@ router.post('/:id/notes', getContact, async (req, res) => {
   ]);
   await automation.logActivity(req.location.id, req.contact.id, 'note', 'Note added');
   res.status(201).json(await db.get('SELECT * FROM notes WHERE id = ?', [id]));
+});
+
+// ---- Quick actions from the contact card ----
+// Send a message directly to this contact (opens/uses its conversation).
+router.post('/:id/message', getContact, async (req, res) => {
+  const { channel = 'sms', subject = '', body } = req.body || {};
+  if (!body) return res.status(400).json({ error: 'body is required' });
+  if (req.contact.dnd) return res.status(400).json({ error: 'El contacto tiene DND activado' });
+  const message = await messaging.sendByChannel(channel, req.location.id, await withTags(req.contact), { subject, body });
+  res.status(201).json(message);
+});
+
+// Enroll this contact into a workflow.
+router.post('/:id/workflow', getContact, async (req, res) => {
+  const { workflow_id } = req.body || {};
+  if (!workflow_id) return res.status(400).json({ error: 'workflow_id is required' });
+  const ok = await automation.enroll(req.location.id, workflow_id, await withTags(req.contact));
+  if (!ok) return res.status(404).json({ error: 'Workflow not found' });
+  res.json({ ok: true });
 });
 
 // ---- CSV import/export ----

@@ -252,4 +252,13 @@ async function trigger(locationId, triggerType, contact, event = {}) {
   }
 }
 
-module.exports = { trigger, resumeWorkflow, logActivity };
+// Manually enroll a contact into a workflow (bulk actions / contact quick
+// actions). Runs the workflow's actions from the top, like a trigger match.
+async function enroll(locationId, workflowId, contact) {
+  const wf = await db.get('SELECT * FROM workflows WHERE id = ? AND location_id = ?', [workflowId, locationId]);
+  if (!wf || !contact) return false;
+  await executeActions(wf, contact, 0, 'Manual enrollment');
+  return true;
+}
+
+module.exports = { trigger, resumeWorkflow, logActivity, enroll };
