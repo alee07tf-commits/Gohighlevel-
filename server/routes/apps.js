@@ -77,8 +77,12 @@ router.get('/oauth/callback', async (req, res) => {
   res.redirect(`/?connected=${app.key}#/marketplace`);
 });
 
-// Upsert a connection (tokens encrypted at rest).
+// Upsert a connection (tokens/credentials encrypted at rest). Pass either
+// `access_token` (a raw OAuth token, stored as { v }) or `credentials` (an
+// arbitrary object of API-key fields, stored as-is) — both go, encrypted, into
+// the access_token column so they never round-trip to the client.
 async function storeConnection(locationId, appKey, c) {
+  const secret = c.credentials ? secretbox.encrypt(c.credentials) : c.access_token ? secretbox.encrypt({ v: c.access_token }) : '';
   await db.run(
     `INSERT INTO connected_accounts
        (location_id, app, external_id, display_name, access_token, refresh_token, scopes, data, status, expires_at, connected_at)
@@ -90,7 +94,7 @@ async function storeConnection(locationId, appKey, c) {
        expires_at = EXCLUDED.expires_at, connected_at = now()`,
     [
       locationId, appKey, c.external_id || '', c.display_name || '',
-      c.access_token ? secretbox.encrypt({ v: c.access_token }) : '',
+      secret,
       c.refresh_token ? secretbox.encrypt({ v: c.refresh_token }) : '',
       c.scopes || '', JSON.stringify(c.data || {}), c.expires_at || null,
     ]
@@ -125,6 +129,7 @@ router.post('/:key/connect', requireLocation, async (req, res) => {
   const app = apps.get(req.params.key);
   if (!app) return res.status(404).json({ error: 'Unknown app' });
   if (app.status === 'soon') return res.status(400).json({ error: 'Esta integración aún no está disponible' });
+  if (app.auth !== 'oauth') return res.status(400).json({ error: 'Esta app no usa OAuth; conéctala con sus credenciales' });
   if (!apps.isConfigured(app)) return res.json({ needs_config: true, missing: apps.missingEnv(app) });
   const shop = (req.body && req.body.shop ? String(req.body.shop).trim() : '').replace(/^https?:\/\//, '');
   if (app.needsShop && !shop) return res.status(400).json({ error: 'shop domain is required' });
@@ -133,13 +138,43 @@ router.post('/:key/connect', requireLocation, async (req, res) => {
   res.json({ authorize_url: url });
 });
 
-// Manually store a connection (for API-key style apps, or pasting a token).
+// Manually store a connection. Two shapes:
+//   { fields: {...} }        — API-key apps: validate against the catalog's
+//                              field spec, encrypt the whole blob, keep only
+//                              non-secret values + masked secrets in `data`.
+//   { access_token, ... }    — raw token (OAuth apps, or mapping a Meta page).
 router.post('/:key/manual', requireLocation, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
   const app = apps.get(req.params.key);
   if (!app) return res.status(404).json({ error: 'Unknown app' });
-  const { access_token, external_id, display_name, data } = req.body || {};
-  if (!access_token) return res.status(400).json({ error: 'access_token is required' });
+  const body = req.body || {};
+
+  if (body.fields && typeof body.fields === 'object') {
+    const spec = app.fields || [];
+    if (!spec.length) return res.status(400).json({ error: 'Esta app no admite conexión manual por campos' });
+    const creds = {};
+    const display = {};
+    const masked = {};
+    for (const f of spec) {
+      const v = body.fields[f.k];
+      if (v === undefined || v === null || v === '') continue;
+      creds[f.k] = v;
+      if (f.secret) masked[f.k] = secretbox.mask(v);
+      else display[f.k] = v;
+    }
+    // Require every non-secret field and at least one secret to be present.
+    const missing = spec.filter((f) => !(f.k in creds)).map((f) => f.k);
+    if (missing.length) return res.status(400).json({ error: `Faltan campos: ${missing.join(', ')}` });
+    await storeConnection(req.location.id, app.key, {
+      credentials: creds, display_name: app.name,
+      external_id: display.domain || display.site_url || display.measurement_id || '',
+      data: { display, masked },
+    });
+    return res.status(201).json({ ok: true });
+  }
+
+  const { access_token, external_id, display_name, data } = body;
+  if (!access_token) return res.status(400).json({ error: 'access_token or fields is required' });
   await storeConnection(req.location.id, app.key, {
     access_token, external_id: external_id || '', display_name: display_name || app.name,
     scopes: app.scopes || '', data: data || {},
