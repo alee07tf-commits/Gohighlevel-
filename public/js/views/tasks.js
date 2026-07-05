@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast, fmtDate, fullName } from '../ui.js';
+import { t } from '../i18n.js';
 
 export async function renderTasks(view) {
   let filter = 'open';
@@ -10,36 +11,36 @@ export async function renderTasks(view) {
 
     view.innerHTML = `
     <div class="page-header">
-      <h1>Tareas</h1>
+      <h1>${t('Tareas', 'Tasks')}</h1>
       <select class="input" id="task-filter" style="width:150px">
-        <option value="open" ${filter === 'open' ? 'selected' : ''}>Pendientes</option>
-        <option value="done" ${filter === 'done' ? 'selected' : ''}>Hechas</option>
-        <option value="all" ${filter === 'all' ? 'selected' : ''}>Todas</option>
+        <option value="open" ${filter === 'open' ? 'selected' : ''}>${t('Pendientes', 'Pending')}</option>
+        <option value="done" ${filter === 'done' ? 'selected' : ''}>${t('Hechas', 'Done')}</option>
+        <option value="all" ${filter === 'all' ? 'selected' : ''}>${t('Todas', 'All')}</option>
       </select>
       <div class="spacer"></div>
-      <button class="btn" id="new-task">+ Tarea</button>
+      <button class="btn" id="new-task">${t('+ Tarea', '+ Task')}</button>
     </div>
     <div class="card">
       ${
         tasks.length
           ? tasks
-              .map((t) => {
-                const overdue = t.status === 'open' && t.due_at && t.due_at.slice(0, 19) <= now;
+              .map((task) => {
+                const overdue = task.status === 'open' && task.due_at && task.due_at.slice(0, 19) <= now;
                 return `<div class="appt-row">
-                  <input type="checkbox" class="toggle-task" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>
+                  <input type="checkbox" class="toggle-task" data-id="${task.id}" ${task.status === 'done' ? 'checked' : ''}>
                   <div style="flex:1">
-                    <strong style="${t.status === 'done' ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(t.title)}</strong>
+                    <strong style="${task.status === 'done' ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(task.title)}</strong>
                     <div class="muted" style="font-size:12px">
-                      ${t.contact_id ? `<a href="#/contacts/${t.contact_id}">${esc(fullName(t))}</a> · ` : ''}
-                      ${esc(t.user_name || '')}${t.notes ? ` · ${esc(t.notes)}` : ''}
+                      ${task.contact_id ? `<a href="#/contacts/${task.contact_id}">${esc(fullName(task))}</a> · ` : ''}
+                      ${esc(task.user_name || '')}${task.notes ? ` · ${esc(task.notes)}` : ''}
                     </div>
                   </div>
-                  ${t.due_at ? `<span class="badge ${overdue ? 'red' : 'gray'}">${overdue ? '' : ''}${fmtDate(t.due_at)}</span>` : ''}
-                  <button class="btn ghost small del-task" data-id="${t.id}">✕</button>
+                  ${task.due_at ? `<span class="badge ${overdue ? 'red' : 'gray'}">${overdue ? '' : ''}${fmtDate(task.due_at)}</span>` : ''}
+                  <button class="btn ghost small del-task" data-id="${task.id}">✕</button>
                 </div>`;
               })
               .join('')
-          : '<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>Sin tareas. Créalas a mano o desde automatizaciones (acción "Crear tarea").</div>'
+          : `<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>${t('Sin tareas. Créalas a mano o desde automatizaciones (acción "Crear tarea").', 'No tasks. Create them manually or from automations ("Create task" action).')}</div>`
       }
     </div>`;
 
@@ -52,26 +53,26 @@ export async function renderTasks(view) {
     );
     view.querySelectorAll('.del-task').forEach((b) =>
       b.addEventListener('click', async () => {
-        if (!confirm('¿Eliminar tarea?')) return;
+        if (!confirm(t('¿Eliminar tarea?', 'Delete task?'))) return;
         await api(`/tasks/${b.dataset.id}`, { method: 'DELETE' });
         load();
       })
     );
     view.querySelector('#new-task').addEventListener('click', () => {
       const modal = openModal(`
-        <h2>Nueva Tarea</h2>
+        <h2>${t('Nueva Tarea', 'New Task')}</h2>
         <form id="task-form">
-          <label class="field"><span class="label">Título</span><input class="input" name="title" required placeholder="Llamar a María"></label>
-          <label class="field"><span class="label">Notas</span><input class="input" name="notes"></label>
+          <label class="field"><span class="label">${t('Título', 'Title')}</span><input class="input" name="title" required placeholder="${t('Llamar a María', 'Call María')}"></label>
+          <label class="field"><span class="label">${t('Notas', 'Notes')}</span><input class="input" name="notes"></label>
           <div class="form-row">
-            <label class="field"><span class="label">Vence</span><input class="input" name="due_at" type="datetime-local"></label>
+            <label class="field"><span class="label">${t('Vence', 'Due')}</span><input class="input" name="due_at" type="datetime-local"></label>
           </div>
-          <label class="field"><span class="label">Contacto (opcional)</span>
-            <input class="input" id="t-search" placeholder="buscar…" autocomplete="off">
+          <label class="field"><span class="label">${t('Contacto (opcional)', 'Contact (optional)')}</span>
+            <input class="input" id="t-search" placeholder="${t('buscar…', 'search…')}" autocomplete="off">
             <input type="hidden" name="contact_id"><div id="t-results"></div></label>
           <div class="modal-actions">
-            <button type="button" class="btn secondary" id="cancel">Cancelar</button>
-            <button class="btn">Crear</button>
+            <button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
+            <button class="btn">${t('Crear', 'Create')}</button>
           </div>
         </form>`);
       let timer;
@@ -100,7 +101,7 @@ export async function renderTasks(view) {
         try {
           await api('/tasks', { method: 'POST', body: data });
           closeOverlay();
-          toast('Tarea creada');
+          toast(t('Tarea creada', 'Task created'));
           load();
         } catch (err) { toast(err.message, true); }
       });

@@ -1,61 +1,68 @@
 import { api } from '../api.js';
 import { esc, openModal, closeOverlay, toast, fmtDate, fmtMoney, fullName } from '../ui.js';
+import { t } from '../i18n.js';
 
 export async function renderPayments(view) {
   const data = await api('/payments');
   const { invoices, stats } = data;
   const badge = { draft: 'gray', sent: 'amber', paid: 'green', void: 'red' };
+  const statusLabel = {
+    draft: t('Borrador', 'Draft'),
+    sent: t('Enviada', 'Sent'),
+    paid: t('Pagada', 'Paid'),
+    void: t('Anulada', 'Void'),
+  };
 
   view.innerHTML = `
   <div class="page-header">
-    <h1>Pagos</h1>
+    <h1>${t('Pagos', 'Payments')}</h1>
     <div class="spacer"></div>
-    <button class="btn" id="new-invoice">+ Factura</button>
+    <button class="btn" id="new-invoice">${t('+ Factura', '+ Invoice')}</button>
   </div>
   <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
-    <div class="stat"><div class="stat-label">Cobrado</div><div class="stat-value">${fmtMoney(stats.paid)}</div></div>
-    <div class="stat"><div class="stat-label">Pendiente de cobro</div><div class="stat-value">${fmtMoney(stats.outstanding)}</div></div>
-    <div class="stat"><div class="stat-label">Facturas</div><div class="stat-value">${invoices.length}</div></div>
+    <div class="stat"><div class="stat-label">${t('Cobrado', 'Collected')}</div><div class="stat-value">${fmtMoney(stats.paid)}</div></div>
+    <div class="stat"><div class="stat-label">${t('Pendiente de cobro', 'Outstanding')}</div><div class="stat-value">${fmtMoney(stats.outstanding)}</div></div>
+    <div class="stat"><div class="stat-label">${t('Facturas', 'Invoices')}</div><div class="stat-value">${invoices.length}</div></div>
   </div>
   <div class="card">
     ${
       invoices.length
-        ? `<table class="table"><thead><tr><th>Nº</th><th>Cliente</th><th>Concepto</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+        ? `<table class="table"><thead><tr><th>${t('Nº', 'No.')}</th><th>${t('Cliente', 'Client')}</th><th>${t('Concepto', 'Description')}</th><th>${t('Total', 'Total')}</th><th>${t('Estado', 'Status')}</th><th></th></tr></thead>
           <tbody>${invoices
             .map(
               (i) => `<tr>
-                <td><strong>${esc(i.number)}</strong>${i.kind === 'quote' ? ' <span class="badge amber">presupuesto</span>' : ''}${i.recurring ? ' <span class="badge indigo">mensual</span>' : ''}<div class="muted" style="font-size:11px">${fmtDate(i.created_at)}</div></td>
+                <td><strong>${esc(i.number)}</strong>${i.kind === 'quote' ? ` <span class="badge amber">${t('presupuesto', 'quote')}</span>` : ''}${i.recurring ? ` <span class="badge indigo">${t('mensual', 'monthly')}</span>` : ''}<div class="muted" style="font-size:11px">${fmtDate(i.created_at)}</div></td>
                 <td>${i.contact_id ? esc(fullName(i)) : '<span class="muted">—</span>'}</td>
                 <td>${esc(i.title || i.items[0]?.name || '')}</td>
                 <td><strong>${i.total.toFixed(2)} ${esc(i.currency)}</strong></td>
-                <td><span class="badge ${badge[i.status]}">${i.status}</span></td>
+                <td><span class="badge ${badge[i.status]}">${statusLabel[i.status] || i.status}</span></td>
                 <td style="text-align:right;white-space:nowrap">
-                  <a class="btn secondary small" href="/pay/${esc(i.token)}" target="_blank">Ver ↗</a>
+                  <a class="btn secondary small" href="/pay/${esc(i.token)}" target="_blank">${t('Ver ↗', 'View ↗')}</a>
                   ${i.status !== 'paid' && i.status !== 'void' ? `
-                    <button class="btn secondary small send-inv" data-id="${i.id}" ${i.contact_id ? '' : 'disabled title="Sin contacto"'}>Enviar</button>
-                    <button class="btn small paid-inv" data-id="${i.id}">Cobrada</button>` : ''}
+                    <button class="btn secondary small send-inv" data-id="${i.id}" ${i.contact_id ? '' : `disabled title="${t('Sin contacto', 'No contact')}"`}>${t('Enviar', 'Send')}</button>
+                    <button class="btn small paid-inv" data-id="${i.id}">${t('Cobrada', 'Mark paid')}</button>` : ''}
                   ${i.status !== 'paid' ? `<button class="btn ghost small del-inv" data-id="${i.id}">✕</button>` : ''}
                 </td></tr>`
             )
             .join('')}</tbody></table>`
-        : '<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>No hay facturas aún. Crea la primera y cóbrala con un link.</div>'
+        : `<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>${t('No hay facturas aún. Crea la primera y cóbrala con un link.', 'No invoices yet. Create the first one and collect it with a link.')}</div>`
     }
   </div>`;
 
   view.querySelector('#new-invoice').addEventListener('click', invoiceModal);
   view.querySelectorAll('.paid-inv').forEach((b) =>
     b.addEventListener('click', async () => {
-      if (!confirm('¿Marcar como cobrada (efectivo/transferencia)? Disparará las automatizaciones de pago.')) return;
+      if (!confirm(t('¿Marcar como cobrada (efectivo/transferencia)? Disparará las automatizaciones de pago.', 'Mark as paid (cash/transfer)? This will trigger the payment automations.'))) return;
       try {
         await api(`/payments/${b.dataset.id}/mark-paid`, { method: 'POST' });
-        toast('Factura cobrada');
+        toast(t('Factura cobrada', 'Invoice marked paid'));
         renderPayments(view);
       } catch (err) { toast(err.message, true); }
     })
   );
   view.querySelectorAll('.del-inv').forEach((b) =>
     b.addEventListener('click', async () => {
-      if (!confirm('¿Eliminar factura?')) return;
+      if (!confirm(t('¿Eliminar factura?', 'Delete invoice?'))) return;
       await api(`/payments/${b.dataset.id}`, { method: 'DELETE' });
       renderPayments(view);
     })
@@ -63,13 +70,13 @@ export async function renderPayments(view) {
   view.querySelectorAll('.send-inv').forEach((b) =>
     b.addEventListener('click', () => {
       const modal = openModal(`
-        <h2>Enviar factura</h2>
-        <label class="field"><span class="label">Canal</span><select class="input" id="channel">
-          <option value="email">Email</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option>
+        <h2>${t('Enviar factura', 'Send invoice')}</h2>
+        <label class="field"><span class="label">${t('Canal', 'Channel')}</span><select class="input" id="channel">
+          <option value="email">${t('Email', 'Email')}</option><option value="sms">${t('SMS', 'SMS')}</option><option value="whatsapp">${t('WhatsApp', 'WhatsApp')}</option>
         </select></label>
         <div class="modal-actions">
-          <button class="btn secondary" id="cancel">Cancelar</button>
-          <button class="btn" id="go">Enviar link de pago</button>
+          <button class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
+          <button class="btn" id="go">${t('Enviar link de pago', 'Send payment link')}</button>
         </div>`);
       modal.querySelector('#cancel').addEventListener('click', closeOverlay);
       modal.querySelector('#go').addEventListener('click', async () => {
@@ -79,7 +86,7 @@ export async function renderPayments(view) {
             body: { channel: modal.querySelector('#channel').value },
           });
           closeOverlay();
-          toast('Factura enviada');
+          toast(t('Factura enviada', 'Invoice sent'));
           renderPayments(view);
         } catch (err) { toast(err.message, true); }
       });

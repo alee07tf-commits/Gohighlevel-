@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { esc, openModal, closeOverlay, toast, fmtDate, fullName } from '../ui.js';
+import { t } from '../i18n.js';
 
 const BLOCK_TYPES = {
   hero: 'Hero', text: 'Texto', features: 'Features', testimonials: 'Testimonios',
@@ -25,9 +26,9 @@ export async function renderFunnels(view, rest = []) {
             (f) => `<div class="card"><div class="card-body">
               <div class="flex"><strong style="font-size:15px">${esc(f.name)}</strong>
                 <div class="right">
-                  <a class="btn secondary small" href="#/funnels/${f.id}">Edit pages</a>
+                  <a class="btn secondary small" href="#/funnels/${f.id}">${t('Editar páginas', 'Edit pages')}</a>
                   <button class="btn ghost small del-funnel" data-id="${f.id}">✕</button></div></div>
-              <div class="muted" style="margin:8px 0;font-size:12px">${f.pages.length} page(s)</div>
+              <div class="muted" style="margin:8px 0;font-size:12px">${f.pages.length} ${t('página(s)', 'page(s)')}</div>
               ${f.pages
                 .map(
                   (p) => `<div style="font-size:13px;margin:3px 0">
