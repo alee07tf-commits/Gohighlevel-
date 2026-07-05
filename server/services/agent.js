@@ -9,27 +9,34 @@ const automation = require('./automation');
 
 // Free slots for the next 7 days for one calendar (max ~40 slots).
 async function availableSlots(calendar, days = 7) {
-  const taken = new Set(
-    (
-      await db.all(
-        `SELECT starts_at FROM appointments WHERE calendar_id = ? AND status != 'cancelled' AND starts_at >= now()`,
-        [calendar.id]
-      )
-    ).map((r) => new Date(r.starts_at).toISOString().slice(0, 16))
-  );
+  const takenTimes = (
+    await db.all(
+      `SELECT starts_at FROM appointments WHERE calendar_id = ? AND status != 'cancelled' AND starts_at >= now()`,
+      [calendar.id]
+    )
+  ).map((r) => new Date(r.starts_at).getTime());
   const activeDays = JSON.parse(calendar.days || '[1,2,3,4,5]');
+  let blocked = [];
+  try { blocked = JSON.parse(calendar.blocked_dates || '[]'); } catch { blocked = []; }
+  const buffer = Number(calendar.buffer_minutes || 0) * 60000;
+  const minNoticeMs = Number(calendar.min_notice_hours ?? 1) * 3_600_000;
+  const dur = calendar.duration_minutes * 60000;
   const slots = [];
   const now = new Date();
   for (let d = 0; d < days && slots.length < 40; d++) {
     const day = new Date(now.getTime() + d * 86_400_000);
     if (!activeDays.includes(day.getUTCDay())) continue;
     const date = day.toISOString().slice(0, 10);
+    if (blocked.includes(date)) continue;
     for (let m = calendar.start_hour * 60; m + calendar.duration_minutes <= calendar.end_hour * 60; m += calendar.duration_minutes) {
       const h = String(Math.floor(m / 60)).padStart(2, '0');
       const mm = String(m % 60).padStart(2, '0');
       const iso = `${date}T${h}:${mm}`;
-      if (new Date(iso + ':00Z').getTime() < now.getTime() + 3_600_000) continue; // at least 1h ahead
-      if (!taken.has(iso)) slots.push(iso);
+      const startMs = new Date(iso + ':00Z').getTime();
+      if (startMs < now.getTime() + minNoticeMs) continue;
+      // Free if no taken appointment overlaps this slot ± buffer.
+      const clash = takenTimes.some((tk) => Math.abs(tk - startMs) < dur + buffer);
+      if (!clash) slots.push(iso);
       if (slots.length >= 40) break;
     }
   }

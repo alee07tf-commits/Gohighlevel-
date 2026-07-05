@@ -688,9 +688,18 @@ router.post('/book/:slug', async (req, res) => {
     return res.status(400).json({ error: 'name, email, date and time are required' });
 
   const startsAt = `${date}T${time}:00`;
-  const endsAt = new Date(new Date(startsAt + 'Z').getTime() + calendar.duration_minutes * 60000)
-    .toISOString()
-    .slice(0, 19);
+  const startMs = new Date(startsAt + 'Z').getTime();
+  const endsAt = new Date(startMs + calendar.duration_minutes * 60000).toISOString().slice(0, 19);
+
+  // Minimum scheduling notice.
+  const minNotice = Number(calendar.min_notice_hours || 0);
+  if (startMs < Date.now() + minNotice * 3_600_000)
+    return res.status(409).json({ error: `Please pick a time at least ${minNotice}h from now.` });
+
+  // Blocked / holiday dates.
+  let blocked = [];
+  try { blocked = JSON.parse(calendar.blocked_dates || '[]'); } catch { blocked = []; }
+  if (blocked.includes(date)) return res.status(409).json({ error: 'That date is not available, pick another day.' });
 
   const { n: booked } = await db.get(
     'SELECT COUNT(*)::int AS n FROM appointments WHERE calendar_id = ? AND starts_at = ? AND status != ?',
@@ -698,6 +707,20 @@ router.post('/book/:slug', async (req, res) => {
   );
   if (booked >= (calendar.capacity || 1))
     return res.status(409).json({ error: 'That slot is already taken, pick another time.' });
+
+  // Buffer: no other appointment whose start is within (duration + buffer) of
+  // this slot — accounts for the neighbouring appointment's own length.
+  const buffer = Number(calendar.buffer_minutes || 0);
+  if (buffer > 0) {
+    const reach = (calendar.duration_minutes + buffer) * 60000;
+    const winStart = new Date(startMs - reach).toISOString().slice(0, 19);
+    const winEnd = new Date(startMs + reach).toISOString().slice(0, 19);
+    const clash = await db.get(
+      `SELECT id FROM appointments WHERE calendar_id = ? AND status != 'cancelled' AND starts_at != ? AND starts_at > ? AND starts_at < ?`,
+      [calendar.id, startsAt, winStart, winEnd]
+    );
+    if (clash) return res.status(409).json({ error: 'Too close to another appointment, pick another time.' });
+  }
 
   let contact = await db.get('SELECT * FROM contacts WHERE location_id = ? AND email = ?', [
     calendar.location_id,

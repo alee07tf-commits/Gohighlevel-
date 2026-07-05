@@ -599,6 +599,12 @@ ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFEREN
 ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lost_reason TEXT DEFAULT '';
 ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS source TEXT DEFAULT '';
 
+-- Calendar parity (v3.13): buffer between appointments, minimum scheduling
+-- notice, and blocked/holiday dates (JSON array of 'YYYY-MM-DD').
+ALTER TABLE calendars ADD COLUMN IF NOT EXISTS buffer_minutes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE calendars ADD COLUMN IF NOT EXISTS min_notice_hours INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE calendars ADD COLUMN IF NOT EXISTS blocked_dates TEXT NOT NULL DEFAULT '[]';
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -704,7 +710,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 20;
+const SCHEMA_VERSION = 21;
 
 let readyPromise = null;
 function ensureReady() {

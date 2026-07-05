@@ -161,8 +161,16 @@ export async function renderCalendar(view) {
           <label class="field"><span class="label">${t('Hasta (hora)', 'To (hour)')}</span><input class="input" name="end_hour" type="number" value="17" min="1" max="24"></label>
           <label class="field"><span class="label">${t('Plazas/hueco', 'Slots/spot')}</span><input class="input" name="capacity" type="number" value="1" min="1" title="${t('Más de 1 = reservas grupales (clases)', 'More than 1 = group bookings (classes)')}"></label>
         </div>
-        <label class="field"><span class="label">${t('Recordatorio automático (horas antes de la cita, 0 = desactivado)', 'Automatic reminder (hours before the appointment, 0 = disabled)')}</span>
-          <input class="input" name="reminder_hours" type="number" value="24" min="0"></label>
+        <div class="form-row">
+          <label class="field"><span class="label">${t('Recordatorio (h antes, 0=off)', 'Reminder (h before, 0=off)')}</span>
+            <input class="input" name="reminder_hours" type="number" value="24" min="0"></label>
+          <label class="field"><span class="label">${t('Margen entre citas (min)', 'Buffer between appts (min)')}</span>
+            <input class="input" name="buffer_minutes" type="number" value="0" min="0"></label>
+          <label class="field"><span class="label">${t('Aviso mínimo (h)', 'Minimum notice (h)')}</span>
+            <input class="input" name="min_notice_hours" type="number" value="1" min="0"></label>
+        </div>
+        <label class="field"><span class="label">${t('Días bloqueados (festivos, YYYY-MM-DD separados por coma)', 'Blocked dates (holidays, YYYY-MM-DD comma-separated)')}</span>
+          <input class="input" name="blocked_dates_raw" placeholder="2026-12-25, 2027-01-01"></label>
         ${team.length
           ? `<div class="field"><span class="label">${t('Round-robin: repartir reservas entre (opcional)', 'Round-robin: distribute bookings among (optional)')}</span>
               <div class="flex" style="flex-wrap:wrap;gap:10px">
@@ -180,6 +188,8 @@ export async function renderCalendar(view) {
       try {
         const body = formData(e.target);
         body.assignees = [...modal.querySelectorAll('.assignee-cb:checked')].map((c) => Number(c.value));
+        body.blocked_dates = (body.blocked_dates_raw || '').split(',').map((d) => d.trim()).filter(Boolean);
+        delete body.blocked_dates_raw;
         await api('/calendars', { method: 'POST', body });
         closeOverlay();
         toast(t('Calendario creado', 'Calendar created'));
