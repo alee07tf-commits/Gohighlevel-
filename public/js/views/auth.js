@@ -26,6 +26,21 @@ async function loadBrand(slug) {
   }
 }
 
+// Warns loudly when the backend has no persistent database (serverless without
+// DATABASE_URL) — otherwise accounts silently vanish between requests.
+async function persistenceWarning() {
+  try {
+    const res = await fetch('/api/system/health');
+    const h = await res.json();
+    if (h && h.persistent === false) {
+      return `<div class="auth-warn">⚠️ La base de datos no es persistente. Configura <code>DATABASE_URL</code> (Supabase) y <code>JWT_SECRET</code> en Vercel — sin eso, las cuentas no se guardan.</div>`;
+    }
+  } catch {
+    /* health unreachable → don't block the form */
+  }
+  return '';
+}
+
 function applyBrandColor(brand) {
   const c = brand && brand.brand_color;
   const root = document.documentElement.style;
@@ -39,13 +54,13 @@ function applyBrandColor(brand) {
 }
 
 export async function renderLogin(root, brandSlug) {
-  const brand = await loadBrand(brandSlug);
+  const [brand, warn] = await Promise.all([loadBrand(brandSlug), persistenceWarning()]);
   applyBrandColor(brand);
   const sub = brand
     ? brand.headline || `Accede a tu cuenta de ${esc(brand.name)}`
     : 'Sign in to your agency account';
   root.innerHTML = authShell(
-    `
+    `${warn}
     <p class="sub">${esc(sub)}</p>
     <form id="login-form">
       <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" required></label>
@@ -69,8 +84,9 @@ export async function renderLogin(root, brandSlug) {
   });
 }
 
-export function renderRegister(root) {
-  root.innerHTML = authShell(`
+export async function renderRegister(root) {
+  const warn = await persistenceWarning();
+  root.innerHTML = authShell(`${warn}
     <p class="sub">Create your agency — free forever, self-hosted</p>
     <form id="register-form">
       <label class="field"><span class="label">Agency name</span><input class="input" name="agency_name" required placeholder="Acme Marketing"></label>

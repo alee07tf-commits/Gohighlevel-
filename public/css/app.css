@@ -393,3 +393,11 @@ code.inline { background: #f0f1f6; padding: 2px 7px; border-radius: 6px; font-si
 }
 .course-card:hover { border-color: var(--primary); box-shadow: 0 4px 16px rgba(109, 94, 245, 0.12); }
 .lesson-row.active { font-weight: 600; }
+
+/* Non-persistent-DB warning on the auth screens (serverless without DATABASE_URL). */
+.auth-warn {
+  background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+  border-radius: 10px; padding: 10px 12px; margin-bottom: 14px;
+  font-size: 12.5px; line-height: 1.5;
+}
+.auth-warn code { background: #fff; border: 1px solid #fecaca; border-radius: 5px; padding: 1px 5px; font-size: 11.5px; }

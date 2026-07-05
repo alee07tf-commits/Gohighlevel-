@@ -10,8 +10,17 @@ const router = express.Router();
 
 // Public DB health check — no auth so it works even when login is broken.
 // Surfaces the underlying driver error instead of hanging into a 504.
+// `persistent` is false when running on a serverless host WITHOUT DATABASE_URL:
+// the embedded DB then lives in /tmp and resets between instances/cold starts,
+// so accounts appear to save but vanish — the #1 "nothing persists" symptom.
 router.get('/health', async (req, res) => {
-  const info = { database: process.env.DATABASE_URL ? 'postgres' : 'pglite' };
+  const hasDb = Boolean(process.env.DATABASE_URL);
+  const onServerless = Boolean(process.env.VERCEL);
+  const info = {
+    database: hasDb ? 'postgres' : 'pglite',
+    serverless: onServerless,
+    persistent: hasDb || !onServerless,
+  };
   try {
     await db.get('SELECT 1 AS ok');
     res.json({ ok: true, ...info });
