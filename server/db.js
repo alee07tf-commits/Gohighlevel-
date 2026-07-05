@@ -719,6 +719,13 @@ CREATE TABLE IF NOT EXISTS documents (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_documents_location ON documents(location_id);
+-- Password reset tokens (forgot-password flow).
+CREATE TABLE IF NOT EXISTS password_resets (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -791,7 +798,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 29;
+const SCHEMA_VERSION = 30;
 
 let readyPromise = null;
 function ensureReady() {

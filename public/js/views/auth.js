@@ -71,6 +71,7 @@ export async function renderLogin(root, brandSlug) {
       <label class="field"><span class="label">${t('Contraseña', 'Password')}</span><input class="input" name="password" type="password" required></label>
       <button class="btn" style="width:100%">${t('Entrar', 'Sign in')}</button>
     </form>
+    <p class="alt"><a href="#/forgot">${t('¿Olvidaste tu contraseña?', 'Forgot your password?')}</a></p>
     ${brand ? '' : `<p class="alt">${t('¿Nueva agencia?', 'New agency?')} <a href="#/register">${t('Crea una cuenta', 'Create an account')}</a></p>`}
     ${brand ? '' : '<p class="alt muted">Demo: <code class="inline">demo@upcro.app</code> / <code class="inline">demo123</code></p>'}`,
     brand
@@ -111,5 +112,42 @@ export async function renderRegister(root) {
     } catch (err) {
       toast(err.message, true);
     }
+  });
+}
+
+export async function renderForgot(root) {
+  root.innerHTML = authShell(`
+    <p class="sub">${t('Restablecer contraseña', 'Reset your password')}</p>
+    <p class="muted" style="font-size:13px;margin-bottom:12px">${t('Escribe tu email y te enviaremos un enlace para crear una nueva contraseña.', 'Enter your email and we will send you a link to set a new password.')}</p>
+    <form id="forgot-form">
+      <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" required></label>
+      <button class="btn" style="width:100%">${t('Enviar enlace', 'Send link')}</button>
+    </form>
+    <p class="alt"><a href="#/login">${t('← Volver a entrar', '← Back to sign in')}</a></p>`);
+  root.querySelector('#forgot-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('/auth/forgot', { method: 'POST', body: formData(e.target) });
+      root.querySelector('#forgot-form').outerHTML = `<div class="auth-warn" style="background:#dcfce7;border-color:#86efac;color:#166534">${t('Si ese email existe, te hemos enviado un enlace para restablecer la contraseña. Revisa tu bandeja.', 'If that email exists, we have sent you a reset link. Check your inbox.')}</div>`;
+    } catch (err) { toast(err.message, true); }
+  });
+}
+
+export async function renderReset(root, token) {
+  root.innerHTML = authShell(`
+    <p class="sub">${t('Nueva contraseña', 'New password')}</p>
+    <form id="reset-form">
+      <label class="field"><span class="label">${t('Nueva contraseña', 'New password')}</span><input class="input" name="password" type="password" required minlength="6" placeholder="${t('Mínimo 6 caracteres', 'At least 6 characters')}"></label>
+      <button class="btn" style="width:100%">${t('Guardar y entrar', 'Save and sign in')}</button>
+    </form>
+    <p class="alt"><a href="#/login">${t('← Volver a entrar', '← Back to sign in')}</a></p>`);
+  root.querySelector('#reset-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api('/auth/reset', { method: 'POST', body: { token, password: e.target.password.value } });
+      setSession(res.token);
+      toast(t('Contraseña actualizada', 'Password updated'));
+      location.hash = '#/dashboard';
+    } catch (err) { toast(err.message, true); }
   });
 }

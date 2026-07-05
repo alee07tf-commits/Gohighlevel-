@@ -1,7 +1,7 @@
 import { state, loadMe, clearSession, setLocation, setAgency, api } from './api.js';
 import { esc, initials, toast, icon, fmtDate } from './ui.js';
 import { t, getLang, setLang } from './i18n.js';
-import { renderLogin, renderRegister } from './views/auth.js';
+import { renderLogin, renderRegister, renderForgot, renderReset } from './views/auth.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderContacts } from './views/contacts.js';
 import { renderConversations } from './views/conversations.js';
@@ -271,6 +271,8 @@ async function route() {
   // `#/login/<slug>` shows a client's white-label login (logo + colour + name).
   if (path === 'login') return renderLogin(document.getElementById('app'), rest[0]);
   if (path === 'register') return renderRegister(document.getElementById('app'));
+  if (path === 'forgot') return renderForgot(document.getElementById('app'));
+  if (path === 'reset') return renderReset(document.getElementById('app'), rest[0]);
 
   if (!state.token) {
     location.hash = '#/login';

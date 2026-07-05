@@ -13,6 +13,9 @@ if ((process.env.VERCEL && !process.env.DATABASE_URL) || process.env.AUTO_SEED) 
 }
 
 const app = express();
+app.disable('x-powered-by');
+// Baseline security headers on every response.
+app.use(require('./middleware/security').securityHeaders);
 // Keep the raw body around so webhook receivers that sign the payload (Shopify,
 // Stripe…) can verify the HMAC. Cheap: just holds a reference to the buffer.
 app.use(express.json({ limit: '4mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
@@ -69,7 +72,7 @@ app.get('/widget.js', require('./routes/chat-public').widgetScript);
 
 // Public pretty URLs: funnels (/f/...), booking (/book/...), reports (/r/...),
 // invoice payment (/pay/...) and review gate (/review/...).
-for (const prefix of ['/f', '/book', '/r', '/pay', '/review', '/l', '/signup', '/form', '/course', '/sign']) {
+for (const prefix of ['/f', '/book', '/r', '/pay', '/review', '/l', '/signup', '/form', '/course', '/sign', '/legal']) {
   app.use(prefix, (req, res, next) => {
     req.url = prefix + req.url;
     require('./routes/public')(req, res, next);

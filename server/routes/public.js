@@ -1196,6 +1196,54 @@ router.post('/saas/:slug/signup', async (req, res) => {
   res.status(201).json({ mode: 'simulated', ok: true, location_id: out.locationId, login_url: '/', temp_password: out.password });
 });
 
+// ---- Legal pages (RGPD/GDPR baseline) ----
+const LEGAL = {
+  privacidad: {
+    title: 'Política de Privacidad',
+    html: (co, mail) => `
+      <p>En <strong>${co}</strong> nos tomamos en serio la protección de tus datos personales, conforme al Reglamento (UE) 2016/679 (RGPD) y la normativa española (LOPDGDD).</p>
+      <h2>Responsable del tratamiento</h2><p>${co}. Contacto: ${mail}.</p>
+      <h2>Datos que tratamos</h2><p>Datos identificativos y de contacto (nombre, email, teléfono), datos de uso del servicio y los que nos facilites al contratar o rellenar formularios.</p>
+      <h2>Finalidad</h2><p>Prestar y gestionar el servicio, atender solicitudes, enviar comunicaciones relacionadas y cumplir obligaciones legales.</p>
+      <h2>Base jurídica</h2><p>Ejecución del contrato, tu consentimiento y el interés legítimo del responsable.</p>
+      <h2>Conservación</h2><p>Conservamos los datos mientras exista relación contractual y, después, durante los plazos legales aplicables.</p>
+      <h2>Destinatarios</h2><p>Proveedores tecnológicos que nos prestan servicios (alojamiento, email, pagos) bajo contrato de encargado de tratamiento. No cedemos tus datos a terceros salvo obligación legal.</p>
+      <h2>Tus derechos</h2><p>Puedes ejercer los derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a ${mail}. También puedes reclamar ante la Agencia Española de Protección de Datos (aepd.es).</p>`,
+  },
+  terminos: {
+    title: 'Términos y Condiciones',
+    html: (co, mail) => `
+      <p>El uso de los servicios de <strong>${co}</strong> implica la aceptación de estos términos.</p>
+      <h2>Objeto</h2><p>Regulan el acceso y uso de la plataforma y los servicios asociados.</p>
+      <h2>Uso aceptable</h2><p>Te comprometes a usar el servicio conforme a la ley y a no realizar envíos no solicitados (spam) ni actividades fraudulentas.</p>
+      <h2>Cuenta</h2><p>Eres responsable de la confidencialidad de tus credenciales y de la actividad de tu cuenta.</p>
+      <h2>Pagos</h2><p>Los precios y planes se indican en la contratación. Los impagos pueden suspender el servicio.</p>
+      <h2>Responsabilidad</h2><p>El servicio se presta "tal cual". En la medida permitida por la ley, ${co} no responde de daños indirectos.</p>
+      <h2>Contacto</h2><p>${mail}.</p>`,
+  },
+  cookies: {
+    title: 'Política de Cookies',
+    html: (co, mail) => `
+      <p><strong>${co}</strong> utiliza cookies y almacenamiento local para el funcionamiento del servicio.</p>
+      <h2>Cookies técnicas</h2><p>Necesarias para iniciar sesión y mantener tu sesión activa. No requieren consentimiento.</p>
+      <h2>Preferencias</h2><p>Guardamos tu idioma y ajustes de interfaz en tu navegador (localStorage).</p>
+      <h2>Gestión</h2><p>Puedes borrar el almacenamiento desde la configuración de tu navegador. Contacto: ${mail}.</p>`,
+  },
+};
+
+router.get('/legal/:doc', (req, res) => {
+  const page = LEGAL[req.params.doc];
+  if (!page) return res.status(404).send('No encontrado');
+  const co = process.env.COMPANY_NAME || 'Upcro';
+  const mail = process.env.COMPANY_EMAIL || 'privacidad@upcro.app';
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1"><title>${page.title} — ${co}</title>
+    <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:0 auto;padding:32px 20px;color:#0f172a;line-height:1.65}
+    h1{font-size:1.7rem}h2{font-size:1.15rem;margin-top:26px}a{color:#4f46e5}.muted{color:#64748b;font-size:13px}</style></head>
+    <body><h1>${page.title}</h1><p class="muted">Última actualización: ${new Date().getFullYear()}</p>${page.html(esc(co), esc(mail))}
+    <p style="margin-top:30px"><a href="/legal/privacidad">Privacidad</a> · <a href="/legal/terminos">Términos</a> · <a href="/legal/cookies">Cookies</a></p></body></html>`);
+});
+
 // ---- Public document e-signature ----
 function signPage(doc, brand, signed) {
   const color = brand || '#4f46e5';
