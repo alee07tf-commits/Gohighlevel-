@@ -134,13 +134,13 @@ function fallbackFunnelDesign({ business, offer, goal }) {
   };
 }
 
-async function generateFunnelDesign({ business, offer, audience, goal, tone, locationName, ctx }) {
-  if (!(await ready(ctx))) return { ...fallbackFunnelDesign({ business, offer, goal }), generated_by: 'template' };
+async function generateFunnelDesign({ business, offer, audience, goal, tone, prompt: brief, locationName, ctx }) {
+  if (!(await ready(ctx))) return { ...fallbackFunnelDesign({ business: business || brief, offer: offer || brief, goal }), generated_by: 'template' };
   const system = `Eres un diseñador de landing pages de conversion (CRO) senior para negocios locales. Escribes copy persuasivo en español (o el idioma del usuario), especifico y creible, nunca generico. Respondes SOLO con JSON valido, sin markdown ni comentarios.
 ${BLOCK_SCHEMA}
 Reglas: incluye SIEMPRE exactamente un bloque "form" (al final o tras el hero), un "hero" al principio, y 4-7 bloques en total. El "tag" del form debe ser una palabra corta relacionada con la oferta. Elige el "theme" que mejor pegue con el negocio.`;
   const prompt = `Diseña una landing page completa.
-Negocio: ${business || locationName || 'negocio local'}
+${brief ? `Descripcion del usuario (PRIORITARIA, sigue esto sobre todo lo demas): ${brief}\n` : ''}Negocio: ${business || locationName || 'negocio local'}
 Oferta/servicio a promocionar: ${offer || 'servicio principal'}
 Publico objetivo: ${audience || 'clientes locales'}
 Objetivo de la pagina: ${goal || 'captar leads'}
@@ -157,7 +157,7 @@ Devuelve JSON: {"name": "nombre corto del funnel", "theme": "...", "blocks": [..
     }
     return { ...parsed, generated_by: 'claude' };
   } catch {
-    return { ...fallbackFunnelDesign({ business, offer, goal }), generated_by: 'template-after-parse-error' };
+    return { ...fallbackFunnelDesign({ business: business || brief, offer: offer || brief, goal }), generated_by: 'template-after-parse-error' };
   }
 }
 

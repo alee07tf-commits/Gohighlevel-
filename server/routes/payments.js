@@ -63,13 +63,22 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { contact_id, title, items, currency, due_date, kind, recurring, discount, tax_rate } = req.body || {};
+  const { contact_id, title, items, currency, due_date, kind, recurring, discount, tax_rate, coupon_code } = req.body || {};
   const list = Array.isArray(items) ? items : [];
   const subtotal = list.reduce((sum, it) => sum + (Number(it.qty) || 1) * (Number(it.price) || 0), 0);
-  const disc = Math.max(0, Number(discount) || 0);
+  if (!list.length || subtotal <= 0) return res.status(400).json({ error: 'At least one item with a price is required' });
+  let disc = Math.max(0, Number(discount) || 0);
+  // A coupon code stacks onto (or replaces) the manual discount, then is redeemed.
+  let redeemCoupon = null;
+  if (coupon_code) {
+    const coupons = require('../services/coupons');
+    const r = await coupons.lookup(req.location.id, coupon_code);
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    disc = Math.min(subtotal, disc + coupons.discountFor(r.coupon, subtotal));
+    redeemCoupon = r.coupon.id;
+  }
   const tax = Math.max(0, Number(tax_rate) || 0);
   const total = Math.max(0, (subtotal - disc)) * (1 + tax / 100);
-  if (!list.length || subtotal <= 0) return res.status(400).json({ error: 'At least one item with a price is required' });
   const id = await db.insert(
     `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, due_date, token, kind, recurring, discount, tax_rate)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -88,6 +97,7 @@ router.post('/', async (req, res) => {
       disc, tax,
     ]
   );
+  if (redeemCoupon) await require('../services/coupons').redeem(redeemCoupon);
   res.status(201).json(parsed(await db.get('SELECT * FROM invoices WHERE id = ?', [id])));
 });
 

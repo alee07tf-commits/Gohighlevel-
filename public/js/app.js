@@ -1,5 +1,5 @@
-import { state, loadMe, clearSession, setLocation, setAgency } from './api.js';
-import { esc, initials, toast, icon } from './ui.js';
+import { state, loadMe, clearSession, setLocation, setAgency, api } from './api.js';
+import { esc, initials, toast, icon, fmtDate } from './ui.js';
 import { t, getLang, setLang } from './i18n.js';
 import { renderLogin, renderRegister } from './views/auth.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -22,6 +22,7 @@ import { renderAnalytics } from './views/analytics.js';
 import { renderForms } from './views/forms.js';
 import { renderDevelopers } from './views/developers.js';
 import { renderMarketplace } from './views/marketplace.js';
+import { renderDocuments } from './views/documents.js';
 
 const IC = {
   dashboard: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -44,13 +45,14 @@ const IC = {
   forms: '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
   developers: '<svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
   marketplace: '<svg viewBox="0 0 24 24"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M3 9h18"/><path d="M9 20v-6h6v6"/></svg>',
+  documents: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15c1 1 2 1 3 0s2-1 3 0"/></svg>',
 };
 
 function navSections() {
   const isAdmin = state.user?.role === 'admin';
   return [
     { title: t('Workspace', 'Workspace'), items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
-    { title: t('Crecimiento', 'Growth'), items: ['prospecting', 'marketing', 'funnels', 'forms', 'automations', 'payments', 'reputation', 'analytics'] },
+    { title: t('Crecimiento', 'Growth'), items: ['prospecting', 'marketing', 'funnels', 'forms', 'automations', 'payments', 'documents', 'reputation', 'analytics'] },
     { title: t('Formación', 'Training'), items: ['training'] },
     // The agency layer is admin-only: "Clientes" manages the agencies below you
     // in the tenant tree; the agency console is SaaS/cross-account/white-label.
@@ -66,6 +68,7 @@ const NAV = [
   { path: 'pipelines', label: () => t('Oportunidades', 'Opportunities'), view: renderPipelines },
   { path: 'calendar', label: () => t('Calendario', 'Calendar'), view: renderCalendar },
   { path: 'payments', label: () => t('Pagos', 'Payments'), view: renderPayments },
+  { path: 'documents', label: () => t('Documentos', 'Documents'), view: renderDocuments },
   { path: 'prospecting', label: () => t('Prospección', 'Prospecting'), view: renderProspecting },
   { path: 'marketing', label: () => t('Marketing', 'Marketing'), view: renderMarketing },
   { path: 'automations', label: () => t('Automatizaciones', 'Automations'), view: renderAutomations },
@@ -142,6 +145,13 @@ function renderShell(activePath) {
             </span>`
           : ''}
         <div class="spacer"></div>
+        <div class="notif-wrap">
+          <button class="notif-bell" id="notif-bell" aria-label="${t('Notificaciones', 'Notifications')}" title="${t('Notificaciones', 'Notifications')}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+            <span class="notif-badge" id="notif-badge" hidden></span>
+          </button>
+          <div class="notif-panel" id="notif-panel" hidden></div>
+        </div>
         <div class="user-chip"><span class="avatar">${initials(state.user || {})}</span> <span class="chip-name">${esc(firstName)}</span></div>
         <button class="btn secondary small" id="logout-btn">${t('Salir', 'Log out')}</button>
       </header>
@@ -193,8 +203,65 @@ function renderShell(activePath) {
     location.hash = '#/contacts';
     setTimeout(() => document.getElementById('search')?.focus(), 350);
   });
+  setupNotifications();
   window.__greeting = `${greet}, ${firstName}`;
   return document.getElementById('view');
+}
+
+// ---- Notification center (bell) ----
+async function setupNotifications() {
+  const bell = document.getElementById('notif-bell');
+  const panel = document.getElementById('notif-panel');
+  const badge = document.getElementById('notif-badge');
+  if (!bell || !panel || !badge) return;
+
+  const paint = async () => {
+    let data;
+    try { data = await api('/notifications'); } catch { return; }
+    if (data.unread > 0) { badge.textContent = data.unread > 99 ? '99+' : data.unread; badge.hidden = false; }
+    else badge.hidden = true;
+    panel.innerHTML = data.notifications.length
+      ? `<div class="notif-head"><strong>${t('Notificaciones', 'Notifications')}</strong>
+           ${data.unread ? `<button class="btn ghost small" id="notif-readall">${t('Marcar leídas', 'Mark read')}</button>` : ''}</div>
+         <div class="notif-list">${data.notifications.map((nf) => `
+           <a class="notif-item ${nf.read ? '' : 'unread'}" data-id="${nf.id}" href="${nf.link || '#'}">
+             <div class="ni-title">${esc(nf.title)}</div>
+             ${nf.body ? `<div class="ni-body">${esc(nf.body)}</div>` : ''}
+             <div class="ni-time">${fmtDate(nf.created_at)}</div>
+           </a>`).join('')}</div>`
+      : `<div class="notif-head"><strong>${t('Notificaciones', 'Notifications')}</strong></div>
+         <div class="empty" style="padding:24px 12px;font-size:13px">${t('Sin notificaciones', 'No notifications')}</div>`;
+    panel.querySelector('#notif-readall')?.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      await api('/notifications/read-all', { method: 'POST' });
+      await paint();
+    });
+    panel.querySelectorAll('.notif-item').forEach((el) =>
+      el.addEventListener('click', async () => {
+        await api(`/notifications/${el.dataset.id}/read`, { method: 'POST' }).catch(() => {});
+        panel.hidden = true;
+      })
+    );
+  };
+
+  bell.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (panel.hidden) { await paint(); panel.hidden = false; }
+    else panel.hidden = true;
+  });
+  document.addEventListener('click', (e) => {
+    if (!panel.hidden && !panel.contains(e.target) && !bell.contains(e.target)) panel.hidden = true;
+  });
+
+  // Initial badge + light polling for the count.
+  const refreshCount = async () => {
+    try { const { unread } = await api('/notifications/unread-count');
+      if (unread > 0) { badge.textContent = unread > 99 ? '99+' : unread; badge.hidden = false; } else badge.hidden = true;
+    } catch {}
+  };
+  refreshCount();
+  clearInterval(window.__notifTimer);
+  window.__notifTimer = setInterval(refreshCount, 60000);
 }
 
 async function route() {

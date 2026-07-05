@@ -28,7 +28,19 @@ Idioma del producto: **español primero** (con EN vía i18n). El usuario habla e
 - **Multi-tenant recursivo:** `agencies.parent_agency_id`; agencia efectiva por header `X-Agency-Id`; todo scoped por `req.user.agency_id` / `req.location.id`.
 - **Auth:** JWT (`requireAuth`), `requireLocation` (header `X-Location-Id`). Secreto en `JWT_SECRET` (con fallback de dev inseguro).
 - **Frontend:** SPA en **JS vanilla**. Router por hash en `public/js/app.js`; una función `render*` por vista en `public/js/views/*.js`. Utilidades en `ui.js` (esc/openModal/closeOverlay/formData/toast/fmtDate/fmtMoney/fullName/initials/icon), `api.js` (api/state), `i18n.js` (`t('es','en')`).
-- **Tests:** `node:test` + `supertest`. Archivos `tests/vNN.test.js`. **Cada archivo nuevo debe añadirse al script `test` de `package.json`.** Actualmente **39 archivos de test, 181 tests, todos verdes.**
+- **Tests:** `node:test` + `supertest`. Archivos `tests/vNN.test.js`. **Cada archivo nuevo debe añadirse al script `test` de `package.json`.** Actualmente **198 tests, todos verdes.** SCHEMA_VERSION = **29**.
+
+---
+
+## 0. Novedades (features añadidas tras la paridad base)
+
+- **Claude design con prompt libre** (`ai.js generateFunnelDesign` + `funnels.js`): el usuario describe la landing en lenguaje natural y la IA genera bloques editables. Endpoint `/api/ai/funnel` acepta `prompt`.
+- **Centro de notificaciones (campana 🔔)**: tabla `notifications`, `services/notifications.js` (`notify`, `notifyLocationTeam`), `routes/notifications.js`, campana en topbar de `app.js`. Emite en: tarea asignada, assign_owner, notify_user, nuevo lead por formulario.
+- **Cupones / descuentos**: tabla `coupons`, `services/coupons.js` (lookup/discountFor/redeem), `routes/coupons.js`, gestor en vista Pagos + `coupon_code` en alta de factura.
+- **Documentos y Contratos con e-firma**: tabla `documents`, `routes/documents.js`, página pública `/sign/:token` (lienzo de firma) en `public.js`, vista `documents.js` (nav Crecimiento). Prefijo `/sign` añadido en `index.js`.
+
+### Pendiente de esta tanda (roadmap, ver §6)
+Permisos granulares (enforcement), Surveys con lógica, Quizzes/drip/certificados en cursos, Seguridad (rate-limit) + recuperar contraseña + páginas legales RGPD, y los grandes: **builder visual drag-and-drop**, email builder visual, comunidades.
 
 ---
 

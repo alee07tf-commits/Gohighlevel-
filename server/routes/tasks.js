@@ -37,11 +37,19 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Contacto no encontrado en esta sub-cuenta' });
   if (!(await ownsUser(user_id, req.user.agency_id)))
     return res.status(400).json({ error: 'Usuario no encontrado en tu agencia' });
+  const assignedTo = user_id || req.user.id;
   const id = await db.insert(
     'INSERT INTO tasks (location_id, contact_id, user_id, title, notes, due_at) VALUES (?, ?, ?, ?, ?, ?)',
-    [req.location.id, contact_id || null, user_id || req.user.id, title, notes || '', due_at || null]
+    [req.location.id, contact_id || null, assignedTo, title, notes || '', due_at || null]
   );
   if (contact_id) await automation.logActivity(req.location.id, contact_id, 'note', `Task created: ${title}`);
+  // Notify the assignee (unless they assigned it to themselves).
+  if (assignedTo !== req.user.id) {
+    await require('../services/notifications').notify(assignedTo, {
+      type: 'task', title: 'Nueva tarea asignada', body: title,
+      link: '#/tasks', locationId: req.location.id,
+    });
+  }
   res.status(201).json(await db.get('SELECT * FROM tasks WHERE id = ?', [id]));
 });
 

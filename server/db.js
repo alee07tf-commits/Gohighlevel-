@@ -676,6 +676,49 @@ CREATE INDEX IF NOT EXISTS idx_review_requests_contact ON review_requests(contac
 CREATE INDEX IF NOT EXISTS idx_plans_agency ON plans(agency_id);
 CREATE INDEX IF NOT EXISTS idx_custom_values_location ON custom_values(location_id);
 CREATE INDEX IF NOT EXISTS idx_contact_tags_tag ON contact_tags(tag);
+-- In-app notification center (bell). One row per user; location scopes the link.
+CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  location_id INTEGER REFERENCES locations(id) ON DELETE CASCADE,
+  type TEXT NOT NULL DEFAULT 'info',
+  title TEXT NOT NULL,
+  body TEXT DEFAULT '',
+  link TEXT DEFAULT '',
+  read INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read);
+-- Reusable discount codes (coupons) applied to invoices/checkout, like GHL.
+CREATE TABLE IF NOT EXISTS coupons (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'percent',
+  value DOUBLE PRECISION NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  uses INTEGER NOT NULL DEFAULT 0,
+  max_uses INTEGER NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coupons_loc_code ON coupons(location_id, lower(code));
+-- Documents & contracts with e-signature (send → client signs on a public link).
+CREATE TABLE IF NOT EXISTS documents (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  body TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft',
+  token TEXT NOT NULL,
+  signer_name TEXT DEFAULT '',
+  signature TEXT DEFAULT '',
+  signed_at TIMESTAMPTZ,
+  signed_ip TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_documents_location ON documents(location_id);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -748,7 +791,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 26;
+const SCHEMA_VERSION = 29;
 
 let readyPromise = null;
 function ensureReady() {
