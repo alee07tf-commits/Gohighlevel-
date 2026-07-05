@@ -44,6 +44,8 @@ app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/plans', require('./routes/plans'));
 app.use('/api/billing', require('./routes/billing'));
 app.use('/api/agency', require('./routes/agency'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/training', require('./routes/training'));
 app.use('/api/reputation', require('./routes/reputation'));
 app.use('/api/snapshots', require('./routes/snapshots'));
 app.use('/api/prospecting', require('./routes/prospecting'));

@@ -1,4 +1,4 @@
-import { state, loadMe, clearSession, setLocation } from './api.js';
+import { state, loadMe, clearSession, setLocation, setAgency } from './api.js';
 import { esc, initials, toast, icon } from './ui.js';
 import { renderLogin, renderRegister } from './views/auth.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -15,6 +15,8 @@ import { renderReputation } from './views/reputation.js';
 import { renderTasks } from './views/tasks.js';
 import { renderProspecting } from './views/prospecting.js';
 import { renderAgency } from './views/agency.js';
+import { renderClients } from './views/clients.js';
+import { renderTraining } from './views/training.js';
 
 const IC = {
   dashboard: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -31,14 +33,19 @@ const IC = {
   tasks: '<svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
   agency: '<svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/></svg>',
+  clients: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  training: '<svg viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
 };
 
 function navSections() {
+  const isAdmin = state.user?.role === 'admin';
   return [
     { title: 'Workspace', items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
     { title: 'Crecimiento', items: ['prospecting', 'marketing', 'funnels', 'automations', 'payments', 'reputation'] },
-    // The agency console is admin-only (SaaS plans, cross-account, white-label).
-    { title: 'Cuenta', items: [...(state.user?.role === 'admin' ? ['agency'] : []), 'settings'] },
+    { title: 'Formación', items: ['training'] },
+    // The agency layer is admin-only: "Clientes" manages the agencies below you
+    // in the tenant tree; the agency console is SaaS/cross-account/white-label.
+    { title: 'Cuenta', items: [...(isAdmin ? ['clients', 'agency'] : []), 'settings'] },
   ];
 }
 
@@ -55,7 +62,9 @@ const NAV = [
   { path: 'funnels', label: 'Sites & Funnels', icon: '', view: renderFunnels },
   { path: 'reputation', label: 'Reputación', icon: '★', view: renderReputation },
   { path: 'tasks', label: 'Tareas', icon: '', view: renderTasks },
+  { path: 'clients', label: 'Clientes', icon: '', view: renderClients },
   { path: 'agency', label: 'Agencia', icon: '', view: renderAgency },
+  { path: 'training', label: 'Formación', icon: '', view: renderTraining },
   { path: 'settings', label: 'Settings', icon: '', view: renderSettings },
 ];
 
@@ -100,11 +109,19 @@ function renderShell(activePath) {
     <div class="main">
       <header class="topbar">
         <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menú"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
-        <select id="location-switcher" title="Sub-account">
+        ${state.locations.length
+          ? `<select id="location-switcher" title="Sub-cuenta">
           ${state.locations
             .map((l) => `<option value="${l.id}" ${l.id === state.locationId ? 'selected' : ''}>${esc(l.name)}</option>`)
             .join('')}
-        </select>
+        </select>`
+          : ''}
+        ${state.actingAsChild
+          ? `<span class="context-chip" title="Estás gestionando un cliente">
+              <span class="context-dot"></span> ${esc(state.agency?.name || 'Cliente')}
+              <button class="btn ghost small" id="ctx-back">← ${esc(state.parentAgency?.name || 'Volver')}</button>
+            </span>`
+          : ''}
         <div class="spacer"></div>
         <div class="user-chip"><span class="avatar">${initials(state.user || {})}</span> <span class="chip-name">${esc(firstName)}</span></div>
         <button class="btn secondary small" id="logout-btn">Salir</button>
@@ -124,9 +141,16 @@ function renderShell(activePath) {
   // Tapping any nav link closes the drawer on mobile.
   sidebar.querySelectorAll('nav a').forEach((a) => a.addEventListener('click', closeDrawer));
 
-  document.getElementById('location-switcher').addEventListener('change', (e) => {
+  document.getElementById('location-switcher')?.addEventListener('change', (e) => {
     setLocation(e.target.value);
     route();
+  });
+  // "← back" from inside a client: return to the parent scope and reload.
+  document.getElementById('ctx-back')?.addEventListener('click', async () => {
+    setAgency(state.parentAgency?.id || null);
+    state.user = null; // force loadMe to refresh scope
+    location.hash = '#/dashboard';
+    await route();
   });
   const doLogout = (e) => {
     e?.preventDefault();

@@ -145,6 +145,38 @@ async function seedDemo() {
     await t.run("INSERT INTO messages (conversation_id, direction, channel, body) VALUES (?, 'inbound', 'sms', ?)", [
       convId, 'Great! Can I come in on Thursday afternoon?',
     ]);
+
+    // Training: a default onboarding course the agency ships to its clients.
+    // It is visible to every agency below this one in the tenant tree.
+    const courseId = await t.insert(
+      'INSERT INTO courses (agency_id, title, description) VALUES (?, ?, ?)',
+      [agencyId, 'Cómo usar tu plataforma de marketing', 'Onboarding paso a paso para sacarle partido a tu cuenta.']
+    );
+    const trainLessons = [
+      ['Bienvenida y primeros pasos', 'Recorre tu panel: dashboard, contactos y el selector de sub-cuenta.'],
+      ['Captar leads con funnels', 'Crea y publica tu primer funnel; los leads entran solos a Contactos.'],
+      ['Conversaciones y seguimiento', 'Responde a tus leads desde el inbox unificado (SMS/email).'],
+      ['Automatiza el seguimiento', 'Monta un workflow "nuevo lead → email + SMS" para no perder ninguno.'],
+      ['Agenda citas', 'Comparte tu calendario público y gestiona tus citas.'],
+    ];
+    for (let i = 0; i < trainLessons.length; i++) {
+      await t.run('INSERT INTO lessons (course_id, title, body, position) VALUES (?, ?, ?, ?)', [
+        courseId, trainLessons[i][0], trainLessons[i][1], i,
+      ]);
+    }
+
+    // A sample client = a child agency with its own admin login and first
+    // sub-account. Shows the recursive model: this client sees the course above
+    // and can manage its own sub-accounts. Login: cliente@leadflow.app / demo123
+    const clientAgencyId = await t.insert('INSERT INTO agencies (name, parent_agency_id) VALUES (?, ?)', [
+      'Cliente Demo — Bright Smile', agencyId,
+    ]);
+    await t.run('INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)', [
+      clientAgencyId, 'Cliente Demo', 'cliente@leadflow.app', bcrypt.hashSync('demo123', 10), 'admin',
+    ]);
+    await t.run('INSERT INTO locations (agency_id, name, company) VALUES (?, ?, ?)', [
+      clientAgencyId, 'Bright Smile Dental', 'Bright Smile SL',
+    ]);
   });
 
   return true;

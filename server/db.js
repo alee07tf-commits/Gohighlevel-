@@ -442,6 +442,44 @@ ALTER TABLE agencies ADD COLUMN IF NOT EXISTS brand_color TEXT DEFAULT '#4f46e5'
 ALTER TABLE agencies ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT '';
 ALTER TABLE agencies ADD COLUMN IF NOT EXISTS signup_headline TEXT DEFAULT '';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agencies_slug ON agencies(slug) WHERE slug IS NOT NULL;
+
+-- Recursive tenancy (Phase 4): an agency can belong to a parent agency. The
+-- root agency (parent NULL) is the platform operator (e.g. Upcross); each
+-- client it creates is a child agency that in turn owns its sub-accounts and,
+-- if it resells, its own child agencies. Scope resolves by walking this tree
+-- (see server/auth.js: effective agency via the X-Agency-Id header).
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS parent_agency_id INTEGER REFERENCES agencies(id);
+CREATE INDEX IF NOT EXISTS idx_agencies_parent ON agencies(parent_agency_id);
+
+-- Training / onboarding (Phase 4): recursive too. A course is authored by a
+-- tenant (agency_id) and is visible to that tenant and all of its descendants,
+-- so an upper tenant trains the ones below it. Videos are YouTube embeds
+-- (youtube_id only) — no file hosting.
+CREATE TABLE IF NOT EXISTS courses (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  is_published INTEGER NOT NULL DEFAULT 1,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_courses_agency ON courses(agency_id);
+CREATE TABLE IF NOT EXISTS lessons (
+  id SERIAL PRIMARY KEY,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body TEXT DEFAULT '',
+  youtube_id TEXT DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
+CREATE TABLE IF NOT EXISTS course_progress (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, lesson_id)
+);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -514,7 +552,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 let readyPromise = null;
 function ensureReady() {
