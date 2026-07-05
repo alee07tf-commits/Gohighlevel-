@@ -44,7 +44,7 @@ export async function renderForms(view) {
 
   view.querySelector('#new-form').addEventListener('click', () => formModal());
   view.querySelectorAll('.form-edit').forEach((b) =>
-    b.addEventListener('click', async () => formModal((await api('/forms')).find((f) => f.id === Number(b.dataset.id))))
+    b.addEventListener('click', () => formModal(forms.find((f) => f.id === Number(b.dataset.id))))
   );
   view.querySelectorAll('.form-del').forEach((b) =>
     b.addEventListener('click', async () => {

@@ -70,11 +70,16 @@ async function renderThread(threadEl, conv) {
   const msgs = threadEl.querySelector('#msgs');
   msgs.scrollTop = msgs.scrollHeight;
 
-  threadEl.querySelector('#ai-toggle').addEventListener('click', async () => {
-    const res = await api(`/conversations/${conv.id}/ai`, { method: 'PUT', body: { paused: !conv.ai_paused } });
-    conv.ai_paused = res.ai_paused;
-    toast(conv.ai_paused ? t('IA pausada — tomas tú la conversación', 'AI paused — you are taking over the conversation') : t('IA reactivada', 'AI reactivated'));
-    renderThread(threadEl, conv);
+  threadEl.querySelector('#ai-toggle').addEventListener('click', async (e) => {
+    try {
+      const res = await api(`/conversations/${conv.id}/ai`, { method: 'PUT', body: { paused: !conv.ai_paused } });
+      conv.ai_paused = res.ai_paused;
+      // Just update the button — messages are unchanged, no need to refetch them.
+      e.currentTarget.textContent = conv.ai_paused ? '▶ IA' : 'IA';
+      toast(conv.ai_paused ? t('IA pausada — tomas tú la conversación', 'AI paused — you are taking over the conversation') : t('IA reactivada', 'AI reactivated'));
+    } catch (err) {
+      toast(err.message, true);
+    }
   });
 
   threadEl.querySelector('#compose').addEventListener('submit', async (e) => {

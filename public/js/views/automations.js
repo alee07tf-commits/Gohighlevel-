@@ -331,15 +331,23 @@ export async function renderAutomations(view) {
   view.querySelectorAll('.toggle-wf').forEach((b) =>
     b.addEventListener('click', async () => {
       const wf = workflows.find((w) => w.id === Number(b.dataset.id));
-      await api(`/workflows/${wf.id}`, { method: 'PUT', body: { active: !wf.active } });
-      renderAutomations(view);
+      try {
+        await api(`/workflows/${wf.id}`, { method: 'PUT', body: { active: !wf.active } });
+        renderAutomations(view);
+      } catch (err) {
+        toast(err.message, true);
+      }
     })
   );
   view.querySelectorAll('.del-wf').forEach((b) =>
     b.addEventListener('click', async () => {
       if (!confirm(t('¿Eliminar flujo?', 'Delete workflow?'))) return;
-      await api(`/workflows/${b.dataset.id}`, { method: 'DELETE' });
-      renderAutomations(view);
+      try {
+        await api(`/workflows/${b.dataset.id}`, { method: 'DELETE' });
+        renderAutomations(view);
+      } catch (err) {
+        toast(err.message, true);
+      }
     })
   );
   view.querySelectorAll('.runs-wf').forEach((b) =>

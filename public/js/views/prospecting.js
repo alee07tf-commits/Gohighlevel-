@@ -6,7 +6,6 @@ export async function renderProspecting(view) {
   const status = await api('/prospecting/status');
   let allResults = [];
   let results = [];
-  let lastQuery = '';
 
   function currentFilters() {
     return {
@@ -144,7 +143,6 @@ export async function renderProspecting(view) {
   async function doSearch() {
     const q = view.querySelector('#pq').value.trim();
     if (q.length < 3) return toast(t('Escribe qué buscar (ej: "clínicas dentales en Madrid")', 'Type what to search (e.g.: "dental clinics in Madrid")'), true);
-    lastQuery = q;
     const btn = view.querySelector('#psearch');
     btn.disabled = true;
     btn.textContent = t('Buscando y comprobando anuncios…', 'Searching and checking ads…');

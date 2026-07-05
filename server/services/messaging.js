@@ -106,12 +106,14 @@ function renderEmailHtml(body, { color = '#4f46e5', fromName = '' } = {}) {
     </div></body></html>`;
 }
 
-async function sendEmail(locationId, contact, subject, body) {
+// `ctx` may carry a pre-fetched { cvMap, brand } so bulk senders (campaigns)
+// don't re-query custom values and the location brand once per recipient.
+async function sendEmail(locationId, contact, subject, body, ctx = {}) {
   if (contact.dnd) return null;
-  const cv = await customValues.getMap(locationId);
+  const cv = ctx.cvMap || (await customValues.getMap(locationId));
   const mergedSubject = mergeFields(subject, contact, cv);
   const mergedBody = mergeFields(body, contact, cv);
-  const brand = await locationBrand(locationId);
+  const brand = ctx.brand || (await locationBrand(locationId));
   const result = await providers.deliverEmail(
     {
       to: contact.email,
@@ -134,9 +136,9 @@ async function sendEmail(locationId, contact, subject, body) {
   });
 }
 
-async function sendSms(locationId, contact, body) {
+async function sendSms(locationId, contact, body, ctx = {}) {
   if (contact.dnd) return null;
-  const merged = mergeFields(body, contact, await customValues.getMap(locationId));
+  const merged = mergeFields(body, contact, ctx.cvMap || (await customValues.getMap(locationId)));
   const result = await providers.deliverSms({ to: contact.phone, body: merged }, { locationId });
   await meterUsage(locationId, 'sms', result);
   return recordMessage({
@@ -149,9 +151,9 @@ async function sendSms(locationId, contact, body) {
   });
 }
 
-async function sendWhatsapp(locationId, contact, body) {
+async function sendWhatsapp(locationId, contact, body, ctx = {}) {
   if (contact.dnd) return null;
-  const merged = mergeFields(body, contact, await customValues.getMap(locationId));
+  const merged = mergeFields(body, contact, ctx.cvMap || (await customValues.getMap(locationId)));
   const result = await providers.deliverWhatsapp({ to: contact.phone, body: merged }, { locationId });
   await meterUsage(locationId, 'whatsapp', result);
   return recordMessage({
@@ -164,17 +166,24 @@ async function sendWhatsapp(locationId, contact, body) {
   });
 }
 
-// Channel-generic helper used by campaigns and workflow actions.
-async function sendByChannel(channel, locationId, contact, { subject = '', body }) {
-  if (channel === 'email') return sendEmail(locationId, contact, subject, body);
-  if (channel === 'whatsapp') return sendWhatsapp(locationId, contact, body);
+// Channel-generic helper used by campaigns and workflow actions. `ctx` may carry
+// a pre-fetched { cvMap, brand } for bulk sends.
+async function sendByChannel(channel, locationId, contact, { subject = '', body }, ctx = {}) {
+  if (channel === 'email') return sendEmail(locationId, contact, subject, body, ctx);
+  if (channel === 'whatsapp') return sendWhatsapp(locationId, contact, body, ctx);
   if (channel === 'chat')
     // Web chat lives in our own widget — no external provider, just the inbox.
     return recordMessage({
       locationId, contactId: contact.id, direction: 'outbound', channel: 'chat',
-      body: mergeFields(body, contact, await customValues.getMap(locationId)),
+      body: mergeFields(body, contact, ctx.cvMap || (await customValues.getMap(locationId))),
     });
-  return sendSms(locationId, contact, body);
+  return sendSms(locationId, contact, body, ctx);
+}
+
+// Builds the shared send context (custom values + brand) once for a location.
+async function buildSendContext(locationId) {
+  const [cvMap, brand] = await Promise.all([customValues.getMap(locationId), locationBrand(locationId)]);
+  return { cvMap, brand };
 }
 
 module.exports = {
@@ -182,6 +191,7 @@ module.exports = {
   recordMessage,
   mergeFields,
   renderEmailHtml,
+  buildSendContext,
   sendEmail,
   sendSms,
   sendWhatsapp,

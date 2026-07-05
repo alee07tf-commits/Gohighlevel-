@@ -47,15 +47,23 @@ export async function renderTasks(view) {
     view.querySelector('#task-filter').addEventListener('change', (e) => { filter = e.target.value; load(); });
     view.querySelectorAll('.toggle-task').forEach((cb) =>
       cb.addEventListener('change', async () => {
-        await api(`/tasks/${cb.dataset.id}`, { method: 'PUT', body: { status: cb.checked ? 'done' : 'open' } });
-        load();
+        try {
+          await api(`/tasks/${cb.dataset.id}`, { method: 'PUT', body: { status: cb.checked ? 'done' : 'open' } });
+          load();
+        } catch (err) {
+          toast(err.message, true);
+        }
       })
     );
     view.querySelectorAll('.del-task').forEach((b) =>
       b.addEventListener('click', async () => {
         if (!confirm(t('¿Eliminar tarea?', 'Delete task?'))) return;
-        await api(`/tasks/${b.dataset.id}`, { method: 'DELETE' });
-        load();
+        try {
+          await api(`/tasks/${b.dataset.id}`, { method: 'DELETE' });
+          load();
+        } catch (err) {
+          toast(err.message, true);
+        }
       })
     );
     view.querySelector('#new-task').addEventListener('click', () => {

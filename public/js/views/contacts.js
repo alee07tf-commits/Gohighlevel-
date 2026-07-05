@@ -2,8 +2,6 @@ import { api } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast, fmtDate, fmtMoney, fullName, initials, icon } from '../ui.js';
 import { t } from '../i18n.js';
 
-const ICONS = { contact: 'contact', tag: 'tag', note: 'note', appointment: 'appointment', form: 'form', automation: 'automation', opportunity: 'opportunity' };
-
 export async function renderContacts(view, rest = []) {
   if (rest[0]) return renderContactDetail(view, rest[0]);
 
@@ -284,7 +282,7 @@ async function renderContactDetail(view, id) {
         c.activities.length
           ? c.activities
               .map(
-                (a) => `<div class="timeline-item"><div class="t-icon">${icon(ICONS[a.type] || 'note', 14)}</div>
+                (a) => `<div class="timeline-item"><div class="t-icon">${icon(a.type || 'note', 14)}</div>
                 <div>${esc(a.description)}<div class="t-time">${fmtDate(a.created_at)}</div></div></div>`
               )
               .join('')

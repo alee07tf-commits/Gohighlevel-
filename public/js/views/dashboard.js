@@ -1,8 +1,6 @@
 import { api } from '../api.js';
-import { esc, fmtMoney, fmtDate, fullName, openModal, closeOverlay, toast, icon } from '../ui.js';
+import { esc, fmtMoney, fmtDate, fullName, openModal, toast, icon } from '../ui.js';
 import { t } from '../i18n.js';
-
-const ICONS = { contact: 'contact', tag: 'tag', note: 'note', appointment: 'appointment', form: 'form', automation: 'automation', opportunity: 'opportunity' };
 
 export async function renderDashboard(view) {
   const data = await api('/dashboard');
@@ -57,7 +55,7 @@ export async function renderDashboard(view) {
             ? data.recentActivity
                 .map(
                   (a) => `<div class="timeline-item">
-                    <div class="t-icon">${icon(ICONS[a.type] || 'note', 14)}</div>
+                    <div class="t-icon">${icon(a.type || 'note', 14)}</div>
                     <div><div>${esc(a.description)} ${a.first_name ? `— <a href="#/contacts/${a.contact_id}">${esc(fullName(a))}</a>` : ''}</div>
                     <div class="t-time">${fmtDate(a.created_at)}</div></div></div>`
                 )

@@ -95,11 +95,16 @@ async function deliverCampaign(campaign) {
     contacts = await db.all('SELECT * FROM contacts WHERE location_id = ?', [campaign.location_id]);
   }
   let sent = 0;
+  // Fetch custom values + brand once for the whole campaign, not per recipient.
+  const ctx = await messaging.buildSendContext(campaign.location_id);
   for (const contact of contacts) {
-    const message = await messaging.sendByChannel(campaign.channel, campaign.location_id, contact, {
-      subject: campaign.subject,
-      body: campaign.body,
-    });
+    const message = await messaging.sendByChannel(
+      campaign.channel,
+      campaign.location_id,
+      contact,
+      { subject: campaign.subject, body: campaign.body },
+      ctx
+    );
     if (message) {
       await db.run('INSERT INTO campaign_recipients (campaign_id, contact_id) VALUES (?, ?)', [
         campaign.id,
