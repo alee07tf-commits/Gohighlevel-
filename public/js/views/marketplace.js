@@ -27,9 +27,32 @@ export async function renderMarketplace(view) {
   if (q.get('connected')) { toast(`${t('Conectado', 'Connected')}: ${q.get('connected')}`); history.replaceState(null, '', location.pathname + location.hash); }
   if (q.get('integration_error')) { toast(`${t('Error al conectar', 'Connection error')}: ${q.get('integration_error')}`, true); history.replaceState(null, '', location.pathname + location.hash); }
 
-  const { catalog, categories, connected } = await api('/apps');
+  const { catalog, categories, connected, managed = [] } = await api('/apps');
   const isAdmin = state.user?.role === 'admin';
   const byKey = Object.fromEntries(catalog.map((a) => [a.key, a]));
+
+  const SOURCE_LABEL = {
+    plataforma: t('incluido en la plataforma', 'included in the platform'),
+    agencia: t('activado por tu agencia', 'enabled by your agency'),
+    estancia: t('configurado en esta sub-cuenta', 'set for this sub-account'),
+  };
+
+  // A managed service is provided centrally: the client just uses it, no setup.
+  const managedCard = (m) => `<div class="card" style="display:flex;flex-direction:column;gap:8px">
+      <div class="flex" style="align-items:flex-start;gap:10px">
+        <span class="app-ic">${logoHtml(m.key)}</span>
+        <div style="flex:1;min-width:0">
+          <div class="flex" style="gap:6px;align-items:center;flex-wrap:wrap"><strong>${esc(m.name)}</strong>
+            ${m.active
+              ? `<span class="tag" style="background:#e6f7ec;color:#137333">✓ ${t('Activo', 'Active')}</span>`
+              : `<span class="tag" style="background:#fff4e5;color:#a15c00">${t('Lo activa tu agencia', 'Your agency enables it')}</span>`}</div>
+          <p class="muted" style="font-size:12.5px;margin:4px 0 0">${esc(t(m.blurb[0], m.blurb[1]))}</p>
+        </div>
+      </div>
+      <div class="muted" style="font-size:11.5px;margin-top:auto">${m.active
+        ? `${t('Listo para usar', 'Ready to use')} · ${esc(SOURCE_LABEL[m.source] || t('gestionado', 'managed'))}`
+        : (isAdmin ? t('Configúralo en Ajustes › Integraciones para toda tu cuenta.', 'Set it up in Settings › Integrations for your whole account.') : t('Tu agencia lo activará; no necesitas hacer nada.', 'Your agency will enable it; you don’t need to do anything.'))}</div>
+    </div>`;
 
   const groups = {};
   for (const app of catalog) (groups[app.category] ||= []).push(app);
@@ -66,9 +89,15 @@ export async function renderMarketplace(view) {
   const order = Object.keys(categories);
   view.innerHTML = `
   <div class="page-header">
-    <div><h1>${t('Marketplace de integraciones', 'Integrations marketplace')}</h1>
-      <p class="muted" style="font-size:13px">${t('Conecta tus apps favoritas de forma nativa, igual que en GoHighLevel. Las de OAuth sin claves aparecen como “config. pendiente”; las de clave propia se conectan al momento.', 'Connect your favorite apps natively, just like GoHighLevel. OAuth apps without keys show as “setup pending”; API-key apps connect instantly.')}</p></div>
+    <div><h1>${t('Integraciones', 'Integrations')}</h1>
+      <p class="muted" style="font-size:13px">${t('Dos tipos, como en GoHighLevel: los servicios incluidos que provee tu agencia y usas sin configurar nada, y el marketplace donde conectas tus propias apps.', 'Two kinds, like GoHighLevel: included services your agency provides that you use with no setup, and the marketplace where you connect your own apps.')}</p></div>
   </div>
+
+  <div class="nav-section" style="margin:6px 0 8px">${t('Servicios incluidos', 'Included services')} <span class="muted" style="font-weight:400">· ${t('los gestiona tu agencia, sin claves', 'managed by your agency, no keys')}</span></div>
+  <div class="grid-cards">${managed.map(managedCard).join('')}</div>
+
+  <div class="nav-section" style="margin:22px 0 4px">${t('Marketplace · conecta tus apps', 'Marketplace · connect your apps')}</div>
+  <p class="muted" style="font-size:12.5px;margin:0 0 6px">${t('Cada cliente conecta sus propias cuentas. Las de OAuth sin claves aparecen como “config. pendiente”; las de clave propia se conectan al momento.', 'Each client connects their own accounts. OAuth apps without keys show as “setup pending”; API-key apps connect instantly.')}</p>
   ${!isAdmin ? `<div class="card" style="margin-bottom:12px"><div class="card-body muted" style="font-size:13px">${t('Solo los administradores pueden conectar o desconectar apps.', 'Only administrators can connect or disconnect apps.')}</div></div>` : ''}
   ${order.map((cat) => {
     const list = groups[cat] || [];

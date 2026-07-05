@@ -106,14 +106,10 @@ const CATALOG = [
     env: ['META_APP_ID', 'META_APP_SECRET'], scopes: 'instagram_manage_messages,pages_manage_metadata',
     blurb: ['Recibe y responde mensajes directos de Instagram en la bandeja unificada.',
             'Receive and reply to Instagram DMs in the unified inbox.'] },
-  { key: 'whatsapp', name: 'WhatsApp Business', category: 'messaging', auth: 'oauth', ...META,
-    env: ['META_APP_ID', 'META_APP_SECRET'], scopes: 'whatsapp_business_messaging,whatsapp_business_management', status: 'soon',
-    blurb: ['Envía y recibe mensajes de WhatsApp (requiere Meta / Twilio).',
-            'Send and receive WhatsApp messages (requires Meta / Twilio).'] },
-  { key: 'twilio', name: 'Twilio — SMS y Voz', category: 'messaging', auth: 'apikey', status: 'soon',
-    fields: [{ k: 'account_sid', label: ['Account SID', 'Account SID'] }, { k: 'auth_token', secret: true, label: ['Auth Token', 'Auth Token'] }, { k: 'from_number', label: ['Número emisor', 'From number'] }],
-    blurb: ['SMS y llamadas de voz con tu cuenta de Twilio.',
-            'SMS and voice calls with your Twilio account.'] },
+  // NOTE: SMS and WhatsApp are NOT connect-your-own-account apps. They are
+  // "servicios incluidos" the agency provides centrally (see MANAGED below), so
+  // a client uses them with zero setup — no token, no account. That mirrors
+  // GoHighLevel's LC Phone / LC WhatsApp model.
 
   // ---- Email ----
   { key: 'mailgun', name: 'Mailgun', category: 'email', auth: 'apikey',
@@ -200,6 +196,41 @@ const CATALOG = [
     blurb: ['Automatización open-source con n8n vía API keys y webhooks.',
             'Open-source automation with n8n via API keys and webhooks.'] },
 ];
+
+// ---- Managed services (tier 2): provided centrally by the agency, used by
+// every client with ZERO setup — no token, no account. The agency configures
+// the underlying provider once (platform env or agency-level integration) and
+// it cascades to every sub-account (services/integrations.js). This is GHL's
+// LC Phone / LC WhatsApp / Email / Conversations-AI model. `statusKey` maps to
+// providers.status(); `sourceKey` maps to its .sources.
+const MANAGED = [
+  { key: 'sms', name: 'SMS y llamadas', provider: 'twilio', statusKey: 'sms', sourceKey: 'sms',
+    blurb: ['Envía SMS a tus contactos desde Conversaciones y automatizaciones, sin configurar nada.',
+            'Send SMS to your contacts from Conversations and automations, with zero setup.'] },
+  { key: 'whatsapp', name: 'WhatsApp', provider: 'twilio', statusKey: 'whatsapp', sourceKey: 'whatsapp',
+    blurb: ['Envía y recibe WhatsApp sin crear cuenta ni token: lo provee tu agencia.',
+            'Send and receive WhatsApp with no account or token: your agency provides it.'] },
+  { key: 'email', name: 'Email', provider: 'email', statusKey: 'email', sourceKey: 'email',
+    blurb: ['Envío de email para campañas, secuencias y respuestas, listo para usar.',
+            'Email sending for campaigns, sequences and replies, ready to use.'] },
+  { key: 'ai', name: 'IA conversacional', provider: 'ai', statusKey: 'ai', sourceKey: 'ai',
+    blurb: ['Respuestas y redacción con IA en toda la plataforma, sin claves por tu parte.',
+            'AI replies and copywriting across the platform, with no keys on your side.'] },
+];
+
+// Resolves the managed-service tier for a context using providers.status(): each
+// service reports whether it's active and where it's configured (plataforma /
+// agencia / estancia). Pure metadata + status — no secrets.
+function managedStatus(status) {
+  return MANAGED.map((m) => {
+    const raw = status[m.statusKey];
+    const active = m.statusKey === 'ai' ? Boolean(raw) : Boolean(raw) && raw !== 'simulated';
+    return {
+      key: m.key, name: m.name, blurb: m.blurb, provider: m.provider,
+      active, source: (status.sources && status.sources[m.sourceKey]) || 'none',
+    };
+  });
+}
 
 const BY_KEY = Object.fromEntries(CATALOG.map((a) => [a.key, a]));
 
@@ -288,6 +319,6 @@ function publicCatalog() {
 }
 
 module.exports = {
-  CATALOG, CATEGORIES, BY_KEY, get, isConfigured, missingEnv,
+  CATALOG, CATEGORIES, MANAGED, BY_KEY, get, isConfigured, missingEnv, managedStatus,
   clientId, clientSecret, signState, verifyState, authorizeUrl, publicCatalog, publicFields,
 };

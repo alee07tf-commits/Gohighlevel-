@@ -7,6 +7,7 @@ const express = require('express');
 const db = require('../db');
 const apps = require('../services/apps');
 const secretbox = require('../services/secretbox');
+const providers = require('../services/providers');
 const { requireAuth, requireLocation } = require('../auth');
 
 const router = express.Router();
@@ -120,7 +121,10 @@ router.get('/', requireLocation, async (req, res) => {
       scopes: r.scopes, status: r.status, expires_at: r.expires_at, connected_at: r.connected_at, data,
     };
   }
-  res.json({ catalog: apps.publicCatalog(), categories: apps.CATEGORIES, connected });
+  // Managed-service tier (SMS/WhatsApp/Email/AI): status resolved from the
+  // agency→sub-account credential cascade, not from connected_accounts.
+  const status = await providers.status({ locationId: req.location.id, agencyId: req.user.agency_id });
+  res.json({ catalog: apps.publicCatalog(), categories: apps.CATEGORIES, connected, managed: apps.managedStatus(status) });
 });
 
 // Begin OAuth: returns { authorize_url } or { needs_config, missing } / errors.

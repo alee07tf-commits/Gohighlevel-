@@ -23,7 +23,7 @@ test('catalog matches the GHL native set across categories', async () => {
   const r = await request(app).get('/api/apps').set(H);
   const keys = r.body.catalog.map((a) => a.key);
   for (const k of ['calendly', 'microsoft', 'google_ads', 'tiktok_ads', 'linkedin', 'twitter', 'youtube',
-                   'pinterest', 'messenger', 'instagram_dm', 'twilio', 'mailgun', 'sendgrid', 'smtp',
+                   'pinterest', 'messenger', 'instagram_dm', 'mailgun', 'sendgrid', 'smtp',
                    'square', 'authorize_net', 'nmi', 'razorpay', 'google_analytics', 'wordpress',
                    'hubspot', 'zapier', 'make', 'n8n']) {
     assert.ok(keys.includes(k), `catalog includes ${k}`);
@@ -39,6 +39,32 @@ test('catalog matches the GHL native set across categories', async () => {
   assert.equal(zapier.auth, 'builtin');
   // API-key apps are "configured" without any operator env.
   assert.equal(mailgun.configured, true);
+});
+
+test('managed tier: SMS/WhatsApp are agency-provided, not connect-your-own', async () => {
+  const r = await request(app).get('/api/apps').set(H);
+  // The managed services exist and default to inactive (no provider configured).
+  const managed = Object.fromEntries(r.body.managed.map((m) => [m.key, m]));
+  for (const k of ['sms', 'whatsapp', 'email', 'ai']) assert.ok(managed[k], `managed includes ${k}`);
+  assert.equal(managed.sms.active, false);
+  // They are NOT in the connect-your-own marketplace catalog.
+  const keys = r.body.catalog.map((a) => a.key);
+  assert.ok(!keys.includes('twilio'));
+  assert.ok(!keys.includes('whatsapp'));
+
+  // The operator provides Twilio once (platform env) → every sub-account's SMS
+  // and WhatsApp light up automatically, with zero client setup.
+  process.env.TWILIO_ACCOUNT_SID = 'ACxxx';
+  process.env.TWILIO_AUTH_TOKEN = 'tok';
+  process.env.TWILIO_FROM_NUMBER = '+34600';
+  process.env.TWILIO_WHATSAPP_FROM = 'whatsapp:+34600';
+  const r2 = await request(app).get('/api/apps').set(H);
+  const m2 = Object.fromEntries(r2.body.managed.map((m) => [m.key, m]));
+  assert.equal(m2.sms.active, true);
+  assert.equal(m2.sms.source, 'plataforma');
+  assert.equal(m2.whatsapp.active, true);
+  delete process.env.TWILIO_ACCOUNT_SID; delete process.env.TWILIO_AUTH_TOKEN;
+  delete process.env.TWILIO_FROM_NUMBER; delete process.env.TWILIO_WHATSAPP_FROM;
 });
 
 test('API-key app connects via fields, masks secrets, disconnects', async () => {
