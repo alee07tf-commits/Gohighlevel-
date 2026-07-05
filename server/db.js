@@ -594,6 +594,11 @@ CREATE TABLE IF NOT EXISTS snippets (
 CREATE INDEX IF NOT EXISTS idx_snippets_location ON snippets(location_id);
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER REFERENCES users(id);
 
+-- Opportunities parity (v3.11): owner assignment, lost reason, lead source.
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id);
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lost_reason TEXT DEFAULT '';
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS source TEXT DEFAULT '';
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -699,7 +704,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 19;
+const SCHEMA_VERSION = 20;
 
 let readyPromise = null;
 function ensureReady() {
