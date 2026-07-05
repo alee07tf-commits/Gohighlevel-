@@ -409,20 +409,36 @@ router.post('/meta/webhook', async (req, res) => {
 });
 
 // ---- Shopify store webhooks (orders + customers → CRM) ----
-// Creates an opportunity in the sub-account's first pipeline for an order.
-async function createOrderOpportunity(locationId, contactId, order) {
+// Upserts ONE opportunity per order (matched by its Shopify order number) and
+// moves it through the pipeline by order status — like GoHighLevel. Shopify
+// fires several topics for a single order (orders/create → orders/paid →
+// orders/cancelled); each just updates the same opportunity instead of
+// spawning duplicates.
+async function upsertOrderOpportunity(locationId, contactId, order, topic) {
   const pipeline = await db.get('SELECT * FROM pipelines WHERE location_id = ? ORDER BY id LIMIT 1', [locationId]);
   if (!pipeline) return false;
   const stage = await db.get('SELECT * FROM stages WHERE pipeline_id = ? ORDER BY position LIMIT 1', [pipeline.id]);
   if (!stage) return false;
-  const paid = String(order.financial_status || '').toLowerCase() === 'paid';
   const info = shopify.mapOrder(order);
-  await db.run(
-    `INSERT INTO opportunities (location_id, pipeline_id, stage_id, contact_id, title, value, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [locationId, pipeline.id, stage.id, contactId, `Shopify ${info.number || 'order'}`.trim(), info.total, paid ? 'won' : 'open']
+  const { status, lost_reason } = shopify.orderStatus(order, topic);
+  const title = `Shopify ${info.number || 'order'}`.trim();
+  // Match the existing opportunity for this order by its stable title + source.
+  const existing = await db.get(
+    `SELECT id FROM opportunities WHERE location_id = ? AND source = 'shopify:order' AND title = ?`,
+    [locationId, title]
   );
-  return true;
+  if (existing) {
+    await db.run(
+      `UPDATE opportunities SET value = ?, status = ?, lost_reason = ?, updated_at = now() WHERE id = ?`,
+      [info.total, status, lost_reason, existing.id]
+    );
+    return existing.id;
+  }
+  return db.insert(
+    `INSERT INTO opportunities (location_id, pipeline_id, stage_id, contact_id, title, value, status, lost_reason, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'shopify:order')`,
+    [locationId, pipeline.id, stage.id, contactId, title, info.total, status, lost_reason]
+  );
 }
 
 router.post('/shopify/webhook', async (req, res) => {
@@ -445,13 +461,15 @@ router.post('/shopify/webhook', async (req, res) => {
   try {
     if (topic.startsWith('orders/')) {
       const info = shopify.mapOrder(payload);
+      const { status, lost_reason } = shopify.orderStatus(payload, topic);
+      const stateLabel = status === 'won' ? 'pagado' : status === 'lost' ? (lost_reason || 'cerrado').toLowerCase() : 'abierto';
       const { contact_id } = await leads.ingestLead({
         location_id: loc, ...person, custom: info.custom,
         source: 'shopify:order', tag: 'shopify',
-        activityLabel: `Pedido de Shopify ${info.number}`.trim(),
+        activityLabel: `Pedido de Shopify ${info.number} — ${stateLabel}`.trim(),
       });
-      await createOrderOpportunity(loc, contact_id, payload);
-      return res.status(200).json({ ok: true, contact_id });
+      const opp_id = await upsertOrderOpportunity(loc, contact_id, payload, topic);
+      return res.status(200).json({ ok: true, contact_id, opportunity_id: opp_id, status });
     }
     // customers/create, customers/update
     const { contact_id } = await leads.ingestLead({

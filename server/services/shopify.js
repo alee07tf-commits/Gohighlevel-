@@ -45,4 +45,20 @@ function mapOrder(order = {}) {
   };
 }
 
-module.exports = { verifyHmac, mapCustomer, mapOrder };
+// Maps a Shopify order (+ webhook topic) to the CRM opportunity status, so ONE
+// opportunity per order moves through the pipeline exactly like GoHighLevel:
+//   paid / partially_refunded          → 'won'   (revenue captured)
+//   refunded / voided / cancelled      → 'lost'  (with a reason)
+//   pending / authorised / anything    → 'open'  (still in the pipeline)
+// A cancelled order (topic orders/cancelled or a cancelled_at timestamp) always
+// wins — a cancellation is terminal regardless of what was paid.
+function orderStatus(order = {}, topic = '') {
+  const fin = String(order.financial_status || '').toLowerCase();
+  const cancelled = topic === 'orders/cancelled' || Boolean(order.cancelled_at);
+  if (cancelled) return { status: 'lost', lost_reason: 'Pedido cancelado en Shopify' };
+  if (fin === 'refunded' || fin === 'voided') return { status: 'lost', lost_reason: 'Pedido reembolsado en Shopify' };
+  if (fin === 'paid' || fin === 'partially_refunded') return { status: 'won', lost_reason: null };
+  return { status: 'open', lost_reason: null };
+}
+
+module.exports = { verifyHmac, mapCustomer, mapOrder, orderStatus };

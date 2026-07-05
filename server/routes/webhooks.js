@@ -76,7 +76,7 @@ router.post('/stripe', express.json(), async (req, res) => {
   // (renewals, upgrades, cancellations) so MRR and access stay accurate. Trusted
   // via signature (when STRIPE_WEBHOOK_SECRET is set) rather than a re-fetch,
   // since they only touch rows we already own by subscription id.
-  const lifecycle = ['customer.subscription.updated', 'customer.subscription.deleted', 'invoice.payment_succeeded', 'invoice.paid'];
+  const lifecycle = ['customer.subscription.updated', 'customer.subscription.deleted', 'invoice.payment_succeeded', 'invoice.paid', 'invoice.payment_failed'];
   if (lifecycle.includes(event.type)) {
     const stripe = require('../services/stripe');
     if (!stripe.verifySignature(req.get('Stripe-Signature'), req.rawBody, process.env.STRIPE_WEBHOOK_SECRET || '')) {
@@ -89,6 +89,11 @@ router.post('/stripe', express.json(), async (req, res) => {
       } else if (event.type === 'customer.subscription.updated') {
         await db.run(`UPDATE subscriptions SET status = ?, current_period_end = to_timestamp(?) WHERE stripe_subscription_id = ?`,
           [o.status || 'active', o.current_period_end || null, o.id || '']);
+      } else if (event.type === 'invoice.payment_failed') {
+        // Dunning: a failed renewal charge flags the subscription past_due so the
+        // agency sees at-risk clients and access logic can react — like GHL.
+        const subId = o.subscription || '';
+        if (subId) await db.run(`UPDATE subscriptions SET status = 'past_due' WHERE stripe_subscription_id = ?`, [subId]);
       } else {
         const subId = o.subscription || '';
         if (subId) {
