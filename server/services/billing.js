@@ -60,6 +60,7 @@ async function getWallet(locationId) {
 async function topUp(locationId, amount, method = 'topup', description = 'Recarga') {
   const amt = Math.round(Number(amount) * 100) / 100;
   if (!(amt > 0)) throw new Error('El importe debe ser mayor que 0');
+  await getWallet(locationId); // ensure the wallet row exists before crediting
   await db.tx(async (t) => {
     await t.run('UPDATE wallets SET balance = balance + ? WHERE location_id = ?', [amt, locationId]);
     await t.run('INSERT INTO wallet_transactions (location_id, amount, kind, description) VALUES (?, ?, ?, ?)', [

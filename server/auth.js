@@ -50,6 +50,9 @@ async function requireAuth(req, res, next) {
     let effectiveAgencyId = homeAgencyId;
     const requested = Number(req.headers['x-agency-id']);
     if (requested && requested !== homeAgencyId) {
+      // Only admins may drill into a client (child) tenant; and only within
+      // their own subtree.
+      if (user.role !== 'admin') return res.status(403).json({ error: 'Solo los administradores pueden gestionar clientes' });
       if (!(await isInSubtree(requested, homeAgencyId)))
         return res.status(403).json({ error: 'No tienes acceso a esa cuenta' });
       effectiveAgencyId = requested;

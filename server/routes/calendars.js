@@ -82,6 +82,10 @@ router.post('/:id/appointments', async (req, res) => {
   if (!calendar) return res.status(404).json({ error: 'Calendar not found' });
   const { contact_id, title, starts_at, ends_at, notes } = req.body || {};
   if (!title || !starts_at) return res.status(400).json({ error: 'title and starts_at are required' });
+  if (contact_id) {
+    const owns = await db.get('SELECT id FROM contacts WHERE id = ? AND location_id = ?', [contact_id, req.location.id]);
+    if (!owns) return res.status(400).json({ error: 'Contacto no encontrado en esta sub-cuenta' });
+  }
   const end =
     ends_at || new Date(new Date(starts_at).getTime() + calendar.duration_minutes * 60000).toISOString();
   const id = await db.insert(
@@ -105,6 +109,8 @@ router.put('/appointments/:id', async (req, res) => {
     req.location.id,
   ]);
   if (!appt) return res.status(404).json({ error: 'Appointment not found' });
+  if (req.body.status && !['confirmed', 'cancelled', 'completed', 'no_show'].includes(req.body.status))
+    return res.status(400).json({ error: 'Estado no válido' });
   const merged = { ...appt, ...req.body };
   await db.run('UPDATE appointments SET title=?, starts_at=?, ends_at=?, status=?, notes=? WHERE id=?', [
     merged.title,

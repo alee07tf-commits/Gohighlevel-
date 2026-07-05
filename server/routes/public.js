@@ -672,16 +672,20 @@ router.post('/saas/:slug/signup', async (req, res) => {
   const stripeOn = (await providers.paymentsProvider({ agencyId: agency.id })) === 'stripe';
   if (stripeOn) {
     const base = `${req.protocol}://${req.get('host')}`;
-    const session = await providers.createSubscriptionCheckout(
-      {
-        plan, customerEmail: email,
-        successUrl: `${base}/signup/${agency.slug}?welcome=1`,
-        cancelUrl: `${base}/signup/${agency.slug}`,
-        metadata: { saas_plan: plan.id, saas_agency: agency.id, saas_name: name, saas_email: email, saas_business: business_name },
-      },
-      { agencyId: agency.id }
-    );
-    return res.json({ mode: 'stripe', url: session ? session.url : null });
+    try {
+      const session = await providers.createSubscriptionCheckout(
+        {
+          plan, customerEmail: email,
+          successUrl: `${base}/signup/${agency.slug}?welcome=1`,
+          cancelUrl: `${base}/signup/${agency.slug}`,
+          metadata: { saas_plan: plan.id, saas_agency: agency.id, saas_name: name, saas_email: email, saas_business: business_name },
+        },
+        { agencyId: agency.id }
+      );
+      return res.json({ mode: 'stripe', url: session ? session.url : null });
+    } catch (err) {
+      return res.status(502).json({ error: 'No se pudo iniciar el pago. Inténtalo de nuevo.', detail: err.message });
+    }
   }
 
   const saas = require('../services/saas');

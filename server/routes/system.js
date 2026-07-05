@@ -45,6 +45,12 @@ router.use(requireAuth);
 
 router.get('/integrations', async (req, res) => {
   const locationId = Number(req.headers['x-location-id']) || undefined;
+  // Only report a location's status if it belongs to the caller's agency —
+  // otherwise fall back to agency-level status (never another tenant's config).
+  if (locationId) {
+    const owns = await db.get('SELECT id FROM locations WHERE id = ? AND agency_id = ?', [locationId, req.user.agency_id]);
+    if (!owns) return res.status(404).json({ error: 'Sub-cuenta no encontrada' });
+  }
   res.json({
     ...(await providers.status({ locationId, agencyId: req.user.agency_id })),
     cron_secret: Boolean(process.env.CRON_SECRET),

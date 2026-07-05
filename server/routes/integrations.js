@@ -110,6 +110,7 @@ router.put('/:provider', requireLocation, async (req, res) => {
 
 // ---- Agency-level defaults (admin) ----
 router.get('/agency/:provider', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
   const provider = req.params.provider;
   if (!FIELDS[provider]) return res.status(400).json({ error: 'Unknown provider' });
   const stored = await storedConfig('agency_integrations', 'agency_id', req.user.agency_id, provider);

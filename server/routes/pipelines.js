@@ -76,9 +76,19 @@ router.get('/:id/opportunities', getPipeline, async (req, res) => {
   );
 });
 
+// Reject a contact_id that isn't in this sub-account (prevents attaching — and
+// then reading back via the LEFT JOIN — another tenant's contact PII).
+async function assertOwnedContact(contactId, locationId) {
+  if (contactId === undefined || contactId === null || contactId === '') return true;
+  const owns = await db.get('SELECT id FROM contacts WHERE id = ? AND location_id = ?', [contactId, locationId]);
+  return Boolean(owns);
+}
+
 router.post('/:id/opportunities', getPipeline, async (req, res) => {
   const { title, value, contact_id, stage_id } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title is required' });
+  if (!(await assertOwnedContact(contact_id, req.location.id)))
+    return res.status(400).json({ error: 'Contacto no encontrado en esta sub-cuenta' });
   const stage = stage_id
     ? await db.get('SELECT * FROM stages WHERE id = ? AND pipeline_id = ?', [stage_id, req.pipeline.id])
     : await db.get('SELECT * FROM stages WHERE pipeline_id = ? ORDER BY position LIMIT 1', [req.pipeline.id]);
@@ -102,6 +112,10 @@ router.put('/opportunities/:oppId', async (req, res) => {
   ]);
   if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
   const merged = { ...opp, ...req.body };
+  if (merged.status && !['open', 'won', 'lost'].includes(merged.status))
+    return res.status(400).json({ error: 'Estado no válido' });
+  if (!(await assertOwnedContact(req.body.contact_id, req.location.id)))
+    return res.status(400).json({ error: 'Contacto no encontrado en esta sub-cuenta' });
   if (req.body.stage_id) {
     const stage = await db.get('SELECT * FROM stages WHERE id = ? AND pipeline_id = ?', [
       req.body.stage_id,

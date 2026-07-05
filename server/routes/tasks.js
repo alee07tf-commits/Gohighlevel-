@@ -19,9 +19,21 @@ router.get('/', async (req, res) => {
   res.json(await db.all(sql, params));
 });
 
+// Ownership guards so a task can't reference another tenant's contact/user.
+async function ownsContact(id, locationId) {
+  return !id || Boolean(await db.get('SELECT id FROM contacts WHERE id = ? AND location_id = ?', [id, locationId]));
+}
+async function ownsUser(id, agencyId) {
+  return !id || Boolean(await db.get('SELECT id FROM users WHERE id = ? AND agency_id = ?', [id, agencyId]));
+}
+
 router.post('/', async (req, res) => {
   const { title, notes, due_at, contact_id, user_id } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title is required' });
+  if (!(await ownsContact(contact_id, req.location.id)))
+    return res.status(400).json({ error: 'Contacto no encontrado en esta sub-cuenta' });
+  if (!(await ownsUser(user_id, req.user.agency_id)))
+    return res.status(400).json({ error: 'Usuario no encontrado en tu agencia' });
   const id = await db.insert(
     'INSERT INTO tasks (location_id, contact_id, user_id, title, notes, due_at) VALUES (?, ?, ?, ?, ?, ?)',
     [req.location.id, contact_id || null, user_id || req.user.id, title, notes || '', due_at || null]
@@ -33,6 +45,8 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const task = await db.get('SELECT * FROM tasks WHERE id = ? AND location_id = ?', [req.params.id, req.location.id]);
   if (!task) return res.status(404).json({ error: 'Task not found' });
+  if (!(await ownsUser(req.body.user_id, req.user.agency_id)))
+    return res.status(400).json({ error: 'Usuario no encontrado en tu agencia' });
   const merged = { ...task, ...req.body };
   await db.run('UPDATE tasks SET title=?, notes=?, due_at=?, status=?, user_id=? WHERE id=?', [
     merged.title,

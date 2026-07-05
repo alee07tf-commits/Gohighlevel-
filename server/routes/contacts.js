@@ -105,6 +105,14 @@ router.get('/:id', getContact, async (req, res) => {
 
 router.put('/:id', getContact, async (req, res) => {
   const merged = { ...req.contact, ...req.body };
+  let customFieldsJson;
+  try {
+    customFieldsJson = JSON.stringify(
+      typeof merged.custom_fields === 'string' ? JSON.parse(merged.custom_fields) : merged.custom_fields || {}
+    );
+  } catch {
+    return res.status(400).json({ error: 'custom_fields no es JSON válido' });
+  }
   await db.run(
     `UPDATE contacts SET first_name=?, last_name=?, email=?, phone=?, source=?, dnd=?, owner_user_id=?, custom_fields=?,
      updated_at=now() WHERE id=?`,
@@ -116,9 +124,7 @@ router.put('/:id', getContact, async (req, res) => {
       merged.source,
       merged.dnd ? 1 : 0,
       merged.owner_user_id || null,
-      JSON.stringify(
-        typeof merged.custom_fields === 'string' ? JSON.parse(merged.custom_fields) : merged.custom_fields || {}
-      ),
+      customFieldsJson,
       req.contact.id,
     ]
   );
@@ -283,7 +289,8 @@ router.get('/meta/duplicates', async (req, res) => {
 // duplicate is deleted.
 router.post('/merge', async (req, res) => {
   const { keep_id, merge_id } = req.body || {};
-  if (!keep_id || !merge_id || keep_id === merge_id) return res.status(400).json({ error: 'keep_id and merge_id required' });
+  if (!keep_id || !merge_id || Number(keep_id) === Number(merge_id))
+    return res.status(400).json({ error: 'keep_id and merge_id required' });
   const keep = await db.get('SELECT * FROM contacts WHERE id = ? AND location_id = ?', [keep_id, req.location.id]);
   const dup = await db.get('SELECT * FROM contacts WHERE id = ? AND location_id = ?', [merge_id, req.location.id]);
   if (!keep || !dup) return res.status(404).json({ error: 'Contact not found' });

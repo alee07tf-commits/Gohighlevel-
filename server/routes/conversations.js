@@ -61,6 +61,8 @@ router.post('/start/:contactId', async (req, res) => {
 router.post('/:id/simulate-inbound', getConversation, async (req, res) => {
   const { channel = 'sms', body } = req.body || {};
   if (!body) return res.status(400).json({ error: 'body is required' });
+  if (!['sms', 'email', 'whatsapp', 'chat', 'note'].includes(channel))
+    return res.status(400).json({ error: 'Canal no válido' });
   const message = await messaging.recordMessage({
     locationId: req.location.id,
     contactId: req.conversation.contact_id,
