@@ -32,6 +32,7 @@ app.use('/api/companies', require('./routes/companies'));
 app.use('/api/pipelines', require('./routes/pipelines'));
 app.use('/api/calendars', require('./routes/calendars'));
 app.use('/api/conversations', require('./routes/conversations'));
+app.use('/api/snippets', require('./routes/snippets'));
 app.use('/api/marketing', require('./routes/marketing'));
 app.use('/api/workflows', require('./routes/workflows'));
 app.use('/api/funnels', require('./routes/funnels'));

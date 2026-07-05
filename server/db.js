@@ -583,6 +583,17 @@ ALTER TABLE contacts ADD COLUMN IF NOT EXISTS additional_phones TEXT DEFAULT '[]
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS dnd_email INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS dnd_sms INTEGER NOT NULL DEFAULT 0;
 
+-- Inbox parity (v3.10): saved replies (snippets) and conversation assignment.
+CREATE TABLE IF NOT EXISTS snippets (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_snippets_location ON snippets(location_id);
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER REFERENCES users(id);
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -688,7 +699,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 18;
+const SCHEMA_VERSION = 19;
 
 let readyPromise = null;
 function ensureReady() {

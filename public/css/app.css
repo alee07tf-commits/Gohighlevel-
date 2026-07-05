@@ -194,6 +194,9 @@ label.field .label { display: block; font-size: 11.5px; font-weight: 600; color:
 /* ---------- Stats ---------- */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 18px; }
 .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.seg { display: inline-flex; background: var(--surface-2, #f3f4f6); border: 1px solid var(--border); border-radius: 9px; padding: 2px; gap: 2px; }
+.seg-btn { border: 0; background: transparent; padding: 5px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.seg-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 .app-ic { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 10px; background: #fff; border: 1px solid var(--border); padding: 7px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 .app-ic svg { width: 100%; height: 100%; display: block; }
 .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
