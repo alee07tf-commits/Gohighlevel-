@@ -2,6 +2,57 @@ import { api, state } from '../api.js';
 import { esc, toast, openModal, closeOverlay, formData } from '../ui.js';
 import { t } from '../i18n.js';
 
+// Central "servicios de la plataforma": configured ONCE by the agency and
+// cascaded to every sub-account (env → agency → sub-account). These are the
+// managed services a client uses with zero setup (SMS, WhatsApp, Email, AI),
+// plus agency-wide payments/prospecting defaults. `primary` is the field whose
+// presence means "configured".
+const CENTRAL = [
+  { key: 'twilio', label: t('SMS y WhatsApp (Twilio)', 'SMS & WhatsApp (Twilio)'), managed: true, primary: 'account_sid', fields: [
+    { k: 'account_sid', label: 'Account SID (AC…)' },
+    { k: 'auth_token', label: 'Auth Token', secret: true },
+    { k: 'from_number', label: t('Número SMS (from)', 'SMS number (from)'), placeholder: '+34…' },
+    { k: 'whatsapp_from', label: 'WhatsApp from', placeholder: 'whatsapp:+14155238886' } ] },
+  { key: 'email', label: 'Email', managed: true, primary: 'api_key', fields: [
+    { k: 'vendor', label: t('Proveedor', 'Provider'), type: 'select', opts: ['resend', 'sendgrid'] },
+    { k: 'api_key', label: t('API key', 'API key'), secret: true },
+    { k: 'mail_from', label: t('Remitente (from)', 'Sender (from)'), placeholder: t('tu@dominio.com', 'you@domain.com') } ] },
+  { key: 'ai', label: t('IA conversacional (Claude)', 'Conversational AI (Claude)'), managed: true, primary: 'api_key', fields: [
+    { k: 'api_key', label: 'Anthropic API key', secret: true },
+    { k: 'model', label: t('Modelo (opcional)', 'Model (optional)'), placeholder: 'claude-sonnet-5' } ] },
+  { key: 'stripe', label: t('Pagos (Stripe)', 'Payments (Stripe)'), primary: 'secret_key', fields: [{ k: 'secret_key', label: 'Secret key (sk_…)', secret: true }] },
+  { key: 'places', label: t('Prospección (Google)', 'Prospecting (Google)'), primary: 'google_places_api_key', fields: [
+    { k: 'google_places_api_key', label: 'Google Places API key', secret: true },
+    { k: 'serper_api_key', label: t('Serper API key (alternativa)', 'Serper API key (alternative)'), secret: true } ] },
+];
+
+function centralFieldValue(cfg, k) {
+  const f = (cfg?.fields || []).find((x) => x.key === k);
+  return f ? f.value : '';
+}
+function centralBlock(p, cfg) {
+  const configured = (cfg?.fields || []).some((f) => f.key === p.primary && f.set);
+  const badge = configured
+    ? `<span class="badge green">${t('Activo para todos', 'Active for all')}</span>`
+    : `<span class="badge amber">${t('Sin configurar', 'Not configured')}</span>`;
+  return `<div class="integ-block" data-provider="${p.key}" style="border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:12px">
+    <div class="flex" style="justify-content:space-between;align-items:center">
+      <strong>${esc(p.label)}${p.managed ? ` <span class="muted" style="font-weight:400;font-size:11px">· ${t('servicio incluido', 'included service')}</span>` : ''}</strong> ${badge}</div>
+    ${p.fields.map((f) => {
+      const val = centralFieldValue(cfg, f.key);
+      if (f.type === 'select')
+        return `<label class="field" style="margin-top:8px"><span class="label">${esc(f.label)}</span>
+          <select class="input integ-f" data-k="${f.key}"><option value="">—</option>${f.opts.map((o) => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+      return `<label class="field" style="margin-top:8px"><span class="label">${esc(f.label)}</span>
+        <input class="input integ-f" data-k="${f.key}" ${f.secret ? 'type="password"' : ''} value="${esc(val)}" placeholder="${esc(f.placeholder || (f.secret ? '••••' : ''))}"></label>`;
+    }).join('')}
+    <div class="flex" style="margin-top:8px;gap:8px">
+      <button class="btn secondary small integ-save">${t('Guardar', 'Save')}</button>
+      ${configured ? `<button class="btn ghost small integ-clear">${t('Vaciar', 'Clear')}</button>` : ''}
+    </div>
+  </div>`;
+}
+
 // Agency console (admin): cross-sub-account roll-up, SaaS plans, and
 // white-label / signup settings.
 export async function renderAgency(view) {
@@ -9,12 +60,15 @@ export async function renderAgency(view) {
     view.innerHTML = `<div class="empty card" style="padding:40px">${t('Solo los administradores de la agencia pueden ver este panel.', 'Only agency administrators can view this panel.')}</div>`;
     return;
   }
-  const [overview, plans, snaps, settings] = await Promise.all([
+  const CENTRAL_KEYS = CENTRAL.map((p) => p.key);
+  const [overview, plans, snaps, settings, ...centralCfgs] = await Promise.all([
     api('/agency/overview'),
     api('/plans'),
     api('/snapshots'),
     api('/agency/settings'),
+    ...CENTRAL_KEYS.map((k) => api(`/integrations/agency/${k}`)),
   ]);
+  const centralCfg = Object.fromEntries(CENTRAL_KEYS.map((k, i) => [k, centralCfgs[i]]));
   const money = (n, c = 'EUR') => `${Number(n || 0).toFixed(2)} ${c}`;
   const signupUrl = settings.slug ? `${location.origin}/signup/${settings.slug}` : null;
 
@@ -42,6 +96,14 @@ export async function renderAgency(view) {
           <td>${money(l.usage_this_month)}</td>
         </tr>`).join('')}
       </tbody></table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">${t('Servicios de la plataforma', 'Platform services')}</div>
+    <div class="card-body">
+      <p class="muted" style="font-size:12.5px;margin-bottom:12px">${t('Configúralos <strong>una sola vez aquí</strong> y quedan disponibles para <strong>todos tus clientes</strong> sin que ellos pongan nada. Cada cliente puede sobrescribirlos en su sub-cuenta si trae su propia cuenta. Los secretos se guardan cifrados.', 'Set them up <strong>once here</strong> and they become available to <strong>all your clients</strong> with no setup on their side. Each client can override them in their sub-account if they bring their own. Secrets are stored encrypted.')}</p>
+      <div class="grid-cards">${CENTRAL.map((p) => centralBlock(p, centralCfg[p.key])).join('')}</div>
     </div>
   </div>
 
@@ -87,6 +149,37 @@ export async function renderAgency(view) {
     } catch (err) {
       toast(err.message, true);
     }
+  });
+
+  // Central platform-service integrations (agency scope → cascades to all).
+  view.querySelectorAll('.integ-block').forEach((block) => {
+    const provider = block.dataset.provider;
+    block.querySelector('.integ-save').addEventListener('click', async () => {
+      const body = {};
+      block.querySelectorAll('.integ-f').forEach((i) => {
+        const v = i.value.trim();
+        if (v && !v.startsWith('••••')) body[i.dataset.k] = v;
+      });
+      try {
+        await api(`/integrations/agency/${provider}`, { method: 'PUT', body });
+        toast(t('Servicio guardado para toda la agencia', 'Service saved for the whole agency'));
+        renderAgency(view);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+    const clr = block.querySelector('.integ-clear');
+    if (clr)
+      clr.addEventListener('click', async () => {
+        if (!confirm(t('¿Vaciar este servicio para toda la agencia?', 'Clear this service for the whole agency?'))) return;
+        try {
+          await api(`/integrations/agency/${provider}`, { method: 'PUT', body: { clear: true } });
+          toast(t('Servicio vaciado', 'Service cleared'));
+          renderAgency(view);
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
   });
 
   view.querySelectorAll('.plan-del').forEach((b) =>
