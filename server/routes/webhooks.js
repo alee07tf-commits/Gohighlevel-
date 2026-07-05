@@ -71,6 +71,37 @@ router.post('/twilio/:locationId', express.urlencoded({ extended: false }), asyn
 // the session is re-fetched from Stripe's API before settling the invoice.
 router.post('/stripe', express.json(), async (req, res) => {
   const event = req.body || {};
+
+  // Subscription lifecycle → keep our subscriptions table in sync with Stripe
+  // (renewals, upgrades, cancellations) so MRR and access stay accurate. Trusted
+  // via signature (when STRIPE_WEBHOOK_SECRET is set) rather than a re-fetch,
+  // since they only touch rows we already own by subscription id.
+  const lifecycle = ['customer.subscription.updated', 'customer.subscription.deleted', 'invoice.payment_succeeded', 'invoice.paid'];
+  if (lifecycle.includes(event.type)) {
+    const stripe = require('../services/stripe');
+    if (!stripe.verifySignature(req.get('Stripe-Signature'), req.rawBody, process.env.STRIPE_WEBHOOK_SECRET || '')) {
+      return res.status(400).json({ error: 'invalid signature' });
+    }
+    const o = (event.data && event.data.object) || {};
+    try {
+      if (event.type === 'customer.subscription.deleted') {
+        await db.run(`UPDATE subscriptions SET status = 'canceled' WHERE stripe_subscription_id = ?`, [o.id || '']);
+      } else if (event.type === 'customer.subscription.updated') {
+        await db.run(`UPDATE subscriptions SET status = ?, current_period_end = to_timestamp(?) WHERE stripe_subscription_id = ?`,
+          [o.status || 'active', o.current_period_end || null, o.id || '']);
+      } else {
+        const subId = o.subscription || '';
+        if (subId) {
+          const end = o.period_end || (o.lines && o.lines.data && o.lines.data[0] && o.lines.data[0].period && o.lines.data[0].period.end) || null;
+          await db.run(`UPDATE subscriptions SET status = 'active', current_period_end = to_timestamp(?) WHERE stripe_subscription_id = ?`, [end, subId]);
+        }
+      }
+    } catch (err) {
+      console.error('stripe lifecycle failed:', err.message);
+    }
+    return res.json({ received: true });
+  }
+
   if (event.type !== 'checkout.session.completed') return res.json({ received: true });
   const obj = (event.data && event.data.object) || {};
   const sessionId = obj.id;
