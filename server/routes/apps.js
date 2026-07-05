@@ -4,6 +4,7 @@
 // browser redirect (which carries no session) can reach it; it trusts the
 // HMAC-signed `state` minted at connect time to bind back to the location.
 const express = require('express');
+const crypto = require('crypto');
 const db = require('../db');
 const apps = require('../services/apps');
 const secretbox = require('../services/secretbox');
@@ -84,20 +85,22 @@ router.get('/oauth/callback', async (req, res) => {
 // the access_token column so they never round-trip to the client.
 async function storeConnection(locationId, appKey, c) {
   const secret = c.credentials ? secretbox.encrypt(c.credentials) : c.access_token ? secretbox.encrypt({ v: c.access_token }) : '';
+  const token = crypto.randomBytes(12).toString('hex'); // used only if none exists yet
   await db.run(
     `INSERT INTO connected_accounts
-       (location_id, app, external_id, display_name, access_token, refresh_token, scopes, data, status, expires_at, connected_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'connected', ?, now())
+       (location_id, app, external_id, display_name, access_token, refresh_token, scopes, data, status, expires_at, webhook_token, connected_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'connected', ?, ?, now())
      ON CONFLICT (location_id, app) DO UPDATE SET
        external_id = EXCLUDED.external_id, display_name = EXCLUDED.display_name,
        access_token = EXCLUDED.access_token, refresh_token = EXCLUDED.refresh_token,
        scopes = EXCLUDED.scopes, data = EXCLUDED.data, status = 'connected',
-       expires_at = EXCLUDED.expires_at, connected_at = now()`,
+       expires_at = EXCLUDED.expires_at, connected_at = now(),
+       webhook_token = COALESCE(connected_accounts.webhook_token, EXCLUDED.webhook_token)`,
     [
       locationId, appKey, c.external_id || '', c.display_name || '',
       secret,
       c.refresh_token ? secretbox.encrypt({ v: c.refresh_token }) : '',
-      c.scopes || '', JSON.stringify(c.data || {}), c.expires_at || null,
+      c.scopes || '', JSON.stringify(c.data || {}), c.expires_at || null, token,
     ]
   );
 }
@@ -108,7 +111,7 @@ router.use(requireAuth);
 // Marketplace: catalog + this sub-account's connections (tokens never leaked).
 router.get('/', requireLocation, async (req, res) => {
   const rows = await db.all(
-    `SELECT id, app, external_id, display_name, scopes, status, expires_at, connected_at, data
+    `SELECT id, app, external_id, display_name, scopes, status, expires_at, connected_at, data, webhook_token
        FROM connected_accounts WHERE location_id = ? ORDER BY connected_at DESC`,
     [req.location.id]
   );
@@ -119,6 +122,7 @@ router.get('/', requireLocation, async (req, res) => {
     connected[r.app] = {
       id: r.id, external_id: r.external_id, display_name: r.display_name,
       scopes: r.scopes, status: r.status, expires_at: r.expires_at, connected_at: r.connected_at, data,
+      webhook_token: r.webhook_token || null,
     };
   }
   // Managed-service tier (SMS/WhatsApp/Email/AI): backend status from the

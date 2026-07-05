@@ -556,6 +556,10 @@ CREATE TABLE IF NOT EXISTS connected_accounts (
   connected_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_connected_accounts_loc_app ON connected_accounts(location_id, app);
+-- Per-connection inbound webhook token (Calendly and other push integrations
+-- route events to the right sub-account via /api/public/<app>/<token>).
+ALTER TABLE connected_accounts ADD COLUMN IF NOT EXISTS webhook_token TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_connected_accounts_webhook_token ON connected_accounts(webhook_token) WHERE webhook_token IS NOT NULL;
 
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
@@ -662,7 +666,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 16;
+const SCHEMA_VERSION = 17;
 
 let readyPromise = null;
 function ensureReady() {

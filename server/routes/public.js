@@ -1,6 +1,7 @@
 // Public, unauthenticated routes: rendered funnel pages, form capture and
 // calendar booking widgets. These are what your clients' leads interact with.
 const express = require('express');
+const crypto = require('crypto');
 const db = require('../db');
 const automation = require('../services/automation');
 const scheduler = require('../services/scheduler');
@@ -9,6 +10,7 @@ const customValues = require('../services/customValues');
 const leads = require('../services/leads');
 const secretbox = require('../services/secretbox');
 const shopify = require('../services/shopify');
+const calendly = require('../services/calendly');
 
 const router = express.Router();
 
@@ -451,6 +453,65 @@ router.post('/shopify/webhook', async (req, res) => {
   } catch (err) {
     if (err.status === 400) return res.status(202).json({ ok: true, skipped: err.message });
     console.error('shopify webhook failed:', err.message);
+    return res.status(200).json({ ok: false });
+  }
+});
+
+// ---- Calendly webhooks (invitee.created / invitee.canceled → appointment) ----
+// Resolves the sub-account's calendar for external bookings, creating a
+// dedicated "Calendly" calendar the first time.
+async function resolveExternalCalendar(locationId, name) {
+  let cal = await db.get('SELECT * FROM calendars WHERE location_id = ? ORDER BY id LIMIT 1', [locationId]);
+  if (cal) return cal;
+  const slug = `${name.toLowerCase()}-${locationId}-${crypto.randomBytes(3).toString('hex')}`;
+  const id = await db.insert('INSERT INTO calendars (location_id, name, slug) VALUES (?, ?, ?)', [locationId, name, slug]);
+  return db.get('SELECT * FROM calendars WHERE id = ?', [id]);
+}
+
+router.post('/calendly/:token', async (req, res) => {
+  const acct = await db.get(`SELECT * FROM connected_accounts WHERE app = 'calendly' AND webhook_token = ?`, [req.params.token]);
+  if (!acct) return res.status(404).json({ error: 'connection not found' });
+  if (!calendly.verifySignature(req.get('Calendly-Webhook-Signature'), req.rawBody, process.env.CALENDLY_WEBHOOK_SIGNING_KEY || '')) {
+    return res.status(401).json({ error: 'invalid signature' });
+  }
+  const loc = acct.location_id;
+  const m = calendly.mapPayload(req.body || {});
+  if (!m.contact.email && !m.contact.phone) return res.status(202).json({ ok: true, skipped: 'no contact info' });
+
+  try {
+    const { contact_id } = await leads.ingestLead({
+      location_id: loc, ...m.contact, source: 'calendly', tag: 'calendly',
+      activityLabel: `Calendly: ${m.event.title}`,
+    });
+
+    if (m.kind === 'invitee.canceled') {
+      // Cancel the matching appointment if we can find it by contact + start.
+      await db.run(
+        `UPDATE appointments SET status = 'cancelled'
+         WHERE location_id = ? AND contact_id = ? AND status = 'confirmed'
+         AND (? = '' OR starts_at = ?)`,
+        [loc, contact_id, m.event.start_time || '', m.event.start_time || null]
+      );
+      return res.status(200).json({ ok: true, contact_id, cancelled: true });
+    }
+
+    if (m.event.start_time && m.event.end_time) {
+      const cal = await resolveExternalCalendar(loc, 'Calendly');
+      const appt = await db.insert(
+        `INSERT INTO appointments (location_id, calendar_id, contact_id, title, starts_at, ends_at, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [loc, cal.id, contact_id, m.event.title, m.event.start_time, m.event.end_time, 'Reservado vía Calendly']
+      );
+      const event = { calendar_id: cal.id, status: 'confirmed', id: appt };
+      await scoring.addScore(contact_id, 'appointment_booked');
+      const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [contact_id]);
+      await automation.trigger(loc, 'appointment_booked', contact, event);
+      return res.status(200).json({ ok: true, contact_id, appointment_id: appt });
+    }
+    return res.status(200).json({ ok: true, contact_id });
+  } catch (err) {
+    if (err.status === 400) return res.status(202).json({ ok: true, skipped: err.message });
+    console.error('calendly webhook failed:', err.message);
     return res.status(200).json({ ok: false });
   }
 });
