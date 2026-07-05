@@ -4,19 +4,29 @@ import { t } from '../i18n.js';
 
 export async function renderTasks(view) {
   let filter = 'open';
+  let scope = 'all'; // all | mine | overdue
+  const team = await api('/locations/team/users').catch(() => []);
 
   async function load() {
-    const tasks = await api(`/tasks?status=${filter}`);
+    const params = new URLSearchParams();
+    if (scope === 'overdue') { params.set('status', 'open'); params.set('overdue', '1'); }
+    else { params.set('status', filter); if (scope === 'mine') params.set('assignee', 'mine'); }
+    const tasks = await api(`/tasks?${params}`);
     const now = new Date().toISOString();
 
     view.innerHTML = `
     <div class="page-header">
       <h1>${t('Tareas', 'Tasks')}</h1>
-      <select class="input" id="task-filter" style="width:150px">
+      <select class="input" id="task-filter" style="width:130px" ${scope === 'overdue' ? 'disabled' : ''}>
         <option value="open" ${filter === 'open' ? 'selected' : ''}>${t('Pendientes', 'Pending')}</option>
         <option value="done" ${filter === 'done' ? 'selected' : ''}>${t('Hechas', 'Done')}</option>
         <option value="all" ${filter === 'all' ? 'selected' : ''}>${t('Todas', 'All')}</option>
       </select>
+      <div class="seg" id="task-scope">
+        <button class="seg-btn ${scope === 'all' ? 'active' : ''}" data-s="all">${t('Todas', 'All')}</button>
+        <button class="seg-btn ${scope === 'mine' ? 'active' : ''}" data-s="mine">${t('Mías', 'Mine')}</button>
+        <button class="seg-btn ${scope === 'overdue' ? 'active' : ''}" data-s="overdue">${t('Vencidas', 'Overdue')}</button>
+      </div>
       <div class="spacer"></div>
       <button class="btn" id="new-task">${t('+ Tarea', '+ Task')}</button>
     </div>
@@ -45,6 +55,7 @@ export async function renderTasks(view) {
     </div>`;
 
     view.querySelector('#task-filter').addEventListener('change', (e) => { filter = e.target.value; load(); });
+    view.querySelectorAll('#task-scope .seg-btn').forEach((b) => b.addEventListener('click', () => { scope = b.dataset.s; load(); }));
     view.querySelectorAll('.toggle-task').forEach((cb) =>
       cb.addEventListener('change', async () => {
         try {
@@ -74,6 +85,7 @@ export async function renderTasks(view) {
           <label class="field"><span class="label">${t('Notas', 'Notes')}</span><input class="input" name="notes"></label>
           <div class="form-row">
             <label class="field"><span class="label">${t('Vence', 'Due')}</span><input class="input" name="due_at" type="datetime-local"></label>
+            <label class="field"><span class="label">${t('Asignar a', 'Assign to')}</span><select class="input" name="user_id"><option value="">${t('— yo —', '— me —')}</option>${team.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select></label>
           </div>
           <label class="field"><span class="label">${t('Contacto (opcional)', 'Contact (optional)')}</span>
             <input class="input" id="t-search" placeholder="${t('buscar…', 'search…')}" autocomplete="off">
@@ -105,6 +117,7 @@ export async function renderTasks(view) {
         e.preventDefault();
         const data = formData(e.target);
         data.contact_id = Number(data.contact_id) || null;
+        data.user_id = Number(data.user_id) || null;
         data.due_at = data.due_at ? data.due_at + ':00' : null;
         try {
           await api('/tasks', { method: 'POST', body: data });

@@ -7,7 +7,7 @@ const router = express.Router();
 router.use(requireAuth, requireLocation);
 
 router.get('/', async (req, res) => {
-  const { status = 'open', contact_id } = req.query;
+  const { status = 'open', contact_id, assignee, overdue } = req.query;
   let sql = `SELECT t.*, c.first_name, c.last_name, u.name AS user_name FROM tasks t
              LEFT JOIN contacts c ON c.id = t.contact_id
              LEFT JOIN users u ON u.id = t.user_id
@@ -15,6 +15,9 @@ router.get('/', async (req, res) => {
   const params = [req.location.id];
   if (status !== 'all') { sql += ' AND t.status = ?'; params.push(status); }
   if (contact_id) { sql += ' AND t.contact_id = ?'; params.push(contact_id); }
+  if (assignee === 'mine') { sql += ' AND t.user_id = ?'; params.push(req.user.id); }
+  else if (assignee) { sql += ' AND t.user_id = ?'; params.push(Number(assignee)); }
+  if (overdue) sql += ` AND t.status = 'open' AND t.due_at IS NOT NULL AND t.due_at <= now()`;
   sql += ' ORDER BY t.due_at NULLS LAST, t.id DESC LIMIT 300';
   res.json(await db.all(sql, params));
 });
