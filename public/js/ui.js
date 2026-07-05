@@ -1,4 +1,5 @@
 // Small UI helpers: escaping, modals, drawers, toasts, form serialization.
+import { t, locale } from './i18n.js';
 
 // Professional inline line-icons (no emoji). `icon(name)` returns an <svg> string.
 const ICON_PATHS = {
@@ -60,20 +61,20 @@ export function formData(form) {
 // currency code (EUR/USD/MXN/COP/ARS…) when the record has one.
 export function fmtMoney(value, currency = 'EUR') {
   try {
-    return Number(value || 0).toLocaleString('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 });
+    return Number(value || 0).toLocaleString(locale(), { style: 'currency', currency, maximumFractionDigits: 0 });
   } catch {
-    return `${Number(value || 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })} ${currency}`;
+    return `${Number(value || 0).toLocaleString(locale(), { maximumFractionDigits: 0 })} ${currency}`;
   }
 }
 
 export function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
-  return d.toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString(locale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export function fullName(obj) {
-  return [obj.first_name, obj.last_name].filter(Boolean).join(' ') || obj.email || obj.phone || 'Sin nombre';
+  return [obj.first_name, obj.last_name].filter(Boolean).join(' ') || obj.email || obj.phone || t('Sin nombre', 'No name');
 }
 
 export function initials(obj) {

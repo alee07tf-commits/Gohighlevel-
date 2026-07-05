@@ -401,3 +401,11 @@ code.inline { background: #f0f1f6; padding: 2px 7px; border-radius: 6px; font-si
   font-size: 12.5px; line-height: 1.5;
 }
 .auth-warn code { background: #fff; border: 1px solid #fecaca; border-radius: 5px; padding: 1px 5px; font-size: 11.5px; }
+
+/* Language switcher (ES/EN) in the sidebar footer. */
+.lang-switch { display: inline-flex; gap: 4px; margin-bottom: 8px; }
+.lang-btn {
+  border: 1px solid var(--border); background: #fff; color: var(--muted);
+  border-radius: 7px; padding: 2px 9px; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.lang-btn.active { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }

@@ -1,5 +1,6 @@
 import { state, loadMe, clearSession, setLocation, setAgency } from './api.js';
 import { esc, initials, toast, icon } from './ui.js';
+import { t, getLang, setLang } from './i18n.js';
 import { renderLogin, renderRegister } from './views/auth.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderContacts } from './views/contacts.js';
@@ -40,32 +41,33 @@ const IC = {
 function navSections() {
   const isAdmin = state.user?.role === 'admin';
   return [
-    { title: 'Workspace', items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
-    { title: 'Crecimiento', items: ['prospecting', 'marketing', 'funnels', 'automations', 'payments', 'reputation'] },
-    { title: 'Formación', items: ['training'] },
+    { title: t('Workspace', 'Workspace'), items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
+    { title: t('Crecimiento', 'Growth'), items: ['prospecting', 'marketing', 'funnels', 'automations', 'payments', 'reputation'] },
+    { title: t('Formación', 'Training'), items: ['training'] },
     // The agency layer is admin-only: "Clientes" manages the agencies below you
     // in the tenant tree; the agency console is SaaS/cross-account/white-label.
-    { title: 'Cuenta', items: [...(isAdmin ? ['clients', 'agency'] : []), 'settings'] },
+    { title: t('Cuenta', 'Account'), items: [...(isAdmin ? ['clients', 'agency'] : []), 'settings'] },
   ];
 }
 
+// Labels are functions so they re-evaluate in the active language on each render.
 const NAV = [
-  { path: 'dashboard', label: 'Panel', icon: '', view: renderDashboard },
-  { path: 'conversations', label: 'Conversaciones', icon: '', view: renderConversations },
-  { path: 'contacts', label: 'Contactos', icon: '', view: renderContacts },
-  { path: 'pipelines', label: 'Oportunidades', icon: '', view: renderPipelines },
-  { path: 'calendar', label: 'Calendario', icon: '', view: renderCalendar },
-  { path: 'payments', label: 'Pagos', icon: '', view: renderPayments },
-  { path: 'prospecting', label: 'Prospección', icon: '', view: renderProspecting },
-  { path: 'marketing', label: 'Marketing', icon: '', view: renderMarketing },
-  { path: 'automations', label: 'Automatizaciones', icon: '', view: renderAutomations },
-  { path: 'funnels', label: 'Sitios y Embudos', icon: '', view: renderFunnels },
-  { path: 'reputation', label: 'Reputación', icon: '★', view: renderReputation },
-  { path: 'tasks', label: 'Tareas', icon: '', view: renderTasks },
-  { path: 'clients', label: 'Clientes', icon: '', view: renderClients },
-  { path: 'agency', label: 'Agencia', icon: '', view: renderAgency },
-  { path: 'training', label: 'Formación', icon: '', view: renderTraining },
-  { path: 'settings', label: 'Ajustes', icon: '', view: renderSettings },
+  { path: 'dashboard', label: () => t('Panel', 'Dashboard'), view: renderDashboard },
+  { path: 'conversations', label: () => t('Conversaciones', 'Conversations'), view: renderConversations },
+  { path: 'contacts', label: () => t('Contactos', 'Contacts'), view: renderContacts },
+  { path: 'pipelines', label: () => t('Oportunidades', 'Opportunities'), view: renderPipelines },
+  { path: 'calendar', label: () => t('Calendario', 'Calendar'), view: renderCalendar },
+  { path: 'payments', label: () => t('Pagos', 'Payments'), view: renderPayments },
+  { path: 'prospecting', label: () => t('Prospección', 'Prospecting'), view: renderProspecting },
+  { path: 'marketing', label: () => t('Marketing', 'Marketing'), view: renderMarketing },
+  { path: 'automations', label: () => t('Automatizaciones', 'Automations'), view: renderAutomations },
+  { path: 'funnels', label: () => t('Sitios y Embudos', 'Sites & Funnels'), view: renderFunnels },
+  { path: 'reputation', label: () => t('Reputación', 'Reputation'), view: renderReputation },
+  { path: 'tasks', label: () => t('Tareas', 'Tasks'), view: renderTasks },
+  { path: 'clients', label: () => t('Clientes', 'Clients'), view: renderClients },
+  { path: 'agency', label: () => t('Agencia', 'Agency'), view: renderAgency },
+  { path: 'training', label: () => t('Formación', 'Training'), view: renderTraining },
+  { path: 'settings', label: () => t('Ajustes', 'Settings'), view: renderSettings },
 ];
 
 function applyBranding() {
@@ -82,19 +84,20 @@ function renderShell(activePath) {
   applyBranding();
   const app = document.getElementById('app');
   const hour = new Date().getHours();
-  const greet = hour < 12 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches';
+  const greet =
+    hour < 12 ? t('Buenos días', 'Good morning') : hour < 20 ? t('Buenas tardes', 'Good afternoon') : t('Buenas noches', 'Good evening');
   const firstName = (state.user?.name || '').split(' ')[0];
 
   const navLink = (n) => `<a href="#/${n.path}" class="${n.path === activePath ? 'active' : ''}">
-    <span class="nav-icon">${IC[n.path] || ''}</span><span class="nav-label">${n.label}</span></a>`;
+    <span class="nav-icon">${IC[n.path] || ''}</span><span class="nav-label">${n.label()}</span></a>`;
 
   app.innerHTML = `
   <div class="layout">
     <div class="sidebar-scrim" id="sidebar-scrim"></div>
     <aside class="sidebar" id="sidebar">
       <div class="logo"><span class="logo-chip">${state.agency?.logo_url ? `<img src="${esc(state.agency.logo_url)}" alt="" style="width:18px;height:18px;object-fit:contain">` : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 10-12h-7z"/></svg>'}</span>
-        <span class="logo-text">${esc(state.agency?.name || 'LeadFlow')}<span class="logo-sub">${state.agency?.slug ? 'Agencia' : 'plataforma'}</span></span></div>
-      <div class="search-box" id="global-search">${icon('search', 15)} <span style="flex:1">Buscar contactos…</span> <span class="kbd">⌘K</span></div>
+        <span class="logo-text">${esc(state.agency?.name || 'LeadFlow')}<span class="logo-sub">${state.agency?.slug ? t('Agencia', 'Agency') : t('plataforma', 'platform')}</span></span></div>
+      <div class="search-box" id="global-search">${icon('search', 15)} <span style="flex:1">${t('Buscar contactos…', 'Search contacts…')}</span> <span class="kbd">⌘K</span></div>
       <nav>
         ${navSections().map(
           (s) => `<div class="nav-section">${s.title}</div>` +
@@ -102,29 +105,33 @@ function renderShell(activePath) {
         ).join('')}
       </nav>
       <div class="sidebar-footer">
-        <a href="#" id="drawer-logout" style="color:var(--danger);font-weight:600">Cerrar sesión</a>
-        <div style="margin-top:6px">v1.10 · plataforma de agencia</div>
+        <div class="lang-switch" role="group" aria-label="${t('Idioma', 'Language')}">
+          <button class="lang-btn ${getLang() === 'es' ? 'active' : ''}" data-lang="es">ES</button>
+          <button class="lang-btn ${getLang() === 'en' ? 'active' : ''}" data-lang="en">EN</button>
+        </div>
+        <a href="#" id="drawer-logout" style="color:var(--danger);font-weight:600">${t('Cerrar sesión', 'Log out')}</a>
+        <div style="margin-top:6px">${t('plataforma de agencia', 'agency platform')}</div>
       </div>
     </aside>
     <div class="main">
       <header class="topbar">
         <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menú"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
         ${state.locations.length
-          ? `<select id="location-switcher" title="Sub-cuenta">
+          ? `<select id="location-switcher" title="${t('Sub-cuenta', 'Sub-account')}">
           ${state.locations
             .map((l) => `<option value="${l.id}" ${l.id === state.locationId ? 'selected' : ''}>${esc(l.name)}</option>`)
             .join('')}
         </select>`
           : ''}
         ${state.actingAsChild
-          ? `<span class="context-chip" title="Estás gestionando un cliente">
-              <span class="context-dot"></span> ${esc(state.agency?.name || 'Cliente')}
-              <button class="btn ghost small" id="ctx-back">← ${esc(state.parentAgency?.name || 'Volver')}</button>
+          ? `<span class="context-chip" title="${t('Estás gestionando un cliente', 'You are managing a client')}">
+              <span class="context-dot"></span> ${esc(state.agency?.name || t('Cliente', 'Client'))}
+              <button class="btn ghost small" id="ctx-back">← ${esc(state.parentAgency?.name || t('Volver', 'Back'))}</button>
             </span>`
           : ''}
         <div class="spacer"></div>
         <div class="user-chip"><span class="avatar">${initials(state.user || {})}</span> <span class="chip-name">${esc(firstName)}</span></div>
-        <button class="btn secondary small" id="logout-btn">Salir</button>
+        <button class="btn secondary small" id="logout-btn">${t('Salir', 'Log out')}</button>
       </header>
       <main class="content" id="view"></main>
     </div>
@@ -159,6 +166,14 @@ function renderShell(activePath) {
   };
   document.getElementById('logout-btn').addEventListener('click', doLogout);
   document.getElementById('drawer-logout').addEventListener('click', doLogout);
+  // Language switch: re-render the whole shell + current view in the new language.
+  sidebar.querySelectorAll('.lang-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (getLang() === b.dataset.lang) return;
+      setLang(b.dataset.lang);
+      route();
+    })
+  );
   document.getElementById('global-search').addEventListener('click', () => {
     closeDrawer();
     location.hash = '#/contacts';
