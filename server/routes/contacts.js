@@ -317,6 +317,7 @@ router.post('/:id/notes', getContact, async (req, res) => {
     body,
   ]);
   await automation.logActivity(req.location.id, req.contact.id, 'note', 'Note added');
+  await automation.trigger(req.location.id, 'note_added', await withTags(req.contact), { note: body });
   res.status(201).json(await db.get('SELECT * FROM notes WHERE id = ?', [id]));
 });
 

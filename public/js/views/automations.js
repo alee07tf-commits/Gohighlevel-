@@ -12,6 +12,8 @@ const TRIGGER_LABELS = {
   appointment_booked: t('Cita reservada', 'Appointment booked'),
   opportunity_stage_changed: t('Cambio de etapa de oportunidad', 'Opportunity stage changed'),
   message_received: t('Mensaje recibido (SMS/WhatsApp)', 'Message received (SMS/WhatsApp)'),
+  note_added: t('Nota añadida', 'Note added'),
+  task_completed: t('Tarea completada', 'Task completed'),
 };
 const ACTION_LABELS = {
   add_tag: t('Añadir etiqueta', 'Add tag'),
@@ -21,6 +23,11 @@ const ACTION_LABELS = {
   send_whatsapp: t('Enviar WhatsApp', 'Send WhatsApp'),
   add_note: t('Añadir nota', 'Add note'),
   create_opportunity: t('Crear oportunidad', 'Create opportunity'),
+  update_field: t('Actualizar campo', 'Update field'),
+  assign_owner: t('Asignar responsable', 'Assign owner'),
+  set_dnd: t('Activar/quitar DND', 'Set DND'),
+  enroll_workflow: t('Añadir a otro workflow', 'Enroll in workflow'),
+  notify_user: t('Notificar al equipo', 'Notify team'),
   wait: t('Esperar', 'Wait'),
   create_task: t('Crear tarea', 'Create task'),
   send_review_request: t('★ Pedir reseña', '★ Request review'),
@@ -29,7 +36,8 @@ const ACTION_LABELS = {
 };
 
 export async function renderAutomations(view) {
-  const workflows = await api('/workflows');
+  const [workflows, team] = await Promise.all([api('/workflows'), api('/locations/team/users').catch(() => [])]);
+  const wfList = workflows;
 
   view.innerHTML = `
   <div class="page-header">
@@ -180,6 +188,20 @@ export async function renderAutomations(view) {
         case 'create_opportunity':
           return `<input class="input" data-i="${i}" data-k="title" placeholder="${t('Título de oportunidad', 'Opportunity title')}" value="${esc(a.config.title || '')}" style="margin-bottom:6px">
             <input class="input" data-i="${i}" data-k="value" type="number" placeholder="${t('Valor $', 'Value $')}" value="${esc(a.config.value || '')}">`;
+        case 'update_field':
+          return `<div class="flex"><input class="input" data-i="${i}" data-k="field" placeholder="${t('campo (email, source, o clave personalizada)', 'field (email, source, or custom key)')}" value="${esc(a.config.field || '')}">
+            <input class="input" data-i="${i}" data-k="value" placeholder="${t('nuevo valor — {{first_name}} vale', 'new value — {{first_name}} works')}" value="${esc(a.config.value ?? '')}"></div>`;
+        case 'assign_owner':
+          return `<select class="input" data-i="${i}" data-k="user_id"><option value="">${t('— sin asignar —', '— unassigned —')}</option>${team.map((u) => `<option value="${u.id}" ${Number(a.config.user_id) === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
+        case 'set_dnd':
+          return `<div class="flex"><select class="input" data-i="${i}" data-k="scope">${[['all', t('Todo', 'All')], ['email', 'Email'], ['sms', 'SMS']].map(([v, l]) => `<option value="${v}" ${a.config.scope === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+            <select class="input" data-i="${i}" data-k="value"><option value="1" ${a.config.value ? 'selected' : ''}>${t('Activar', 'Enable')}</option><option value="" ${!a.config.value ? 'selected' : ''}>${t('Quitar', 'Disable')}</option></select></div>`;
+        case 'enroll_workflow':
+          return `<select class="input" data-i="${i}" data-k="workflow_id"><option value="">${t('— elige workflow —', '— pick workflow —')}</option>${wfList.map((w) => `<option value="${w.id}" ${Number(a.config.workflow_id) === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select>`;
+        case 'notify_user':
+          return `<input class="input" data-i="${i}" data-k="email" placeholder="${t('email del equipo', 'team email')}" value="${esc(a.config.email || '')}" style="margin-bottom:6px">
+            <input class="input" data-i="${i}" data-k="subject" placeholder="${t('Asunto', 'Subject')}" value="${esc(a.config.subject || '')}" style="margin-bottom:6px">
+            <textarea class="input" data-i="${i}" data-k="message" rows="2" placeholder="${t('Mensaje — admite {{first_name}}', 'Message — {{first_name}} works')}">${esc(a.config.message || '')}</textarea>`;
         default:
           return '';
       }
@@ -202,11 +224,11 @@ export async function renderAutomations(view) {
           renderActions();
         })
       );
-      listEl.querySelectorAll('[data-k]').forEach((input) =>
-        input.addEventListener('input', () => {
-          actions[Number(input.dataset.i)].config[input.dataset.k] = input.value;
-        })
-      );
+      listEl.querySelectorAll('[data-k]').forEach((input) => {
+        const set = () => { actions[Number(input.dataset.i)].config[input.dataset.k] = input.value; };
+        input.addEventListener('input', set);
+        input.addEventListener('change', set);
+      });
       // Visual branch editor: edit nested THEN/OTHERWISE actions inline.
       listEl.querySelectorAll('.branch-f').forEach((el) => {
         const handler = () => {

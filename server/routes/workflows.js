@@ -15,6 +15,8 @@ const TRIGGER_TYPES = [
   'invoice_paid',
   'appointment_status_changed',
   'review_received',
+  'note_added',
+  'task_completed',
 ];
 const ACTION_TYPES = [
   'add_tag',
@@ -24,6 +26,11 @@ const ACTION_TYPES = [
   'send_whatsapp',
   'add_note',
   'create_opportunity',
+  'update_field',
+  'assign_owner',
+  'set_dnd',
+  'enroll_workflow',
+  'notify_user',
   'wait',
   'branch',
   'create_task',

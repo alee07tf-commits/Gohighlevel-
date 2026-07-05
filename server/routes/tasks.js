@@ -56,6 +56,11 @@ router.put('/:id', async (req, res) => {
     merged.user_id || null,
     task.id,
   ]);
+  // Fire the task_completed trigger on the open → done transition.
+  if (task.status !== 'done' && merged.status === 'done' && task.contact_id) {
+    const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [task.contact_id]);
+    if (contact) await automation.trigger(req.location.id, 'task_completed', contact, { task_id: task.id });
+  }
   res.json(await db.get('SELECT * FROM tasks WHERE id = ?', [task.id]));
 });
 

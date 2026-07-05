@@ -149,6 +149,50 @@ async function runAction(action, contact, locationId, log) {
       }
       break;
     }
+    case 'update_field': {
+      const known = ['first_name', 'last_name', 'email', 'phone', 'source'];
+      const value = messaging.mergeFields(String(config.value ?? ''), contact);
+      if (known.includes(config.field)) {
+        await db.run(`UPDATE contacts SET ${config.field} = ?, updated_at = now() WHERE id = ?`, [value, contact.id]);
+      } else if (config.field) {
+        let cf = {};
+        try { cf = JSON.parse(contact.custom_fields || '{}'); } catch { cf = {}; }
+        cf[config.field] = value;
+        await db.run('UPDATE contacts SET custom_fields = ?, updated_at = now() WHERE id = ?', [JSON.stringify(cf), contact.id]);
+      }
+      log.push(`Updated field "${config.field}"`);
+      break;
+    }
+    case 'assign_owner': {
+      const loc = await db.get('SELECT agency_id FROM locations WHERE id = ?', [locationId]);
+      const u = config.user_id ? await db.get('SELECT id, name FROM users WHERE id = ? AND agency_id = ?', [config.user_id, loc && loc.agency_id]) : null;
+      await db.run('UPDATE contacts SET owner_user_id = ?, updated_at = now() WHERE id = ?', [u ? u.id : null, contact.id]);
+      log.push(u ? `Assigned owner ${u.name}` : 'Cleared owner');
+      break;
+    }
+    case 'set_dnd': {
+      const col = config.scope === 'email' ? 'dnd_email' : config.scope === 'sms' ? 'dnd_sms' : 'dnd';
+      await db.run(`UPDATE contacts SET ${col} = ? WHERE id = ?`, [config.value ? 1 : 0, contact.id]);
+      log.push(`Set ${col} = ${config.value ? 'on' : 'off'}`);
+      break;
+    }
+    case 'enroll_workflow': {
+      const target = config.workflow_id
+        ? await db.get('SELECT * FROM workflows WHERE id = ? AND location_id = ?', [config.workflow_id, locationId])
+        : null;
+      if (!target) { log.push('Skipped enroll_workflow: workflow not found'); break; }
+      log.push(`Enrolled into workflow "${target.name}"`);
+      await executeActions(target, contact, 0, `Enrolled from another workflow`);
+      break;
+    }
+    case 'notify_user': {
+      const to = config.email;
+      if (!to) { log.push('Skipped notify_user: no email'); break; }
+      const msg = messaging.mergeFields(config.message || 'Nueva actividad de {{first_name}} {{last_name}} ({{email}} {{phone}})', contact);
+      try { await messaging.sendEmail(locationId, { email: to, first_name: '', last_name: '' }, config.subject || 'Notificación interna', msg); log.push(`Notified ${to}`); }
+      catch (err) { log.push(`Notify failed: ${err.message}`); }
+      break;
+    }
     case 'webhook': {
       if (!config.url || !/^https?:\/\//.test(config.url)) {
         log.push('Skipped webhook: invalid URL');
