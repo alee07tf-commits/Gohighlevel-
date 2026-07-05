@@ -126,6 +126,7 @@ async function renderBuilder(view, funnelId) {
       ${Object.entries(THEMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
     </select>
     <button class="btn secondary small" id="ai-redesign" title="La IA rediseña esta página (podrás editarla después)">Rediseñar</button>
+    <button class="btn secondary small" id="page-seo">SEO</button>
     <label class="flex" style="font-size:13px"><input type="checkbox" id="published"> ${t('Publicada', 'Published')}</label>
     <a class="btn secondary" target="_blank" id="preview-link">${t('Abrir ↗', 'Open ↗')}</a>
     <button class="btn" id="save-page">${t('Guardar', 'Save')}</button>
@@ -151,6 +152,25 @@ async function renderBuilder(view, funnelId) {
     blocks = structuredClone(page.content || []);
     view.querySelector('#published').checked = !!page.published;
     view.querySelector('#theme-select').value = page.theme || 'clean';
+    view.querySelector('#page-seo').addEventListener('click', () => {
+      const modal = openModal(`<h2>${t('SEO y seguimiento', 'SEO & tracking')}</h2>
+        <form id="seo-form">
+          <label class="field"><span class="label">${t('Título SEO', 'SEO title')}</span><input class="input" name="seo_title" value="${esc(page.seo_title || '')}" placeholder="${esc(page.name)}"></label>
+          <label class="field"><span class="label">${t('Descripción SEO', 'SEO description')}</span><textarea class="input" name="seo_description" rows="2">${esc(page.seo_description || '')}</textarea></label>
+          <label class="field"><span class="label">${t('Imagen para compartir (URL)', 'Social share image (URL)')}</span><input class="input" name="seo_image" value="${esc(page.seo_image || '')}" placeholder="https://…/og.png"></label>
+          <label class="field"><span class="label">${t('Código en <head> (píxeles, GA…)', 'Code in <head> (pixels, GA…)')}</span><textarea class="input" name="head_code" rows="3" placeholder="&lt;script&gt;…&lt;/script&gt;">${esc(page.head_code || '')}</textarea></label>
+          <label class="field"><span class="label">${t('Código antes de </body>', 'Code before </body>')}</span><textarea class="input" name="body_code" rows="2">${esc(page.body_code || '')}</textarea></label>
+          <div class="modal-actions"><button type="button" class="btn secondary" id="c">${t('Cancelar', 'Cancel')}</button><button class="btn">${t('Guardar', 'Save')}</button></div>
+        </form>`);
+      modal.querySelector('#c').addEventListener('click', closeOverlay);
+      modal.querySelector('#seo-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const d = Object.fromEntries(new FormData(e.target).entries());
+        Object.assign(page, d);
+        try { await api(`/funnels/${funnel.id}/pages/${page.id}`, { method: 'PUT', body: d }); closeOverlay(); toast(t('SEO guardado', 'SEO saved')); }
+        catch (err) { toast(err.message, true); }
+      });
+    });
     view.querySelector('#preview-link').href = `/f/${funnel.slug}/${page.slug}`;
     renderBlocks();
     refreshPreview();

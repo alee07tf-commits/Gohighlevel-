@@ -632,6 +632,14 @@ CREATE INDEX IF NOT EXISTS idx_products_location ON products(location_id);
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS discount DOUBLE PRECISION NOT NULL DEFAULT 0;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION NOT NULL DEFAULT 0;
 
+-- Funnel/site parity (v3.17): per-page SEO metadata and custom tracking code
+-- (head + body), so published pages can carry pixels and share cards.
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS seo_title TEXT DEFAULT '';
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS seo_description TEXT DEFAULT '';
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS seo_image TEXT DEFAULT '';
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS head_code TEXT DEFAULT '';
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS body_code TEXT DEFAULT '';
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -737,7 +745,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 24;
+const SCHEMA_VERSION = 25;
 
 let readyPromise = null;
 function ensureReady() {

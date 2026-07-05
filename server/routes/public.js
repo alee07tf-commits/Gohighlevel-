@@ -183,11 +183,20 @@ router.get('/f/:funnelSlug{/:pageSlug}', async (req, res) => {
   // per-client (business name, phone, etc.).
   const cv = await customValues.getMap(funnel.location_id);
   const body = customValues.apply(blocks.map((b) => renderBlock(b, page.id)).join('\n'), cv);
+  const title = esc(customValues.apply(page.seo_title || page.name, cv));
+  const desc = esc(customValues.apply(page.seo_description || '', cv));
+  const ogImg = esc(page.seo_image || '');
+  const seo = `${desc ? `<meta name="description" content="${desc}">` : ''}
+<meta property="og:title" content="${title}">${desc ? `<meta property="og:description" content="${desc}">` : ''}${ogImg ? `<meta property="og:image" content="${ogImg}">` : ''}
+<meta name="twitter:card" content="summary_large_image">`;
+  // Custom tracking code is operator-authored (their own pixels); injected as-is.
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(customValues.apply(page.name, cv))}</title>
-<style>${css}</style></head><body>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
+${seo}
+<style>${css}</style>${page.head_code || ''}</head><body>
 ${body}
 <div class="footer">Powered by LeadFlow</div>
+${page.body_code || ''}
 <script>
 async function submitLead(e){e.preventDefault();const f=e.target;
 const data=Object.fromEntries(new FormData(f).entries());
