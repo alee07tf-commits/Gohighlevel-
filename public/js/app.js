@@ -21,6 +21,7 @@ import { renderTraining } from './views/training.js';
 import { renderAnalytics } from './views/analytics.js';
 import { renderForms } from './views/forms.js';
 import { renderDevelopers } from './views/developers.js';
+import { renderMarketplace } from './views/marketplace.js';
 
 const IC = {
   dashboard: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -42,6 +43,7 @@ const IC = {
   analytics: '<svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg>',
   forms: '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
   developers: '<svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+  marketplace: '<svg viewBox="0 0 24 24"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M3 9h18"/><path d="M9 20v-6h6v6"/></svg>',
 };
 
 function navSections() {
@@ -52,7 +54,7 @@ function navSections() {
     { title: t('Formación', 'Training'), items: ['training'] },
     // The agency layer is admin-only: "Clientes" manages the agencies below you
     // in the tenant tree; the agency console is SaaS/cross-account/white-label.
-    { title: t('Cuenta', 'Account'), items: [...(isAdmin ? ['clients', 'agency', 'developers'] : []), 'settings'] },
+    { title: t('Cuenta', 'Account'), items: ['marketplace', ...(isAdmin ? ['clients', 'agency', 'developers'] : []), 'settings'] },
   ];
 }
 
@@ -76,6 +78,7 @@ const NAV = [
   { path: 'training', label: () => t('Formación', 'Training'), view: renderTraining },
   { path: 'analytics', label: () => t('Informes', 'Analytics'), view: renderAnalytics },
   { path: 'developers', label: () => t('API y Webhooks', 'API & Webhooks'), view: renderDevelopers },
+  { path: 'marketplace', label: () => t('Marketplace', 'Marketplace'), view: renderMarketplace },
   { path: 'settings', label: () => t('Ajustes', 'Settings'), view: renderSettings },
 ];
 

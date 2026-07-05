@@ -37,6 +37,7 @@ app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/forms', require('./routes/forms'));
 app.use('/api/api-keys', require('./routes/api-keys'));
 app.use('/api/inbound-webhooks', require('./routes/inbound'));
+app.use('/api/apps', require('./routes/apps'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/system', require('./routes/system'));

@@ -6,6 +6,8 @@ const automation = require('../services/automation');
 const scheduler = require('../services/scheduler');
 const scoring = require('../services/scoring');
 const customValues = require('../services/customValues');
+const leads = require('../services/leads');
+const secretbox = require('../services/secretbox');
 
 const router = express.Router();
 
@@ -308,6 +310,90 @@ router.post('/inbound/:token', async (req, res) => {
   await automation.trigger(loc, 'form_submitted', contact, { webhook: hook.name });
   if (tag) await automation.trigger(loc, 'tag_added', contact, { tag });
   res.status(201).json({ ok: true, contact_id: contact.id, created: isNew });
+});
+
+// ---- Meta (Facebook/Instagram) Lead Ads webhook ----
+// Verification handshake: Meta GETs with hub.challenge; echo it back when the
+// verify token matches. Configure this URL as the page's leadgen callback.
+router.get('/meta/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token && token === (process.env.META_VERIFY_TOKEN || '')) {
+    return res.status(200).send(String(challenge || ''));
+  }
+  res.sendStatus(403);
+});
+
+// Maps a Meta lead's field_data ([{name, values:[...]}]) to our lead shape.
+function mapMetaFields(fieldData = []) {
+  const out = { email: '', phone: '', name: '', first_name: '', last_name: '', custom: {} };
+  for (const f of fieldData) {
+    const name = String(f.name || '').toLowerCase();
+    const value = Array.isArray(f.values) ? f.values[0] : f.value;
+    if (value == null) continue;
+    if (name.includes('email')) out.email = value;
+    else if (name.includes('phone')) out.phone = value;
+    else if (name === 'full_name' || name === 'name') out.name = value;
+    else if (name === 'first_name') out.first_name = value;
+    else if (name === 'last_name') out.last_name = value;
+    else out.custom[f.name] = value;
+  }
+  return out;
+}
+
+// Fetches a lead's fields from the Graph API using the page's stored token.
+async function fetchMetaLead(leadgenId, token) {
+  try {
+    const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${encodeURIComponent(token)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    return json.field_data || null;
+  } catch {
+    return null;
+  }
+}
+
+// Receives leadgen changes. Always 200 quickly so Meta doesn't retry; ingest is
+// best-effort. Maps each change's page_id to a connected sub-account.
+router.post('/meta/webhook', async (req, res) => {
+  res.sendStatus(200); // acknowledge immediately
+  try {
+    const entries = (req.body && req.body.entry) || [];
+    for (const entry of entries) {
+      for (const change of entry.changes || []) {
+        if (change.field !== 'leadgen') continue;
+        const v = change.value || {};
+        const pageId = String(v.page_id || entry.id || '');
+        if (!pageId) continue;
+        const acct = await db.get(`SELECT * FROM connected_accounts WHERE app = 'meta' AND external_id = ?`, [pageId]);
+        if (!acct) continue;
+
+        // Prefer inline field_data (some setups include it); else fetch via Graph.
+        let fieldData = v.field_data || null;
+        if (!fieldData && v.leadgen_id) {
+          let token = '';
+          try { token = (secretbox.decrypt(acct.access_token) || {}).v || ''; } catch { token = ''; }
+          if (token) fieldData = await fetchMetaLead(v.leadgen_id, token);
+        }
+        if (!fieldData) continue;
+
+        const m = mapMetaFields(fieldData);
+        await leads.ingestLead({
+          location_id: acct.location_id,
+          email: m.email, phone: m.phone, name: m.name,
+          first_name: m.first_name, last_name: m.last_name,
+          custom: { ...m.custom, meta_form_id: v.form_id || '' },
+          source: 'meta:lead-ad',
+          tag: 'meta-lead',
+          activityLabel: 'Lead de Meta (Facebook/Instagram)',
+        });
+      }
+    }
+  } catch (err) {
+    console.error('meta leadgen ingest failed:', err.message);
+  }
 });
 
 // ---- Standalone public form ----

@@ -537,6 +537,26 @@ CREATE TABLE IF NOT EXISTS inbound_webhooks (
 );
 CREATE INDEX IF NOT EXISTS idx_inbound_webhooks_location ON inbound_webhooks(location_id);
 
+-- Native app connections (v3.1): OAuth links to first-party integrations
+-- (Meta, Google, Shopify, Stripe Connect, Zoom, QuickBooks, PayPal…). One row
+-- per (location, app). Tokens are stored encrypted (secretbox) in access_token/
+-- refresh_token; data holds provider-specific state (selected page, mappings).
+CREATE TABLE IF NOT EXISTS connected_accounts (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  app TEXT NOT NULL,
+  external_id TEXT DEFAULT '',
+  display_name TEXT DEFAULT '',
+  access_token TEXT DEFAULT '',
+  refresh_token TEXT DEFAULT '',
+  scopes TEXT DEFAULT '',
+  data TEXT DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'connected',
+  expires_at TIMESTAMPTZ,
+  connected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_connected_accounts_loc_app ON connected_accounts(location_id, app);
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -642,7 +662,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 15;
+const SCHEMA_VERSION = 16;
 
 let readyPromise = null;
 function ensureReady() {
