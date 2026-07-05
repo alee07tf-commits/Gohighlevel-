@@ -689,6 +689,20 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read);
+-- Reusable discount codes (coupons) applied to invoices/checkout, like GHL.
+CREATE TABLE IF NOT EXISTS coupons (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'percent',
+  value DOUBLE PRECISION NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  uses INTEGER NOT NULL DEFAULT 0,
+  max_uses INTEGER NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coupons_loc_code ON coupons(location_id, lower(code));
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -761,7 +775,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 27;
+const SCHEMA_VERSION = 28;
 
 let readyPromise = null;
 function ensureReady() {

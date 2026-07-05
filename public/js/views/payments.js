@@ -17,6 +17,7 @@ export async function renderPayments(view) {
   <div class="page-header">
     <h1>${t('Pagos', 'Payments')}</h1>
     <div class="spacer"></div>
+    <button class="btn secondary" id="coupons-btn">${t('Cupones', 'Coupons')}</button>
     <button class="btn secondary" id="products-btn">${t('Productos', 'Products')}</button>
     <button class="btn" id="new-invoice">${t('+ Factura', '+ Invoice')}</button>
   </div>
@@ -52,6 +53,50 @@ export async function renderPayments(view) {
 
   view.querySelector('#new-invoice').addEventListener('click', invoiceModal);
   view.querySelector('#products-btn').addEventListener('click', productsModal);
+  view.querySelector('#coupons-btn').addEventListener('click', couponsModal);
+
+  async function couponsModal() {
+    const list = await api('/coupons');
+    const modal = openModal(`
+      <h2>${t('Cupones de descuento', 'Discount coupons')}</h2>
+      <p class="muted" style="margin-bottom:12px;font-size:13px">${t('Códigos reutilizables que aplican descuento al crear una factura o en el checkout.', 'Reusable codes that apply a discount when creating an invoice or at checkout.')}</p>
+      <div id="cp-list" style="margin-bottom:14px">${list.length ? list.map(couponRow).join('') : `<p class="muted">${t('Sin cupones todavía.', 'No coupons yet.')}</p>`}</div>
+      <form id="cp-form" class="card" style="padding:12px">
+        <div class="form-row">
+          <label class="field"><span class="label">${t('Código', 'Code')}</span><input class="input" name="code" placeholder="VERANO20" required></label>
+          <label class="field" style="max-width:130px"><span class="label">${t('Tipo', 'Type')}</span>
+            <select class="input" name="type"><option value="percent">%</option><option value="fixed">${t('fijo', 'fixed')}</option></select></label>
+          <label class="field" style="max-width:120px"><span class="label">${t('Valor', 'Value')}</span><input class="input" name="value" type="number" step="0.01" min="0" required></label>
+        </div>
+        <div class="form-row">
+          <label class="field"><span class="label">${t('Usos máx. (0 = ilimitado)', 'Max uses (0 = unlimited)')}</span><input class="input" name="max_uses" type="number" min="0" value="0"></label>
+          <label class="field"><span class="label">${t('Caduca (opcional)', 'Expires (optional)')}</span><input class="input" name="expires_at" type="date"></label>
+        </div>
+        <button class="btn">${t('+ Crear cupón', '+ Create coupon')}</button>
+      </form>`);
+    const reload = () => { closeOverlay(); couponsModal(); };
+    modal.querySelectorAll('.cp-del').forEach((b) => b.addEventListener('click', async () => {
+      await api(`/coupons/${b.dataset.id}`, { method: 'DELETE' }); reload();
+    }));
+    modal.querySelectorAll('.cp-toggle').forEach((b) => b.addEventListener('click', async () => {
+      await api(`/coupons/${b.dataset.id}`, { method: 'PUT', body: { active: b.dataset.active === '0' } }); reload();
+    }));
+    modal.querySelector('#cp-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = Object.fromEntries(new FormData(e.target));
+      try { await api('/coupons', { method: 'POST', body: { ...f, value: Number(f.value), max_uses: Number(f.max_uses), expires_at: f.expires_at || null } }); reload(); }
+      catch (err) { toast(err.message, true); }
+    });
+  }
+  function couponRow(c) {
+    const val = c.type === 'percent' ? `${c.value}%` : fmtMoney(c.value);
+    const exp = c.expires_at ? ` · ${t('caduca', 'exp')} ${fmtDate(c.expires_at)}` : '';
+    const uses = c.max_uses ? `${c.uses}/${c.max_uses}` : `${c.uses}`;
+    return `<div class="appt-row"><div style="flex:1"><strong>${esc(c.code)}</strong> <span class="badge ${c.active ? 'green' : 'gray'}">${c.active ? t('activo', 'active') : t('inactivo', 'off')}</span>
+      <div class="muted" style="font-size:11px">${val} ${t('dto', 'off')} · ${t('usos', 'uses')} ${uses}${exp}</div></div>
+      <button class="btn ghost small cp-toggle" data-id="${c.id}" data-active="${c.active}">${c.active ? t('Desactivar', 'Disable') : t('Activar', 'Enable')}</button>
+      <button class="btn ghost small cp-del" data-id="${c.id}">✕</button></div>`;
+  }
 
   async function productsModal() {
     const products = await api('/payments/products').catch(() => []);
@@ -146,6 +191,7 @@ export async function renderPayments(view) {
       <div class="form-row" style="margin-top:8px">
         <label class="field"><span class="label">${t('Descuento (importe)', 'Discount (amount)')}</span><input class="input" id="inv-discount" type="number" step="0.01" min="0" value="0"></label>
         <label class="field"><span class="label">${t('Impuesto (%)', 'Tax (%)')}</span><input class="input" id="inv-tax" type="number" step="0.01" min="0" value="0"></label>
+        <label class="field"><span class="label">${t('Cupón (opcional)', 'Coupon (optional)')}</span><input class="input" id="inv-coupon" placeholder="VERANO20"></label>
       </div>
       <div class="modal-actions">
         <button class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
@@ -210,6 +256,7 @@ export async function renderPayments(view) {
             due_date: modal.querySelector('#inv-due').value,
             discount: Number(modal.querySelector('#inv-discount').value) || 0,
             tax_rate: Number(modal.querySelector('#inv-tax').value) || 0,
+            coupon_code: modal.querySelector('#inv-coupon').value.trim() || undefined,
             items: items.filter((it) => it.name && Number(it.price) > 0),
           },
         });
