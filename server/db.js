@@ -703,6 +703,22 @@ CREATE TABLE IF NOT EXISTS coupons (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_coupons_loc_code ON coupons(location_id, lower(code));
+-- Documents & contracts with e-signature (send → client signs on a public link).
+CREATE TABLE IF NOT EXISTS documents (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  body TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft',
+  token TEXT NOT NULL,
+  signer_name TEXT DEFAULT '',
+  signature TEXT DEFAULT '',
+  signed_at TIMESTAMPTZ,
+  signed_ip TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_documents_location ON documents(location_id);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -775,7 +791,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 28;
+const SCHEMA_VERSION = 29;
 
 let readyPromise = null;
 function ensureReady() {

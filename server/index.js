@@ -48,6 +48,7 @@ app.use('/api/system', require('./routes/system'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/coupons', require('./routes/coupons'));
+app.use('/api/documents', require('./routes/documents'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/custom-fields', require('./routes/custom-fields'));
 app.use('/api/custom-values', require('./routes/custom-values'));
@@ -68,7 +69,7 @@ app.get('/widget.js', require('./routes/chat-public').widgetScript);
 
 // Public pretty URLs: funnels (/f/...), booking (/book/...), reports (/r/...),
 // invoice payment (/pay/...) and review gate (/review/...).
-for (const prefix of ['/f', '/book', '/r', '/pay', '/review', '/l', '/signup', '/form', '/course']) {
+for (const prefix of ['/f', '/book', '/r', '/pay', '/review', '/l', '/signup', '/form', '/course', '/sign']) {
   app.use(prefix, (req, res, next) => {
     req.url = prefix + req.url;
     require('./routes/public')(req, res, next);

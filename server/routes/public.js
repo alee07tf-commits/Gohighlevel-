@@ -1196,4 +1196,86 @@ router.post('/saas/:slug/signup', async (req, res) => {
   res.status(201).json({ mode: 'simulated', ok: true, location_id: out.locationId, login_url: '/', temp_password: out.password });
 });
 
+// ---- Public document e-signature ----
+function signPage(doc, brand, signed) {
+  const color = brand || '#4f46e5';
+  const bodyHtml = esc(doc.body || '').replace(/\n/g, '<br>');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(doc.title)}</title>
+  <style>
+    body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#f1f5f9;margin:0;color:#0f172a}
+    .wrap{max-width:720px;margin:0 auto;padding:24px}
+    .card{background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.08);padding:28px;margin-top:20px}
+    h1{font-size:1.5rem;margin:0 0 4px} .muted{color:#64748b;font-size:13px}
+    .doc-body{margin:20px 0;line-height:1.6;white-space:normal}
+    label{display:block;font-weight:600;font-size:13px;margin:14px 0 6px}
+    input{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box}
+    canvas{border:1px solid #cbd5e1;border-radius:9px;width:100%;height:150px;touch-action:none;background:#fff}
+    .btn{background:${color};color:#fff;border:0;border-radius:10px;padding:13px 20px;font-size:15px;font-weight:600;cursor:pointer;width:100%;margin-top:16px}
+    .link{background:none;color:#64748b;border:0;font-size:13px;cursor:pointer;margin-top:8px;text-decoration:underline}
+    .signed{background:#dcfce7;border:1px solid #86efac;color:#166534;padding:14px;border-radius:10px;text-align:center;font-weight:600}
+  </style></head><body><div class="wrap"><div class="card">
+    <h1>${esc(doc.title)}</h1>
+    <div class="muted">${esc(doc.location_name || '')}</div>
+    <div class="doc-body">${bodyHtml || '<span class="muted">—</span>'}</div>
+    ${signed ? `<div class="signed">✓ Documento firmado por ${esc(doc.signer_name)} el ${new Date(doc.signed_at).toLocaleDateString('es-ES')}</div>
+      ${doc.signature ? `<div style="margin-top:12px;text-align:center"><img src="${esc(doc.signature)}" alt="firma" style="max-height:120px"></div>` : ''}`
+    : `<form id="sform">
+        <label>Nombre completo</label><input name="signer_name" required placeholder="Tu nombre y apellidos">
+        <label>Firma (dibuja con el dedo o el ratón)</label>
+        <canvas id="pad"></canvas>
+        <button type="button" class="link" id="clear">Borrar firma</button>
+        <button class="btn" type="submit">Firmar documento</button>
+      </form>`}
+  </div></div>
+  ${signed ? '' : `<script>
+    const c=document.getElementById('pad'),x=c.getContext('2d');
+    function size(){const r=c.getBoundingClientRect();c.width=r.width;c.height=r.height;x.lineWidth=2.5;x.lineCap='round';x.strokeStyle='#0f172a';}
+    size();window.addEventListener('resize',size);
+    let d=false,drawn=false;const pos=e=>{const r=c.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return[t.clientX-r.left,t.clientY-r.top];};
+    const start=e=>{d=true;const[a,b]=pos(e);x.beginPath();x.moveTo(a,b);e.preventDefault();};
+    const move=e=>{if(!d)return;const[a,b]=pos(e);x.lineTo(a,b);x.stroke();drawn=true;e.preventDefault();};
+    const end=()=>{d=false;};
+    c.addEventListener('mousedown',start);c.addEventListener('mousemove',move);window.addEventListener('mouseup',end);
+    c.addEventListener('touchstart',start);c.addEventListener('touchmove',move);c.addEventListener('touchend',end);
+    document.getElementById('clear').onclick=()=>{x.clearRect(0,0,c.width,c.height);drawn=false;};
+    document.getElementById('sform').addEventListener('submit',async e=>{
+      e.preventDefault();
+      const name=e.target.signer_name.value.trim();
+      if(!name)return alert('Escribe tu nombre');
+      if(!drawn)return alert('Dibuja tu firma');
+      const r=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({signer_name:name,signature:c.toDataURL('image/png')})});
+      if(r.ok)location.reload();else alert('No se pudo firmar');
+    });
+  </script>`}
+  </body></html>`;
+}
+
+router.get('/sign/:token', async (req, res) => {
+  const doc = await db.get(
+    `SELECT d.*, l.name AS location_name, l.brand_color FROM documents d JOIN locations l ON l.id = d.location_id WHERE d.token = ?`,
+    [req.params.token]
+  );
+  if (!doc) return res.status(404).send('Documento no encontrado');
+  res.send(signPage(doc, doc.brand_color, doc.status === 'signed'));
+});
+
+router.post('/sign/:token', async (req, res) => {
+  const doc = await db.get('SELECT * FROM documents WHERE token = ?', [req.params.token]);
+  if (!doc) return res.status(404).json({ error: 'Documento no encontrado' });
+  if (doc.status === 'signed') return res.status(400).json({ error: 'Ya firmado' });
+  const { signer_name, signature } = req.body || {};
+  if (!signer_name || !signature) return res.status(400).json({ error: 'Nombre y firma requeridos' });
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
+  await db.run(
+    "UPDATE documents SET status = 'signed', signer_name = ?, signature = ?, signed_at = now(), signed_ip = ? WHERE id = ?",
+    [String(signer_name).slice(0, 120), String(signature).slice(0, 200000), ip, doc.id]
+  );
+  if (doc.contact_id) {
+    try { await require('../services/automation').logActivity(doc.location_id, doc.contact_id, 'note', `Documento firmado: ${doc.title}`); } catch {}
+    try { await require('../services/notifications').notifyLocationTeam(doc.location_id, { type: 'document', title: 'Documento firmado', body: `${signer_name} firmó "${doc.title}"`, link: '#/documents' }); } catch {}
+  }
+  res.json({ ok: true });
+});
+
 module.exports = router;
