@@ -64,6 +64,16 @@ export async function renderMarketplace(view) {
       <div class="muted" style="font-size:11.5px;margin-top:auto">${managedFoot(m)}</div>
     </div>`;
 
+  // Webhook endpoint the operator must configure in the provider, for the push
+  // integrations. Shows only once the app is connected.
+  const base = location.origin;
+  const webhookUrl = (key, conn) => {
+    if (key === 'shopify') return `${base}/api/public/shopify/webhook`;
+    if (key === 'meta') return `${base}/api/public/meta/webhook`;
+    if (key === 'calendly') return conn.webhook_token ? `${base}/api/public/calendly/${conn.webhook_token}` : '';
+    return '';
+  };
+
   const groups = {};
   for (const app of catalog) (groups[app.category] ||= []).push(app);
 
@@ -87,6 +97,11 @@ export async function renderMarketplace(view) {
         </div>
       </div>
       ${conn ? `<div class="muted" style="font-size:11.5px">${t('Conectado', 'Connected')} ${conn.connected_at ? fmtDate(conn.connected_at) : ''}${connLabel(conn) ? ` · ${esc(connLabel(conn))}` : ''}</div>` : ''}
+      ${conn && webhookUrl(app.key, conn) ? `<div style="margin-top:2px">
+        <div class="muted" style="font-size:10.5px;margin-bottom:2px">${t('Apunta el webhook de esta app a:', 'Point this app’s webhook to:')}</div>
+        <div class="flex" style="gap:6px"><code class="inline" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px">${esc(webhookUrl(app.key, conn))}</code>
+          <button class="btn ghost small hook-copy" data-url="${esc(webhookUrl(app.key, conn))}">${t('Copiar', 'Copy')}</button></div>
+      </div>` : ''}
       <div class="flex" style="gap:6px;margin-top:auto">
         ${conn
           ? `<button class="btn ghost small app-disconnect" data-id="${conn.id}" ${isAdmin ? '' : 'disabled'}>${t('Desconectar', 'Disconnect')}</button>`
@@ -133,6 +148,10 @@ export async function renderMarketplace(view) {
       toast(t('Desconectado', 'Disconnected'));
       renderMarketplace(view);
     } catch (err) { toast(err.message, true); }
+  }));
+
+  view.querySelectorAll('.hook-copy').forEach((b) => b.addEventListener('click', () => {
+    navigator.clipboard?.writeText(b.dataset.url).then(() => toast(t('Copiado', 'Copied')), () => toast(b.dataset.url));
   }));
 
   function showBuiltin(app) {
