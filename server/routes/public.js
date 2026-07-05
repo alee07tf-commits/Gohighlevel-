@@ -195,7 +195,7 @@ router.get('/f/:funnelSlug{/:pageSlug}', async (req, res) => {
 ${seo}
 <style>${css}</style>${page.head_code || ''}</head><body>
 ${body}
-<div class="footer">Powered by LeadFlow</div>
+<div class="footer">Powered by Upcro</div>
 ${page.body_code || ''}
 <script>
 async function submitLead(e){e.preventDefault();const f=e.target;
@@ -712,7 +712,7 @@ router.get('/book/:slug', async (req, res) => {
 <label>Time<select name="time" id="time"></select></label>
 <button class="btn" type="submit">Book Appointment</button>
 </form></div>
-<div class="footer">Powered by LeadFlow</div>
+<div class="footer">Powered by Upcro</div>
 <script>
 const startHour=${calendar.start_hour},endHour=${calendar.end_hour},dur=${calendar.duration_minutes};
 const sel=document.getElementById('time');
@@ -918,7 +918,7 @@ ${paid || justPaid
         : `<form method="post" action="/api/public/pay/${esc(inv.token)}/simulate-paid"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} (modo prueba)</button></form>
            <p class="muted" style="text-align:center;margin-top:10px">Stripe no está conectado todavía — este botón simula el pago para pruebas.</p>`}
 </div>
-<div class="foot">Powered by LeadFlow</div></div></body></html>`);
+<div class="foot">Powered by Upcro</div></div></body></html>`);
 });
 
 // Quote acceptance: converts the estimate into a payable invoice and
@@ -996,7 +996,7 @@ textarea{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px;fon
 </div>
 <div id="done">¡Gracias por tu opinión! La usaremos para mejorar.</div>
 </div>
-<div class="foot">Powered by LeadFlow</div>
+<div class="foot">Powered by Upcro</div>
 <script>
 const googleLink=${JSON.stringify(location.review_link_google || '')};
 let rating=0;
@@ -1135,7 +1135,7 @@ input.in{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px
     <label class="field"><span>Email</span><input class="in" type="email" name="email" required></label>
     <button class="btn" id="sb">Crear mi cuenta</button>
   </div>
-</form><div class="foot">Powered by LeadFlow</div></div>
+</form><div class="foot">Powered by Upcro</div></div>
 <script>
 const f=document.getElementById('f'),msg=document.getElementById('msg');
 f.addEventListener('submit',async e=>{e.preventDefault();const b=document.getElementById('sb');b.disabled=true;b.textContent='Creando…';

@@ -92,7 +92,7 @@ async function processJob(job) {
         to,
         subject: `☀️ Briefing ${location.name} — ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}`,
         text: lines.join('\n'),
-        fromName: 'LeadFlow',
+        fromName: 'Upcro',
       });
       return result.ok ? `briefing sent to ${to} (${result.provider})` : `briefing failed: ${result.error}`;
     }

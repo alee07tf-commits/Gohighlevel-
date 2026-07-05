@@ -157,7 +157,7 @@ test('appointment_status_changed trigger fires on no-show', async () => {
 test('snapshots: export from A, import into B', async () => {
   await request(app).post('/api/funnels').set(headers).send({ name: 'Snap Funnel' });
   const snap = await request(app).get('/api/snapshots/export').set(headers);
-  assert.equal(snap.body.kind, 'leadflow-snapshot');
+  assert.equal(snap.body.kind, 'upcro-snapshot');
   assert.ok(snap.body.workflows.length >= 1);
   assert.ok(snap.body.funnels.length >= 1);
 
@@ -180,7 +180,7 @@ test('branding: brand color applied to public funnel page', async () => {
 test('PWA: manifest, service worker and icons are served', async () => {
   const manifest = await request(app).get('/manifest.json');
   assert.equal(manifest.status, 200);
-  assert.equal(JSON.parse(manifest.text).short_name, 'LeadFlow');
+  assert.equal(JSON.parse(manifest.text).short_name, 'Upcro');
   const sw = await request(app).get('/sw.js');
   assert.equal(sw.status, 200);
   assert.match(sw.text, /addEventListener\('fetch'/);

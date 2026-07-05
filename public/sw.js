@@ -1,8 +1,8 @@
-// LeadFlow service worker.
+// Upcro service worker.
 // Strategy: pre-cache the app shell; cache-first for static assets with
 // background refresh; network-only for API calls (never cache business data)
 // with a friendly offline fallback page for navigations.
-const VERSION = 'leadflow-v3';
+const VERSION = 'upcro-v3';
 const SHELL = [
   '/',
   '/index.html',
@@ -34,10 +34,10 @@ self.addEventListener('activate', (event) => {
 });
 
 const OFFLINE_PAGE = `<!doctype html><html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin conexión — LeadFlow</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin conexión — Upcro</title>
 <style>body{font-family:system-ui;background:#111827;color:#e5e7eb;display:flex;align-items:center;justify-content:center;
 min-height:100vh;margin:0;text-align:center}div{max-width:320px}h1{font-size:44px;margin:0}</style></head>
-<body><div><h1>⚡</h1><h2>Sin conexión</h2><p>LeadFlow necesita internet para cargar tus datos.
+<body><div><h1>⚡</h1><h2>Sin conexión</h2><p>Upcro necesita internet para cargar tus datos.
 Reintentaremos automáticamente cuando vuelva la conexión.</p></div>
 <script>addEventListener('online',()=>location.reload())</script></body></html>`;
 

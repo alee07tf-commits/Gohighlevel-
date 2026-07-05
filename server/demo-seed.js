@@ -1,23 +1,23 @@
 // Demo-agency seed data, callable both from the CLI (server/seed.js) and at
-// boot on ephemeral hosts (AUTO_SEED). Login: demo@leadflow.app / demo123
+// boot on ephemeral hosts (AUTO_SEED). Login: demo@upcro.app / demo123
 const bcrypt = require('bcryptjs');
 const db = require('./db');
 
 // Returns true if it seeded, false if demo data already existed.
 async function seedDemo() {
-  if (await db.get('SELECT id FROM users WHERE email = ?', ['demo@leadflow.app'])) return false;
+  if (await db.get('SELECT id FROM users WHERE email = ?', ['demo@upcro.app'])) return false;
 
   await db.tx(async (t) => {
     // Serialize competing seeders (boot auto-seed vs manual endpoint) — the
     // loser re-checks inside the lock and exits instead of colliding on the
     // unique email index.
     await t.get('SELECT pg_advisory_xact_lock(815052)');
-    if (await t.get('SELECT id FROM users WHERE email = ?', ['demo@leadflow.app'])) return;
+    if (await t.get('SELECT id FROM users WHERE email = ?', ['demo@upcro.app'])) return;
 
     const agencyId = await t.insert('INSERT INTO agencies (name) VALUES (?)', ['Demo Marketing Agency']);
 
     await t.run('INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)', [
-      agencyId, 'Demo Admin', 'demo@leadflow.app', bcrypt.hashSync('demo123', 10), 'admin',
+      agencyId, 'Demo Admin', 'demo@upcro.app', bcrypt.hashSync('demo123', 10), 'admin',
     ]);
 
     const locId = await t.insert(
@@ -167,13 +167,13 @@ async function seedDemo() {
 
     // A sample client = a child agency with its own admin login and first
     // sub-account. Shows the recursive model: this client sees the course above
-    // and can manage its own sub-accounts. Login: cliente@leadflow.app / demo123
+    // and can manage its own sub-accounts. Login: cliente@upcro.app / demo123
     const clientAgencyId = await t.insert(
       'INSERT INTO agencies (name, parent_agency_id, slug, brand_color) VALUES (?, ?, ?, ?)',
       ['Cliente Demo — Bright Smile', agencyId, 'bright-smile', '#0ea5e9']
     );
     await t.run('INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)', [
-      clientAgencyId, 'Cliente Demo', 'cliente@leadflow.app', bcrypt.hashSync('demo123', 10), 'admin',
+      clientAgencyId, 'Cliente Demo', 'cliente@upcro.app', bcrypt.hashSync('demo123', 10), 'admin',
     ]);
     await t.run('INSERT INTO locations (agency_id, name, company) VALUES (?, ?, ?)', [
       clientAgencyId, 'Bright Smile Dental', 'Bright Smile SL',

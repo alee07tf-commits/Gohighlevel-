@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const db = require('./db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'leadflow-dev-secret-change-me';
+const JWT_SECRET = process.env.JWT_SECRET || 'upcro-dev-secret-change-me';
 const API_KEY_PREFIX = 'lf_';
 
 // Public API keys: a random secret shown once, stored only as a SHA-256 hash.

@@ -88,7 +88,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`LeadFlow running on http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`Upcro running on http://localhost:${PORT}`));
   // Resident scheduler when running as a long-lived server.
   setInterval(() => scheduler.tick().catch((e) => console.error('tick failed:', e.message)), 30_000);
 }

@@ -2,7 +2,7 @@ import { api, setSession } from '../api.js';
 import { formData, toast, esc } from '../ui.js';
 import { t } from '../i18n.js';
 
-// Default (unbranded) LeadFlow header, or a client's white-label header when a
+// Default (unbranded) Upcro header, or a client's white-label header when a
 // brand slug is present in the URL (`#/login/<slug>`).
 function authShell(inner, brand) {
   const logo = brand
@@ -11,7 +11,7 @@ function authShell(inner, brand) {
           ? `<img src="${esc(brand.logo_url)}" alt="${esc(brand.name)}" style="max-height:38px">`
           : esc(brand.name)
       }</div>`
-    : '<div class="logo">Lead<span>Flow</span></div>';
+    : '<div class="logo">Up<span>cro</span></div>';
   return `<div class="auth-wrap"><div class="auth-card">${logo}${inner}</div></div>`;
 }
 
@@ -72,7 +72,7 @@ export async function renderLogin(root, brandSlug) {
       <button class="btn" style="width:100%">${t('Entrar', 'Sign in')}</button>
     </form>
     ${brand ? '' : `<p class="alt">${t('¿Nueva agencia?', 'New agency?')} <a href="#/register">${t('Crea una cuenta', 'Create an account')}</a></p>`}
-    ${brand ? '' : '<p class="alt muted">Demo: <code class="inline">demo@leadflow.app</code> / <code class="inline">demo123</code></p>'}`,
+    ${brand ? '' : '<p class="alt muted">Demo: <code class="inline">demo@upcro.app</code> / <code class="inline">demo123</code></p>'}`,
     brand
   );
 

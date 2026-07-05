@@ -120,7 +120,10 @@ router.get('/export', requireLocation, async (req, res) => {
 
 router.post('/import', requireLocation, async (req, res) => {
   const snap = req.body || {};
-  if (snap.kind !== 'leadflow-snapshot') return res.status(400).json({ error: 'Not a valid LeadFlow snapshot' });
+  // Accept the new 'upcro-snapshot' kind and the legacy 'leadflow-snapshot' for
+  // backward compatibility with exports made before the rebrand.
+  if (snap.kind !== 'upcro-snapshot' && snap.kind !== 'leadflow-snapshot')
+    return res.status(400).json({ error: 'Not a valid Upcro snapshot' });
   const counts = await db.tx((t) => snapshots.applySnapshot(t, req.location.id, snap));
   res.json({ ok: true, imported: counts });
 });
