@@ -76,19 +76,31 @@ router.post('/', async (req, res) => {
   if (await db.get('SELECT id FROM users WHERE email = ?', [admin_email]))
     return res.status(409).json({ error: 'Ese email ya está registrado' });
 
+  // Plan-driven provisioning (the GoHighLevel model): if a plan is chosen, it
+  // brings its own template (snapshot) and opens a subscription automatically —
+  // "elige el plan y ya le trae todo configurado". An explicit snapshot_id still
+  // wins if the admin picked one on purpose.
+  let plan = null;
+  if (req.body?.plan_id) {
+    plan = await db.get('SELECT * FROM plans WHERE id = ? AND agency_id = ?', [req.body.plan_id, req.user.agency_id]);
+    if (!plan) return res.status(400).json({ error: 'Plan no encontrado' });
+  }
+
   // Snapshots belong to the creating (effective) agency; resolve the row here
   // and hand it to provisioning so the new client's first sub-account is
   // installed from the chosen template.
   let snapshot;
   if (req.body?.snapshot_id !== undefined && Number(req.body.snapshot_id) !== 0) {
     snapshot = await provisioning.resolveSnapshot(req.user.agency_id, Number(req.body.snapshot_id));
+  } else if (plan && plan.snapshot_id) {
+    snapshot = await provisioning.resolveSnapshot(req.user.agency_id, plan.snapshot_id); // the plan's template
   } else if (req.body?.snapshot_id === undefined) {
     snapshot = await provisioning.resolveSnapshot(req.user.agency_id, undefined); // agency default, if any
   } else {
     snapshot = null; // snapshot_id === 0 → empty
   }
 
-  const childAgencyId = await db.tx(async (t) => {
+  const created = await db.tx(async (t) => {
     const aid = await t.insert('INSERT INTO agencies (name, parent_agency_id) VALUES (?, ?)', [
       agency_name,
       req.user.agency_id,
@@ -96,11 +108,12 @@ router.post('/', async (req, res) => {
     // Give the client a unique slug so it gets a branded login link out of the box.
     const slug = await uniqueSlug(t, agency_name, aid);
     await t.run('UPDATE agencies SET slug = ? WHERE id = ?', [slug, aid]);
-    await t.insert('INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)', [
+    const uid = await t.insert('INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)', [
       aid, admin_name || agency_name, admin_email, bcrypt.hashSync(admin_password, 10), 'admin',
     ]);
-    return aid;
+    return { agencyId: aid, adminUserId: uid };
   });
+  const childAgencyId = created.agencyId;
 
   // First sub-account for the client (own transaction). Snapshot is passed as a
   // pre-resolved row so provisioning doesn't look it up under the child agency.
@@ -110,8 +123,20 @@ router.post('/', async (req, res) => {
     snapshot: snapshot || null,
   });
 
+  // Open the subscription so the client is on the plan from day one (and the
+  // agency's MRR/roll-up reflects it). Managed services (SMS/WhatsApp/Email/AI)
+  // are already available via the credential cascade — nothing for the client
+  // to set up.
+  if (plan) {
+    await db.run(
+      `INSERT INTO subscriptions (agency_id, location_id, plan_id, client_user_id, status)
+       VALUES (?, ?, ?, ?, 'active')`,
+      [req.user.agency_id, result.locId, plan.id, created.adminUserId]
+    );
+  }
+
   const agency = await db.get('SELECT id, name, slug, brand_color, logo_url FROM agencies WHERE id = ?', [childAgencyId]);
-  res.status(201).json({ ...agency, first_location_id: result.locId, provisioned: result.provisioned });
+  res.status(201).json({ ...agency, first_location_id: result.locId, provisioned: result.provisioned, plan: plan ? { id: plan.id, name: plan.name } : null });
 });
 
 // Rename / rebrand a direct child agency.

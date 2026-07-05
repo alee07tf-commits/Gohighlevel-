@@ -121,10 +121,21 @@ router.get('/', requireLocation, async (req, res) => {
       scopes: r.scopes, status: r.status, expires_at: r.expires_at, connected_at: r.connected_at, data,
     };
   }
-  // Managed-service tier (SMS/WhatsApp/Email/AI): status resolved from the
-  // agency→sub-account credential cascade, not from connected_accounts.
+  // Managed-service tier (SMS/WhatsApp/Email/AI): backend status from the
+  // agency→sub-account credential cascade, gated by the plan the sub-account is
+  // on (its active subscription's features). No subscription → no gating.
   const status = await providers.status({ locationId: req.location.id, agencyId: req.user.agency_id });
-  res.json({ catalog: apps.publicCatalog(), categories: apps.CATEGORIES, connected, managed: apps.managedStatus(status) });
+  const sub = await db.get(
+    `SELECT p.features FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+     WHERE s.location_id = ? AND s.status = 'active' ORDER BY s.id DESC LIMIT 1`,
+    [req.location.id]
+  );
+  let planFeatures = null;
+  if (sub) { try { planFeatures = JSON.parse(sub.features || '{}'); } catch { planFeatures = {}; } }
+  res.json({
+    catalog: apps.publicCatalog(), categories: apps.CATEGORIES, connected,
+    managed: apps.managedStatus(status, planFeatures), plan_gated: Boolean(sub),
+  });
 });
 
 // Begin OAuth: returns { authorize_url } or { needs_config, missing } / errors.

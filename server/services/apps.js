@@ -218,19 +218,29 @@ const MANAGED = [
             'AI replies and copywriting across the platform, with no keys on your side.'] },
 ];
 
-// Resolves the managed-service tier for a context using providers.status(): each
-// service reports whether it's active and where it's configured (plataforma /
-// agencia / estancia). Pure metadata + status — no secrets.
-function managedStatus(status) {
+// Resolves the managed-service tier for a context. Combines two dimensions:
+//   configured — the backend/API is wired centrally (providers.status via the
+//                env→agency→sub-account cascade). Like email works today.
+//   included   — the sub-account's PLAN grants this feature. `planFeatures` is
+//                the plan's features object, or null when the account has no
+//                plan (agency's own accounts) → everything is included.
+// A service is `active` (usable) only when configured AND included. The client
+// still configures the surface (e.g. the AI prompt); the API stays central.
+function managedStatus(status, planFeatures = null) {
   return MANAGED.map((m) => {
     const raw = status[m.statusKey];
-    const active = m.statusKey === 'ai' ? Boolean(raw) : Boolean(raw) && raw !== 'simulated';
+    const configured = m.statusKey === 'ai' ? Boolean(raw) : Boolean(raw) && raw !== 'simulated';
+    const included = planFeatures ? Boolean(planFeatures[m.key]) : true;
     return {
       key: m.key, name: m.name, blurb: m.blurb, provider: m.provider,
-      active, source: (status.sources && status.sources[m.sourceKey]) || 'none',
+      configured, included, active: configured && included,
+      source: (status.sources && status.sources[m.sourceKey]) || 'none',
     };
   });
 }
+
+// The managed-feature keys a plan can grant, for the plan editor UI.
+const FEATURE_KEYS = MANAGED.map((m) => ({ key: m.key, name: m.name }));
 
 const BY_KEY = Object.fromEntries(CATALOG.map((a) => [a.key, a]));
 
@@ -319,6 +329,6 @@ function publicCatalog() {
 }
 
 module.exports = {
-  CATALOG, CATEGORIES, MANAGED, BY_KEY, get, isConfigured, missingEnv, managedStatus,
+  CATALOG, CATEGORIES, MANAGED, FEATURE_KEYS, BY_KEY, get, isConfigured, missingEnv, managedStatus,
   clientId, clientSecret, signState, verifyState, authorizeUrl, publicCatalog, publicFields,
 };

@@ -37,21 +37,31 @@ export async function renderMarketplace(view) {
     estancia: t('configurado en esta sub-cuenta', 'set for this sub-account'),
   };
 
-  // A managed service is provided centrally: the client just uses it, no setup.
-  const managedCard = (m) => `<div class="card" style="display:flex;flex-direction:column;gap:8px">
+  // A managed service is provided centrally: the API is wired by the agency and
+  // the plan grants access; the client just uses it (and tunes the surface).
+  const managedBadge = (m) => {
+    if (m.active) return `<span class="tag" style="background:#e6f7ec;color:#137333">✓ ${t('Activo', 'Active')}</span>`;
+    if (!m.included) return `<span class="tag muted">${t('No incluido en tu plan', 'Not in your plan')}</span>`;
+    return `<span class="tag" style="background:#fff4e5;color:#a15c00">${t('Lo activa tu agencia', 'Your agency enables it')}</span>`;
+  };
+  const managedFoot = (m) => {
+    if (m.active) return `${t('Listo para usar', 'Ready to use')} · ${esc(SOURCE_LABEL[m.source] || t('gestionado', 'managed'))}`;
+    if (!m.included) return isAdmin
+      ? t('No está en el plan de este cliente. Añádelo al plan en Agencia › Planes.', 'Not in this client’s plan. Add it to the plan in Agency › Plans.')
+      : t('Mejora tu plan para activar esta función.', 'Upgrade your plan to unlock this feature.');
+    return isAdmin
+      ? t('Incluido en el plan. Conéctalo en Ajustes › Integraciones para toda tu cuenta.', 'Included in the plan. Connect it in Settings › Integrations for your whole account.')
+      : t('Tu agencia lo activará; no necesitas hacer nada.', 'Your agency will enable it; you don’t need to do anything.');
+  };
+  const managedCard = (m) => `<div class="card" style="display:flex;flex-direction:column;gap:8px${m.included ? '' : ';opacity:.72'}">
       <div class="flex" style="align-items:flex-start;gap:10px">
         <span class="app-ic">${logoHtml(m.key)}</span>
         <div style="flex:1;min-width:0">
-          <div class="flex" style="gap:6px;align-items:center;flex-wrap:wrap"><strong>${esc(m.name)}</strong>
-            ${m.active
-              ? `<span class="tag" style="background:#e6f7ec;color:#137333">✓ ${t('Activo', 'Active')}</span>`
-              : `<span class="tag" style="background:#fff4e5;color:#a15c00">${t('Lo activa tu agencia', 'Your agency enables it')}</span>`}</div>
+          <div class="flex" style="gap:6px;align-items:center;flex-wrap:wrap"><strong>${esc(m.name)}</strong>${managedBadge(m)}</div>
           <p class="muted" style="font-size:12.5px;margin:4px 0 0">${esc(t(m.blurb[0], m.blurb[1]))}</p>
         </div>
       </div>
-      <div class="muted" style="font-size:11.5px;margin-top:auto">${m.active
-        ? `${t('Listo para usar', 'Ready to use')} · ${esc(SOURCE_LABEL[m.source] || t('gestionado', 'managed'))}`
-        : (isAdmin ? t('Configúralo en Ajustes › Integraciones para toda tu cuenta.', 'Set it up in Settings › Integrations for your whole account.') : t('Tu agencia lo activará; no necesitas hacer nada.', 'Your agency will enable it; you don’t need to do anything.'))}</div>
+      <div class="muted" style="font-size:11.5px;margin-top:auto">${managedFoot(m)}</div>
     </div>`;
 
   const groups = {};

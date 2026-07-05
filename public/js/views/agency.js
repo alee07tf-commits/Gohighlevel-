@@ -112,9 +112,14 @@ export async function renderAgency(view) {
       <div class="card-title">${t('Planes (SaaS)', 'Plans (SaaS)')}</div>
       <div class="card-body">
         <p class="muted" style="font-size:12px;margin-bottom:10px">${t('Lo que vendes a tus clientes. El plan carga su plantilla al registrarse y define el margen de rebilling por canal.', 'What you sell to your clients. The plan loads its template on signup and defines the rebilling margin per channel.')}</p>
-        ${plans.length ? plans.map((p) => `<div class="appt-row"><div style="flex:1"><strong>${esc(p.name)}</strong>
-          <div class="muted" style="font-size:12px">${money(p.price, p.currency)}/${p.interval === 'yearly' ? t('año', 'year') : t('mes', 'month')}${p.snapshot_id ? '' : t(' · sin plantilla', ' · no template')}${p.is_public ? '' : t(' · privado', ' · private')}</div></div>
-          <button class="btn ghost small plan-del" data-id="${p.id}">✕</button></div>`).join('') : `<p class="muted">${t('Sin planes todavía.', 'No plans yet.')}</p>`}
+        ${plans.length ? plans.map((p) => {
+          const fk = { email: 'Email', sms: 'SMS', whatsapp: 'WhatsApp', ai: t('IA', 'AI') };
+          const feats = Object.entries(fk).filter(([k]) => p.features && p.features[k]).map(([, l]) => l);
+          return `<div class="appt-row"><div style="flex:1"><strong>${esc(p.name)}</strong>
+          <div class="muted" style="font-size:12px">${money(p.price, p.currency)}/${p.interval === 'yearly' ? t('año', 'year') : t('mes', 'month')}${p.snapshot_id ? '' : t(' · sin plantilla', ' · no template')}${p.is_public ? '' : t(' · privado', ' · private')}</div>
+          ${feats.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${feats.map((l) => `<span class="tag" style="font-size:10px">${esc(l)}</span>`).join('')}</div>` : ''}</div>
+          <button class="btn ghost small plan-del" data-id="${p.id}">✕</button></div>`;
+        }).join('') : `<p class="muted">${t('Sin planes todavía.', 'No plans yet.')}</p>`}
         <button class="btn secondary" id="plan-new" style="margin-top:12px">${t('+ Crear plan', '+ Create plan')}</button>
       </div>
     </div>
@@ -203,6 +208,11 @@ export async function renderAgency(view) {
           <select class="input" name="snapshot_id"><option value="">${t('— ninguna —', '— none —')}</option>
           ${snaps.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
         <label class="field"><span class="label">${t('Descripción', 'Description')}</span><input class="input" name="description"></label>
+        <div class="card-title" style="padding:6px 0">${t('Funciones incluidas (el cliente las usa; el backend ya está conectado)', 'Included features (the client uses them; the backend is already connected)')}</div>
+        <div class="form-row" style="flex-wrap:wrap;gap:10px">
+          ${[['email', 'Email'], ['sms', 'SMS'], ['whatsapp', 'WhatsApp'], ['ai', t('IA', 'AI')]].map(([k, label]) =>
+            `<label class="flex" style="gap:6px;align-items:center"><input type="checkbox" name="ft_${k}" checked> ${esc(label)}</label>`).join('')}
+        </div>
         <div class="card-title" style="padding:6px 0">${t('Rebilling (multiplicador por canal — vacío = no cobrar)', 'Rebilling (multiplier per channel — empty = no charge)')}</div>
         <div class="form-row">
           <label class="field"><span class="label">${t('SMS ×', 'SMS ×')}</span><input class="input" name="rb_sms" type="number" step="0.1" placeholder="2"></label>
@@ -218,10 +228,13 @@ export async function renderAgency(view) {
       const f = formData(e.target);
       const rebilling = {};
       for (const k of ['sms', 'whatsapp', 'email', 'ai']) if (f[`rb_${k}`]) rebilling[k] = Number(f[`rb_${k}`]);
+      // Checkboxes only appear in formData when checked → default false.
+      const features = {};
+      for (const k of ['email', 'sms', 'whatsapp', 'ai']) features[k] = f[`ft_${k}`] != null;
       try {
         await api('/plans', {
           method: 'POST',
-          body: { name: f.name, description: f.description, price: f.price, interval: f.interval, snapshot_id: f.snapshot_id || null, rebilling },
+          body: { name: f.name, description: f.description, price: f.price, interval: f.interval, snapshot_id: f.snapshot_id || null, rebilling, features },
         });
         closeOverlay();
         toast(t('Plan creado', 'Plan created'));

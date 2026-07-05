@@ -10,7 +10,7 @@ export async function renderClients(view) {
     view.innerHTML = `<div class="empty card" style="padding:40px">${t('Solo los administradores pueden gestionar clientes.', 'Only administrators can manage clients.')}</div>`;
     return;
   }
-  const [clients, snaps] = await Promise.all([api('/clients'), api('/snapshots').catch(() => [])]);
+  const [clients, snaps, plans] = await Promise.all([api('/clients'), api('/snapshots').catch(() => []), api('/plans').catch(() => [])]);
 
   view.innerHTML = `
   <div class="page-header">
@@ -123,7 +123,7 @@ export async function renderClients(view) {
   view.querySelector('#client-new').addEventListener('click', () => {
     const modal = openModal(`
       <h2>${t('Nuevo cliente', 'New client')}</h2>
-      <p class="muted" style="font-size:12px;margin-bottom:12px">${t('Crea la cuenta del cliente y su administrador. Se le crea una primera sub-cuenta; si eliges una plantilla, se la instalamos con funnels, pipelines y automatizaciones listos.', 'Create the client account and its administrator. A first sub-account is created; if you choose a template, we install it with funnels, pipelines and automations ready.')}</p>
+      <p class="muted" style="font-size:12px;margin-bottom:12px">${t('Crea la cuenta del cliente y su administrador. Elige un plan y se le instala todo automáticamente (plantilla del plan + servicios de la agencia); el cliente puede ajustarlo después.', 'Create the client account and its administrator. Pick a plan and everything is installed automatically (the plan template + agency services); the client can adjust it afterwards.')}</p>
       <form id="client-form">
         <label class="field"><span class="label">${t('Nombre del cliente / negocio', 'Client / business name')}</span><input class="input" name="agency_name" required placeholder="${t('Clínica Dental Sonrisa', 'Smile Dental Clinic')}"></label>
         <div class="form-row">
@@ -134,8 +134,12 @@ export async function renderClients(view) {
           <label class="field"><span class="label">${t('Email de acceso', 'Access email')}</span><input class="input" name="admin_email" type="email" required placeholder="cliente@email.com"></label>
           <label class="field"><span class="label">${t('Contraseña', 'Password')}</span><input class="input" name="admin_password" type="text" required placeholder="${t('mín. 6 caracteres', 'min. 6 characters')}"></label>
         </div>
-        <label class="field"><span class="label">${t('Plantilla a instalar', 'Template to install')}</span>
-          <select class="input" name="snapshot_id"><option value="">${t('— por defecto de la agencia —', '— agency default —')}</option>
+        <label class="field"><span class="label">${t('Plan', 'Plan')}</span>
+          <select class="input" name="plan_id"><option value="">${t('— sin plan —', '— no plan —')}</option>
+          ${plans.map((p) => `<option value="${p.id}">${esc(p.name)}${p.snapshot_id ? '' : t(' (sin plantilla)', ' (no template)')}</option>`).join('')}</select>
+          <span class="muted" style="font-size:11px;margin-top:4px">${t('El plan instala su plantilla y activa sus funciones automáticamente.', 'The plan installs its template and enables its features automatically.')}</span></label>
+        <label class="field"><span class="label">${t('Plantilla (opcional, sobrescribe la del plan)', 'Template (optional, overrides the plan’s)')}</span>
+          <select class="input" name="snapshot_id"><option value="">${t('— la del plan / por defecto —', '— the plan’s / default —')}</option>
           <option value="0">${t('— vacía —', '— empty —')}</option>
           ${snaps.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
         <div class="modal-actions"><button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button><button class="btn">${t('Crear cliente', 'Create client')}</button></div>
@@ -144,7 +148,8 @@ export async function renderClients(view) {
     modal.querySelector('#client-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = formData(e.target);
-      if (f.snapshot_id === '') delete f.snapshot_id; // let the server pick the agency default
+      if (f.snapshot_id === '') delete f.snapshot_id; // let the server pick the plan/agency default
+      if (f.plan_id === '') delete f.plan_id;
       try {
         await api('/clients', { method: 'POST', body: f });
         closeOverlay();
