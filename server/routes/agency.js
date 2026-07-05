@@ -17,40 +17,44 @@ function slugify(text) {
 }
 
 // Cross-location overview: one row per sub-account with its key metrics.
+// Metrics are fetched with one grouped query each (keyed by location) instead of
+// ~6 queries per sub-account, so the panel stays fast as the agency grows.
 router.get('/overview', async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
   const locations = await db.all('SELECT * FROM locations WHERE agency_id = ? ORDER BY id', [req.user.agency_id]);
-  const rows = [];
-  for (const loc of locations) {
-    const { c } = await db.get('SELECT COUNT(*)::int AS c FROM contacts WHERE location_id = ?', [loc.id]);
-    const { pipeline } = await db.get(
-      `SELECT COALESCE(SUM(value),0)::float AS pipeline FROM opportunities WHERE location_id = ? AND status = 'open'`,
-      [loc.id]
-    );
-    const { revenue } = await db.get(
-      `SELECT COALESCE(SUM(total),0)::float AS revenue FROM invoices WHERE location_id = ? AND status = 'paid'`,
-      [loc.id]
-    );
-    const sub = await db.get(
-      `SELECT s.status, s.current_period_end, p.name AS plan_name, p.price, p.currency
+  if (!locations.length) return res.json({ locations: [], totals: { sub_accounts: 0, mrr: 0, revenue: 0 } });
+
+  const ids = locations.map((l) => l.id);
+  const ph = ids.map(() => '?').join(',');
+  const byId = (arr) => Object.fromEntries(arr.map((r) => [r.location_id, r]));
+
+  const [contacts, pipelines, revenues, wallets, usage, subs] = await Promise.all([
+    db.all(`SELECT location_id, COUNT(*)::int AS c FROM contacts WHERE location_id IN (${ph}) GROUP BY location_id`, ids),
+    db.all(`SELECT location_id, COALESCE(SUM(value),0)::float AS pipeline FROM opportunities WHERE location_id IN (${ph}) AND status = 'open' GROUP BY location_id`, ids),
+    db.all(`SELECT location_id, COALESCE(SUM(total),0)::float AS revenue FROM invoices WHERE location_id IN (${ph}) AND status = 'paid' GROUP BY location_id`, ids),
+    db.all(`SELECT location_id, balance FROM wallets WHERE location_id IN (${ph})`, ids),
+    db.all(`SELECT location_id, COALESCE(SUM(billed_cost),0)::float AS billed FROM usage_events WHERE location_id IN (${ph}) AND created_at >= date_trunc('month', now()) GROUP BY location_id`, ids),
+    db.all(
+      `SELECT DISTINCT ON (s.location_id) s.location_id, s.status, s.current_period_end, p.name AS plan_name, p.price, p.currency
        FROM subscriptions s LEFT JOIN plans p ON p.id = s.plan_id
-       WHERE s.location_id = ? ORDER BY s.id DESC LIMIT 1`,
-      [loc.id]
-    );
-    const wallet = await db.get('SELECT balance FROM wallets WHERE location_id = ?', [loc.id]);
-    const { billed } = await db.get(
-      `SELECT COALESCE(SUM(billed_cost),0)::float AS billed FROM usage_events
-       WHERE location_id = ? AND created_at >= date_trunc('month', now())`,
-      [loc.id]
-    );
-    rows.push({
+       WHERE s.location_id IN (${ph}) ORDER BY s.location_id, s.id DESC`,
+      ids
+    ),
+  ]);
+  const cMap = byId(contacts), pMap = byId(pipelines), rMap = byId(revenues), wMap = byId(wallets), uMap = byId(usage), sMap = byId(subs);
+
+  const rows = locations.map((loc) => {
+    const s = sMap[loc.id];
+    return {
       id: loc.id, name: loc.name, company: loc.company,
-      contacts: c, pipeline_value: pipeline, revenue,
-      subscription: sub || null,
-      wallet_balance: wallet ? wallet.balance : 0,
-      usage_this_month: billed,
-    });
-  }
+      contacts: cMap[loc.id] ? cMap[loc.id].c : 0,
+      pipeline_value: pMap[loc.id] ? pMap[loc.id].pipeline : 0,
+      revenue: rMap[loc.id] ? rMap[loc.id].revenue : 0,
+      subscription: s ? { status: s.status, current_period_end: s.current_period_end, plan_name: s.plan_name, price: s.price, currency: s.currency } : null,
+      wallet_balance: wMap[loc.id] ? wMap[loc.id].balance : 0,
+      usage_this_month: uMap[loc.id] ? uMap[loc.id].billed : 0,
+    };
+  });
   const totals = rows.reduce(
     (a, r) => ({
       sub_accounts: a.sub_accounts + 1,

@@ -34,25 +34,33 @@ async function uniqueSlug(q, base, exceptId) {
 }
 
 // List the direct child agencies of the effective agency, with a light rollup.
+// Rollup metrics use one grouped query each (keyed by child agency) rather than
+// four queries per client.
 router.get('/', async (req, res) => {
   const children = await db.all(
     'SELECT id, name, slug, brand_color, logo_url, created_at FROM agencies WHERE parent_agency_id = ? ORDER BY id',
     [req.user.agency_id]
   );
-  const rows = [];
-  for (const c of children) {
-    const { subaccounts } = await db.get('SELECT COUNT(*)::int AS subaccounts FROM locations WHERE agency_id = ?', [c.id]);
-    const { contacts } = await db.get(
-      'SELECT COUNT(*)::int AS contacts FROM contacts WHERE location_id IN (SELECT id FROM locations WHERE agency_id = ?)',
-      [c.id]
-    );
-    const { clients } = await db.get('SELECT COUNT(*)::int AS clients FROM agencies WHERE parent_agency_id = ?', [c.id]);
-    const admin = await db.get(
-      "SELECT name, email FROM users WHERE agency_id = ? AND role = 'admin' ORDER BY id LIMIT 1",
-      [c.id]
-    );
-    rows.push({ ...c, subaccounts, contacts, clients, admin: admin || null });
-  }
+  if (!children.length) return res.json([]);
+
+  const ids = children.map((c) => c.id);
+  const ph = ids.map(() => '?').join(',');
+  const [subRows, contactRows, clientRows, adminRows] = await Promise.all([
+    db.all(`SELECT agency_id, COUNT(*)::int AS n FROM locations WHERE agency_id IN (${ph}) GROUP BY agency_id`, ids),
+    db.all(`SELECT l.agency_id, COUNT(*)::int AS n FROM contacts c JOIN locations l ON l.id = c.location_id WHERE l.agency_id IN (${ph}) GROUP BY l.agency_id`, ids),
+    db.all(`SELECT parent_agency_id AS agency_id, COUNT(*)::int AS n FROM agencies WHERE parent_agency_id IN (${ph}) GROUP BY parent_agency_id`, ids),
+    db.all(`SELECT DISTINCT ON (agency_id) agency_id, name, email FROM users WHERE agency_id IN (${ph}) AND role = 'admin' ORDER BY agency_id, id`, ids),
+  ]);
+  const map = (arr) => Object.fromEntries(arr.map((r) => [r.agency_id, r]));
+  const sMap = map(subRows), cMap = map(contactRows), gMap = map(clientRows), aMap = map(adminRows);
+
+  const rows = children.map((c) => ({
+    ...c,
+    subaccounts: sMap[c.id] ? sMap[c.id].n : 0,
+    contacts: cMap[c.id] ? cMap[c.id].n : 0,
+    clients: gMap[c.id] ? gMap[c.id].n : 0,
+    admin: aMap[c.id] ? { name: aMap[c.id].name, email: aMap[c.id].email } : null,
+  }));
   res.json(rows);
 });
 
