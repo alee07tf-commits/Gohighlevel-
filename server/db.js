@@ -605,6 +605,13 @@ ALTER TABLE calendars ADD COLUMN IF NOT EXISTS buffer_minutes INTEGER NOT NULL D
 ALTER TABLE calendars ADD COLUMN IF NOT EXISTS min_notice_hours INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE calendars ADD COLUMN IF NOT EXISTS blocked_dates TEXT NOT NULL DEFAULT '[]';
 
+-- Marketing parity (v3.14): per-recipient open/click tracking token + timestamps
+-- so email campaigns report opens and offer an unsubscribe link.
+ALTER TABLE campaign_recipients ADD COLUMN IF NOT EXISTS token TEXT;
+ALTER TABLE campaign_recipients ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ;
+ALTER TABLE campaign_recipients ADD COLUMN IF NOT EXISTS clicked_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_campaign_recipients_token ON campaign_recipients(token);
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -710,7 +717,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 21;
+const SCHEMA_VERSION = 22;
 
 let readyPromise = null;
 function ensureReady() {

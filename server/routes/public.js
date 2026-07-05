@@ -1018,6 +1018,29 @@ router.get('/l/:slug', async (req, res) => {
   res.redirect(link.target_url);
 });
 
+// ---- Email campaign open tracking (1x1 pixel) ----
+const OPEN_PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+router.get('/e/o/:token', async (req, res) => {
+  try {
+    await db.run(`UPDATE campaign_recipients SET opened_at = now() WHERE token = ? AND opened_at IS NULL`, [req.params.token]);
+  } catch { /* never block the pixel */ }
+  res.set('Content-Type', 'image/gif').set('Cache-Control', 'no-store').send(OPEN_PIXEL);
+});
+
+// ---- One-click unsubscribe (sets email DND on the contact) ----
+router.get('/unsub/:token', async (req, res) => {
+  const rec = await db.get('SELECT * FROM campaign_recipients WHERE token = ?', [req.params.token]);
+  if (rec) {
+    await db.run('UPDATE campaign_recipients SET clicked_at = COALESCE(clicked_at, now()) WHERE id = ?', [rec.id]);
+    await db.run('UPDATE contacts SET dnd_email = 1 WHERE id = ?', [rec.contact_id]);
+  }
+  res.set('Content-Type', 'text/html').send(`<!doctype html><meta charset="utf-8"><title>Baja</title>
+    <div style="font-family:system-ui;max-width:420px;margin:80px auto;text-align:center">
+      <h2>Suscripción cancelada</h2>
+      <p style="color:#666">Ya no recibirás más emails de esta lista. Puedes cerrar esta ventana.</p>
+    </div>`);
+});
+
 // ---- SaaS Mode: branded self-serve signup ----
 // Public plan-selection + signup page for an agency (`/signup/<agencySlug>`).
 router.get('/signup/:slug', async (req, res) => {

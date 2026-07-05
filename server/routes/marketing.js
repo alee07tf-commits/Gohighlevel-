@@ -56,11 +56,18 @@ router.get('/campaigns', async (req, res) => {
   const ids = campaigns.map((c) => c.id);
   const ph = ids.map(() => '?').join(',');
   const counts = await db.all(
-    `SELECT campaign_id, COUNT(*)::int AS n FROM campaign_recipients WHERE campaign_id IN (${ph}) GROUP BY campaign_id`,
+    `SELECT campaign_id, COUNT(*)::int AS n,
+       COUNT(opened_at)::int AS opened, COUNT(clicked_at)::int AS clicked
+     FROM campaign_recipients WHERE campaign_id IN (${ph}) GROUP BY campaign_id`,
     ids
   );
-  const byId = Object.fromEntries(counts.map((r) => [r.campaign_id, r.n]));
-  res.json(campaigns.map((c) => ({ ...c, recipient_count: byId[c.id] || 0 })));
+  const byId = Object.fromEntries(counts.map((r) => [r.campaign_id, r]));
+  res.json(campaigns.map((c) => ({
+    ...c,
+    recipient_count: byId[c.id]?.n || 0,
+    opened_count: byId[c.id]?.opened || 0,
+    clicked_count: byId[c.id]?.clicked || 0,
+  })));
 });
 
 router.post('/campaigns', async (req, res) => {
@@ -97,19 +104,25 @@ async function deliverCampaign(campaign) {
   let sent = 0;
   // Fetch custom values + brand once for the whole campaign, not per recipient.
   const ctx = await messaging.buildSendContext(campaign.location_id);
+  const crypto = require('crypto');
+  const base = (process.env.PUBLIC_URL || process.env.APP_URL || '').replace(/\/$/, '');
   for (const contact of contacts) {
+    // Respect DND (global and per-channel) — campaigns never bypass opt-out.
+    const isEmail = campaign.channel === 'email';
+    if (contact.dnd || (isEmail && contact.dnd_email) || (!isEmail && contact.dnd_sms)) continue;
+
+    const token = crypto.randomBytes(12).toString('hex');
+    let body = campaign.body;
+    // Email: append an open-tracking pixel and an unsubscribe link.
+    if (isEmail) {
+      body += `\n\n<a href="${base}/api/public/unsub/${token}">Cancelar suscripción</a>`;
+      body += `\n<img src="${base}/api/public/e/o/${token}" width="1" height="1" alt="" style="display:none">`;
+    }
     const message = await messaging.sendByChannel(
-      campaign.channel,
-      campaign.location_id,
-      contact,
-      { subject: campaign.subject, body: campaign.body },
-      ctx
+      campaign.channel, campaign.location_id, contact, { subject: campaign.subject, body }, ctx
     );
     if (message) {
-      await db.run('INSERT INTO campaign_recipients (campaign_id, contact_id) VALUES (?, ?)', [
-        campaign.id,
-        contact.id,
-      ]);
+      await db.run('INSERT INTO campaign_recipients (campaign_id, contact_id, token) VALUES (?, ?, ?)', [campaign.id, contact.id, token]);
       sent++;
     }
   }

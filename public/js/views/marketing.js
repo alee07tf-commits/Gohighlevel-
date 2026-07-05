@@ -30,7 +30,7 @@ export async function renderMarketing(view) {
                     <td><strong>${esc(c.name)}</strong><div class="muted" style="font-size:11px">${esc(c.subject)}</div></td>
                     <td><span class="badge gray">${c.channel}</span></td>
                     <td>${c.tag_filter ? `<span class="tag">${esc(c.tag_filter)}</span>` : `<span class="muted">${t('Todos', 'Everyone')}</span>`}</td>
-                    <td>${c.status === 'sent' ? `<span class="badge green">${t(`enviada a ${c.recipient_count}`, `sent to ${c.recipient_count}`)}</span><div class="muted" style="font-size:10px">${fmtDate(c.sent_at)}</div>` : c.status === 'scheduled' ? `<span class="badge indigo">${fmtDate(c.send_at)}</span>` : `<span class="badge amber">${t('Borrador', 'Draft')}</span>`}</td>
+                    <td>${c.status === 'sent' ? `<span class="badge green">${t(`enviada a ${c.recipient_count}`, `sent to ${c.recipient_count}`)}</span>${c.channel === 'email' && c.recipient_count ? `<div class="muted" style="font-size:10px">${c.opened_count || 0} ${t('abiertos', 'opened')} (${Math.round(100 * (c.opened_count || 0) / c.recipient_count)}%)</div>` : ''}<div class="muted" style="font-size:10px">${fmtDate(c.sent_at)}</div>` : c.status === 'scheduled' ? `<span class="badge indigo">${fmtDate(c.send_at)}</span>` : `<span class="badge amber">${t('Borrador', 'Draft')}</span>`}</td>
                     <td style="text-align:right">
                       ${c.status === 'draft' ? `<button class="btn small send-camp" data-id="${c.id}">${t('Enviar', 'Send')}</button>` : ''}
                       <button class="btn ghost small del-camp" data-id="${c.id}">✕</button></td>
