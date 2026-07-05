@@ -38,9 +38,13 @@ Idioma del producto: **español primero** (con EN vía i18n). El usuario habla e
 - **Centro de notificaciones (campana 🔔)**: tabla `notifications`, `services/notifications.js` (`notify`, `notifyLocationTeam`), `routes/notifications.js`, campana en topbar de `app.js`. Emite en: tarea asignada, assign_owner, notify_user, nuevo lead por formulario.
 - **Cupones / descuentos**: tabla `coupons`, `services/coupons.js` (lookup/discountFor/redeem), `routes/coupons.js`, gestor en vista Pagos + `coupon_code` en alta de factura.
 - **Documentos y Contratos con e-firma**: tabla `documents`, `routes/documents.js`, página pública `/sign/:token` (lienzo de firma) en `public.js`, vista `documents.js` (nav Crecimiento). Prefijo `/sign` añadido en `index.js`.
+- **Launch-readiness**: `middleware/security.js` (cabeceras + rate limiter sin deps), aplicado global y en login/register/forgot/reset. Recuperar contraseña: tabla `password_resets`, `/api/auth/forgot` + `/reset`, vistas `renderForgot`/`renderReset` (#/forgot, #/reset/:token). Legal RGPD: `/legal/privacidad|terminos|cookies` en public.js + banner de cookies en `index.html` (env `COMPANY_NAME`/`COMPANY_EMAIL`).
+- **Encuestas (Surveys)**: tablas `surveys` + `survey_responses`, `routes/surveys.js`, página pública `/s/:slug` con lógica condicional en `public.js`, vista `surveys.js` (nav Crecimiento). Mapeo de preguntas a nombre/email/teléfono → captura lead.
 
-### Pendiente de esta tanda (roadmap, ver §6)
-Permisos granulares (enforcement), Surveys con lógica, Quizzes/drip/certificados en cursos, Seguridad (rate-limit) + recuperar contraseña + páginas legales RGPD, y los grandes: **builder visual drag-and-drop**, email builder visual, comunidades.
+SCHEMA_VERSION = **31**. Tests = **207**. Prefijos públicos en index.js: …`/sign`, `/legal`, `/s`.
+
+### Pendiente (roadmap, ver §6) — el usuario eligió: builder visual AL FINAL, y primero lanzar (ya hecho)
+Quizzes/drip/certificados en cursos · Comunidades · Permisos granulares (enforcement) · y el grande final: **builder visual drag-and-drop** + email builder visual.
 
 ---
 
