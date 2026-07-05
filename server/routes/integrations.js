@@ -7,9 +7,32 @@ const db = require('../db');
 const { requireAuth, requireLocation } = require('../auth');
 const secretbox = require('../services/secretbox');
 const integrations = require('../services/integrations');
+const providers = require('../services/providers');
+const messaging = require('../services/messaging');
 
 const router = express.Router();
 router.use(requireAuth);
+
+// Send a test email using this sub-account's resolved email config, so an admin
+// can verify their Resend/SendGrid key end-to-end. Defaults to the current
+// user's email. Returns { ok, provider, error? }; provider 'simulated' means no
+// real key is configured yet.
+router.post('/test-email', requireLocation, async (req, res) => {
+  const to = (req.body && req.body.to) || req.user.email;
+  if (!to) return res.status(400).json({ error: 'No hay dirección de destino' });
+  const text = `Este es un email de prueba desde ${req.location.name || 'tu plataforma'}.\n\nSi lo estás leyendo, tu integración de email funciona correctamente. ✅`;
+  const result = await providers.deliverEmail(
+    {
+      to,
+      subject: 'Email de prueba ✅',
+      text,
+      html: messaging.renderEmailHtml(text, { fromName: req.location.name }),
+      fromName: req.location.name,
+    },
+    { locationId: req.location.id, agencyId: req.user.agency_id }
+  );
+  res.json({ ...result, to });
+});
 
 // Field definitions per provider (secret fields are masked on read).
 const FIELDS = {

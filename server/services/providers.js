@@ -121,7 +121,9 @@ async function retrieveCheckoutSession(sessionId, ctx) {
 }
 
 // ---- Email ----
-async function deliverEmail({ to, subject, text, fromName }, ctx) {
+// Sends both an HTML and a plain-text part when `html` is given (better
+// rendering + deliverability). Falls back to text-only when it isn't.
+async function deliverEmail({ to, subject, text, html, fromName }, ctx) {
   const c = await cfg('email', ctx);
   const vendor = c.api_key ? emailVendor(c) || 'resend' : 'simulated';
   if (vendor === 'simulated' || !to) return { ok: true, provider: 'simulated' };
@@ -129,14 +131,18 @@ async function deliverEmail({ to, subject, text, fromName }, ctx) {
   const fromHeader = fromName ? `${fromName} <${from}>` : from;
   try {
     if (vendor === 'resend') {
+      const payload = { from: fromHeader, to: [to], subject: subject || '(no subject)', text };
+      if (html) payload.html = html;
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${c.api_key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: fromHeader, to: [to], subject: subject || '(no subject)', text }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`Resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
       return { ok: true, provider: vendor };
     }
+    const content = [{ type: 'text/plain', value: text || '' }];
+    if (html) content.push({ type: 'text/html', value: html });
     const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${c.api_key}`, 'Content-Type': 'application/json' },
@@ -144,7 +150,7 @@ async function deliverEmail({ to, subject, text, fromName }, ctx) {
         personalizations: [{ to: [{ email: to }] }],
         from: { email: from, name: fromName || undefined },
         subject: subject || '(no subject)',
-        content: [{ type: 'text/plain', value: text }],
+        content,
       }),
     });
     if (!(res.status === 202 || res.ok)) throw new Error(`SendGrid ${res.status}: ${(await res.text()).slice(0, 200)}`);

@@ -44,6 +44,7 @@ function providerBlock(p, cfg) {
     <div class="flex" style="margin-top:8px;gap:8px">
       <button class="btn secondary small integ-save">Guardar</button>
       ${cfg?.has_override ? '<button class="btn ghost small integ-inherit">Heredar de agencia</button>' : ''}
+      ${p.key === 'email' ? '<button class="btn ghost small integ-test" style="margin-left:auto">Enviar prueba</button>' : ''}
     </div>
   </div>`;
 }
@@ -253,6 +254,26 @@ export async function renderSettings(view) {
         await api(`/integrations/${provider}`, { method: 'PUT', body: { use_agency: true } });
         toast('Ahora hereda de la agencia');
         renderSettings(view);
+      });
+    const testBtn = block.querySelector('.integ-test');
+    if (testBtn)
+      testBtn.addEventListener('click', async () => {
+        const to = prompt('Enviar email de prueba a:', state.user?.email || '');
+        if (!to) return;
+        testBtn.disabled = true;
+        testBtn.textContent = 'Enviando…';
+        try {
+          const r = await api('/integrations/test-email', { method: 'POST', body: { to } });
+          if (r.provider === 'simulated')
+            toast('Modo simulado: guarda una API key de email para enviar de verdad', true);
+          else if (r.ok) toast(`Email de prueba enviado a ${r.to} vía ${r.provider}`);
+          else toast(`Fallo al enviar: ${r.error || 'error desconocido'}`, true);
+        } catch (err) {
+          toast(err.message, true);
+        } finally {
+          testBtn.disabled = false;
+          testBtn.textContent = 'Enviar prueba';
+        }
       });
   });
 

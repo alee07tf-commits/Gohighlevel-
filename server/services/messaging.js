@@ -70,9 +70,40 @@ async function meterUsage(locationId, category, result) {
   }
 }
 
-async function locationName(locationId) {
-  const loc = await db.get('SELECT name, company FROM locations WHERE id = ?', [locationId]);
-  return loc ? loc.name || loc.company : '';
+async function locationBrand(locationId) {
+  const loc = await db.get('SELECT name, company, brand_color FROM locations WHERE id = ?', [locationId]);
+  return {
+    name: loc ? loc.name || loc.company : '',
+    color: (loc && /^#[0-9a-fA-F]{6}$/.test(loc.brand_color || '') && loc.brand_color) || '#4f46e5',
+  };
+}
+
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+// Turns an authored plain-text body into a clean, branded HTML email:
+// escapes, auto-links URLs, keeps paragraphs/line breaks, wraps in a simple
+// responsive shell tinted with the sub-account brand colour.
+function renderEmailHtml(body, { color = '#4f46e5', fromName = '' } = {}) {
+  const linked = escapeHtml(body).replace(
+    /(https?:\/\/[^\s<]+)/g,
+    (u) => `<a href="${u}" style="color:${color};text-decoration:underline">${u}</a>`
+  );
+  const paragraphs = linked
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin:0 0 16px">${p.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+  return `<!doctype html><html><body style="margin:0;background:#f4f4f7;padding:24px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+    <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
+      <div style="height:4px;background:${color}"></div>
+      <div style="padding:28px 30px;color:#1f2937;font-size:15px;line-height:1.6">${paragraphs}</div>
+      ${fromName ? `<div style="padding:14px 30px;border-top:1px solid #eee;color:#9ca3af;font-size:12px">${escapeHtml(fromName)}</div>` : ''}
+    </div></body></html>`;
 }
 
 async function sendEmail(locationId, contact, subject, body) {
@@ -80,8 +111,15 @@ async function sendEmail(locationId, contact, subject, body) {
   const cv = await customValues.getMap(locationId);
   const mergedSubject = mergeFields(subject, contact, cv);
   const mergedBody = mergeFields(body, contact, cv);
+  const brand = await locationBrand(locationId);
   const result = await providers.deliverEmail(
-    { to: contact.email, subject: mergedSubject, text: mergedBody, fromName: await locationName(locationId) },
+    {
+      to: contact.email,
+      subject: mergedSubject,
+      text: mergedBody,
+      html: renderEmailHtml(mergedBody, { color: brand.color, fromName: brand.name }),
+      fromName: brand.name,
+    },
     { locationId }
   );
   await meterUsage(locationId, 'email', result);
@@ -143,6 +181,7 @@ module.exports = {
   getOrCreateConversation,
   recordMessage,
   mergeFields,
+  renderEmailHtml,
   sendEmail,
   sendSms,
   sendWhatsapp,
