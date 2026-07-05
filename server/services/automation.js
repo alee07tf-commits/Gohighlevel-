@@ -232,6 +232,9 @@ async function resumeWorkflow(wf, contact, startIndex) {
 // `event` may carry { tag, pipeline_id, stage_id, funnel_id, calendar_id }.
 async function trigger(locationId, triggerType, contact, event = {}) {
   if (!contact) return;
+  // Push the event to connected apps (Google Calendar, Zoom, HubSpot…) — best
+  // effort, never blocks or breaks the automation run below.
+  try { require('./appsync').dispatch(locationId, triggerType, contact, event).catch(() => {}); } catch { /* ignore */ }
   const workflows = await db.all(
     'SELECT * FROM workflows WHERE location_id = ? AND trigger_type = ? AND active = 1',
     [locationId, triggerType]
