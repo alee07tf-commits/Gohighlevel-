@@ -83,7 +83,7 @@ async function renderThread(threadEl, conv) {
     try {
       await api(`/conversations/${conv.id}/messages`, {
         method: 'POST',
-        body: { channel, body, subject: channel === 'email' ? 'Message from your team' : '' },
+        body: { channel, body, subject: channel === 'email' ? 'Mensaje de tu equipo' : '' },
       });
       await renderThread(threadEl, conv);
     } catch (err) {

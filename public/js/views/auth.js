@@ -58,16 +58,16 @@ export async function renderLogin(root, brandSlug) {
   applyBrandColor(brand);
   const sub = brand
     ? brand.headline || `Accede a tu cuenta de ${esc(brand.name)}`
-    : 'Sign in to your agency account';
+    : 'Accede a tu cuenta de agencia';
   root.innerHTML = authShell(
     `${warn}
     <p class="sub">${esc(sub)}</p>
     <form id="login-form">
       <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" required></label>
-      <label class="field"><span class="label">Password</span><input class="input" name="password" type="password" required></label>
-      <button class="btn" style="width:100%">${brand ? 'Entrar' : 'Sign In'}</button>
+      <label class="field"><span class="label">Contraseña</span><input class="input" name="password" type="password" required></label>
+      <button class="btn" style="width:100%">Entrar</button>
     </form>
-    ${brand ? '' : '<p class="alt">New agency? <a href="#/register">Create an account</a></p>'}
+    ${brand ? '' : '<p class="alt">¿Nueva agencia? <a href="#/register">Crea una cuenta</a></p>'}
     ${brand ? '' : '<p class="alt muted">Demo: <code class="inline">demo@leadflow.app</code> / <code class="inline">demo123</code></p>'}`,
     brand
   );
@@ -87,16 +87,16 @@ export async function renderLogin(root, brandSlug) {
 export async function renderRegister(root) {
   const warn = await persistenceWarning();
   root.innerHTML = authShell(`${warn}
-    <p class="sub">Create your agency — free forever, self-hosted</p>
+    <p class="sub">Crea tu agencia</p>
     <form id="register-form">
-      <label class="field"><span class="label">Agency name</span><input class="input" name="agency_name" required placeholder="Acme Marketing"></label>
-      <label class="field"><span class="label">Your name</span><input class="input" name="name" required></label>
+      <label class="field"><span class="label">Nombre de la agencia</span><input class="input" name="agency_name" required placeholder="Acme Marketing"></label>
+      <label class="field"><span class="label">Tu nombre</span><input class="input" name="name" required></label>
       <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" required></label>
-      <label class="field"><span class="label">Password</span><input class="input" name="password" type="password" required minlength="6"></label>
-      <label class="field"><span class="label">First client / sub-account name</span><input class="input" name="location_name" placeholder="My First Client"></label>
-      <button class="btn" style="width:100%">Create Agency</button>
+      <label class="field"><span class="label">Contraseña</span><input class="input" name="password" type="password" required minlength="6"></label>
+      <label class="field"><span class="label">Primer cliente / sub-cuenta</span><input class="input" name="location_name" placeholder="Mi primer cliente"></label>
+      <button class="btn" style="width:100%">Crear agencia</button>
     </form>
-    <p class="alt">Already have an account? <a href="#/login">Sign in</a></p>`);
+    <p class="alt">¿Ya tienes cuenta? <a href="#/login">Entrar</a></p>`);
 
   root.querySelector('#register-form').addEventListener('submit', async (e) => {
     e.preventDefault();

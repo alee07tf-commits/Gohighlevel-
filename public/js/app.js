@@ -50,22 +50,22 @@ function navSections() {
 }
 
 const NAV = [
-  { path: 'dashboard', label: 'Dashboard', icon: '', view: renderDashboard },
-  { path: 'conversations', label: 'Conversations', icon: '', view: renderConversations },
-  { path: 'contacts', label: 'Contacts', icon: '', view: renderContacts },
-  { path: 'pipelines', label: 'Opportunities', icon: '', view: renderPipelines },
-  { path: 'calendar', label: 'Calendar', icon: '', view: renderCalendar },
+  { path: 'dashboard', label: 'Panel', icon: '', view: renderDashboard },
+  { path: 'conversations', label: 'Conversaciones', icon: '', view: renderConversations },
+  { path: 'contacts', label: 'Contactos', icon: '', view: renderContacts },
+  { path: 'pipelines', label: 'Oportunidades', icon: '', view: renderPipelines },
+  { path: 'calendar', label: 'Calendario', icon: '', view: renderCalendar },
   { path: 'payments', label: 'Pagos', icon: '', view: renderPayments },
   { path: 'prospecting', label: 'Prospección', icon: '', view: renderProspecting },
   { path: 'marketing', label: 'Marketing', icon: '', view: renderMarketing },
-  { path: 'automations', label: 'Automations', icon: '', view: renderAutomations },
-  { path: 'funnels', label: 'Sites & Funnels', icon: '', view: renderFunnels },
+  { path: 'automations', label: 'Automatizaciones', icon: '', view: renderAutomations },
+  { path: 'funnels', label: 'Sitios y Embudos', icon: '', view: renderFunnels },
   { path: 'reputation', label: 'Reputación', icon: '★', view: renderReputation },
   { path: 'tasks', label: 'Tareas', icon: '', view: renderTasks },
   { path: 'clients', label: 'Clientes', icon: '', view: renderClients },
   { path: 'agency', label: 'Agencia', icon: '', view: renderAgency },
   { path: 'training', label: 'Formación', icon: '', view: renderTraining },
-  { path: 'settings', label: 'Settings', icon: '', view: renderSettings },
+  { path: 'settings', label: 'Ajustes', icon: '', view: renderSettings },
 ];
 
 function applyBranding() {

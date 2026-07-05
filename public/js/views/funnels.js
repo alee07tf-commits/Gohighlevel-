@@ -318,10 +318,10 @@ async function renderBuilder(view, funnelId) {
   view.querySelector('#add-block').addEventListener('click', () => {
     const type = view.querySelector('#new-block-type').value;
     const defaults = {
-      hero: { type, headline: 'Your big promise', subheadline: 'Explain the value in one sentence', cta: 'Get Started' },
-      text: { type, headline: 'Section title', body: 'Write something persuasive here.' },
-      features: { type, headline: 'Why choose us', items: [{ title: 'Fast', body: 'We deliver quickly.' }] },
-      form: { type, headline: 'Get your free quote', button: 'Submit', fields: ['first_name', 'email', 'phone'], success_message: 'Thanks! We will reach out soon.', tag: '' },
+      hero: { type, headline: 'Tu gran promesa', subheadline: 'Explica el valor en una frase', cta: 'Empezar' },
+      text: { type, headline: 'Título de sección', body: 'Escribe algo persuasivo aquí.' },
+      features: { type, headline: 'Por qué elegirnos', items: [{ title: 'Rápido', body: 'Entregamos con rapidez.' }] },
+      form: { type, headline: 'Solicita tu presupuesto gratis', button: 'Enviar', fields: ['first_name', 'email', 'phone'], success_message: '¡Gracias! Te contactaremos muy pronto.', tag: '' },
       testimonials: { type, headline: 'Lo que dicen nuestros clientes', items: [{ name: 'María G.', text: 'Servicio excelente, lo recomiendo.' }] },
       pricing: { type, headline: 'Planes y precios', button: 'Empezar', items: [{ name: 'Básico', price: '49€/mes', features: ['Incluye A', 'Incluye B'] }] },
       faq: { type, headline: 'Preguntas frecuentes', items: [{ q: '¿Cómo funciona?', a: 'Muy sencillo: nos dejas tus datos y te contactamos.' }] },

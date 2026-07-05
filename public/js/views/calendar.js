@@ -82,10 +82,10 @@ export async function renderCalendar(view) {
         <label class="field"><span class="label">Contact email (optional — links or creates conversation-ready contact)</span>
           <input class="input" name="contact_email" type="email" placeholder="existing contact email"></label>`}
         <div class="form-row">
-          <label class="field"><span class="label">Starts</span><input class="input" name="starts_at" type="datetime-local" required
-            value="${appt ? appt.starts_at.slice(0, 16) : ''}"></label>
-          <label class="field"><span class="label">Ends</span><input class="input" name="ends_at" type="datetime-local"
-            value="${appt ? appt.ends_at.slice(0, 16) : ''}"></label>
+          <label class="field"><span class="label">Inicio</span><input class="input" name="starts_at" type="datetime-local" required
+            value="${appt?.starts_at ? appt.starts_at.slice(0, 16) : ''}"></label>
+          <label class="field"><span class="label">Fin</span><input class="input" name="ends_at" type="datetime-local"
+            value="${appt?.ends_at ? appt.ends_at.slice(0, 16) : ''}"></label>
         </div>
         ${appt ? `<label class="field"><span class="label">Status</span><select class="input" name="status">
           ${['confirmed', 'completed', 'cancelled', 'no_show'].map((s) => `<option ${appt.status === s ? 'selected' : ''}>${s}</option>`).join('')}

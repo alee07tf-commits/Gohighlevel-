@@ -149,28 +149,31 @@ export async function renderMarketing(view) {
 
   view.querySelector('#new-campaign').addEventListener('click', () => {
     const modal = openModal(`
-      <h2>New Campaign</h2>
+      <h2>Nueva campaña</h2>
       <form id="camp-form">
-        <label class="field"><span class="label">Name</span><input class="input" name="name" required placeholder="June Promo Blast"></label>
+        <label class="field"><span class="label">Nombre</span><input class="input" name="name" required placeholder="Promo de junio"></label>
         <div class="form-row">
-          <label class="field"><span class="label">Channel</span><select class="input" name="channel" id="channel-sel">
+          <label class="field"><span class="label">Canal</span><select class="input" name="channel" id="channel-sel">
             <option value="email">Email</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></label>
-          <label class="field"><span class="label">Audience</span><select class="input" name="tag_filter">
-            <option value="">All contacts</option>
-            ${tags.map((t) => `<option value="${esc(t.tag)}">tag: ${esc(t.tag)} (${t.count})</option>`).join('')}
+          <label class="field"><span class="label">Audiencia</span><select class="input" name="tag_filter">
+            <option value="">Todos los contactos</option>
+            ${tags.map((t) => `<option value="${esc(t.tag)}">etiqueta: ${esc(t.tag)} (${t.count})</option>`).join('')}
           </select></label>
         </div>
-        ${templates.length ? `<label class="field"><span class="label">Start from template</span><select class="input" id="tpl-sel">
-          <option value="">— none —</option>
+        ${templates.length ? `<label class="field"><span class="label">Partir de una plantilla</span><select class="input" id="tpl-sel">
+          <option value="">— ninguna —</option>
           ${templates.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}
         </select></label>` : ''}
-        <label class="field" id="subject-field"><span class="label">Subject</span><input class="input" name="subject"></label>
-        <label class="field"><span class="label">Message
+        <label class="field" id="subject-field"><span class="label">Asunto</span><input class="input" name="subject"></label>
+        <label class="field"><span class="label">Mensaje
           <button type="button" class="btn secondary small" id="ai-gen" style="margin-left:8px">Generar con IA</button></span>
-          <textarea class="input" name="body" rows="7" required placeholder="Hi {{first_name}}, …"></textarea></label>
+          <textarea class="input" name="body" rows="7" required placeholder="Hola {{first_name}}, …"></textarea></label>
+        <label class="field"><span class="label">Programar envío (opcional)</span>
+          <input class="input" name="send_at" type="datetime-local">
+          <span class="muted" style="font-size:11px">Déjalo vacío para guardar como borrador y enviar manualmente.</span></label>
         <div class="modal-actions">
-          <button type="button" class="btn secondary" id="cancel">Cancel</button>
-          <button class="btn">Save as Draft</button>
+          <button type="button" class="btn secondary" id="cancel">Cancelar</button>
+          <button class="btn">Guardar</button>
         </div>
       </form>`);
     modal.querySelector('#cancel').addEventListener('click', closeOverlay);
@@ -211,7 +214,7 @@ export async function renderMarketing(view) {
         else delete data.send_at;
         await api('/marketing/campaigns', { method: 'POST', body: data });
         closeOverlay();
-        toast(data.send_at ? 'Campaña programada' : 'Campaign saved as draft');
+        toast(data.send_at ? 'Campaña programada' : 'Campaña guardada como borrador');
         renderMarketing(view);
       } catch (err) {
         toast(err.message, true);

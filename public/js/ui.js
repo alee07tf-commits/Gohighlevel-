@@ -22,7 +22,8 @@ export function esc(text) {
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 export function toast(message, isError = false) {
@@ -55,18 +56,24 @@ export function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
-export function fmtMoney(value) {
-  return '$' + Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+// Currency-aware, Spanish-locale money formatter. Defaults to EUR; pass a
+// currency code (EUR/USD/MXN/COP/ARS…) when the record has one.
+export function fmtMoney(value, currency = 'EUR') {
+  try {
+    return Number(value || 0).toLocaleString('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 });
+  } catch {
+    return `${Number(value || 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })} ${currency}`;
+  }
 }
 
 export function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export function fullName(obj) {
-  return [obj.first_name, obj.last_name].filter(Boolean).join(' ') || obj.email || obj.phone || 'Unknown';
+  return [obj.first_name, obj.last_name].filter(Boolean).join(' ') || obj.email || obj.phone || 'Sin nombre';
 }
 
 export function initials(obj) {
