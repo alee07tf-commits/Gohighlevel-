@@ -43,7 +43,7 @@ function slugify(text) {
 }
 
 router.post('/funnel', async (req, res) => {
-  const { business, offer, audience, goal, tone, funnel_id, page_id } = req.body || {};
+  const { business, offer, audience, goal, tone, prompt, funnel_id, page_id } = req.body || {};
   try {
     const design = await ai.generateFunnelDesign({
       business: business || `${req.location.name}${req.location.company ? ` (${req.location.company})` : ''}`,
@@ -51,6 +51,7 @@ router.post('/funnel', async (req, res) => {
       audience,
       goal,
       tone,
+      prompt,
       locationName: req.location.name,
       ctx: { locationId: req.location.id, agencyId: req.user.agency_id },
     });

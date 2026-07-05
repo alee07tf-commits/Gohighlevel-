@@ -19,6 +19,21 @@ before(async () => {
   headers = { Authorization: `Bearer ${res.body.token}`, 'X-Location-Id': String(me.body.locations[0].id) };
 });
 
+test('ai funnel: generates from a single free-text prompt (Claude design interface)', async () => {
+  // The primary interface: the user just describes what they want, like talking
+  // to a designer. No structured fields required.
+  const gen = await request(app).post('/api/ai/funnel').set(headers).send({
+    prompt: 'Una landing premium para mi clínica dental en Madrid que promocione el blanqueamiento con 20% de descuento, con testimonios y formulario para pedir cita.',
+  });
+  assert.equal(gen.status, 201);
+  assert.equal(gen.body.mode, 'created');
+  const funnels = await request(app).get('/api/funnels').set(headers);
+  const page = funnels.body.find((f) => f.id === gen.body.funnel_id).pages[0];
+  assert.ok(page.content.length >= 4, 'a full page generated from just the prompt');
+  assert.equal(page.content[0].type, 'hero');
+  assert.ok(page.content.some((b) => b.type === 'form'), 'lead form wired in');
+});
+
 test('ai funnel: generates a complete funnel (template fallback) with editable blocks', async () => {
   const gen = await request(app).post('/api/ai/funnel').set(headers).send({
     business: 'Clínica dental', offer: 'Blanqueamiento 20% dto', goal: 'captar leads',

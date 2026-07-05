@@ -45,18 +45,24 @@ export async function renderFunnels(view, rest = []) {
   view.querySelector('#ai-funnel').addEventListener('click', () => {
     const modal = openModal(`
       <h2>Claude design — genera tu landing</h2>
-      <p class="muted" style="margin-bottom:12px">Describe el negocio y la oferta; la IA diseña la página completa (estructura, textos y tema). Después podrás <strong>editar cada bloque</strong> antes de publicar.</p>
-      <label class="field"><span class="label">Negocio</span><input class="input" id="ai-business" placeholder="Clínica dental en Madrid especializada en estética"></label>
-      <label class="field"><span class="label">Oferta / servicio a promocionar</span><input class="input" id="ai-offer" placeholder="Blanqueamiento dental con 20% de descuento este mes"></label>
-      <div class="form-row">
-        <label class="field"><span class="label">Público objetivo</span><input class="input" id="ai-audience" placeholder="Adultos 25-50 de la zona"></label>
-        <label class="field"><span class="label">Objetivo</span><select class="input" id="ai-goal">
-          <option value="captar leads">Captar leads</option><option value="booking">Reservar citas</option>
-          <option value="vender">Vender directamente</option></select></label>
-      </div>
-      <label class="field"><span class="label">Tono</span><select class="input" id="ai-tone">
-        <option>cercano y profesional</option><option>premium y elegante</option><option>directo y urgente</option><option>divertido y fresco</option>
-      </select></label>
+      <p class="muted" style="margin-bottom:12px">Escribe lo que quieres, como se lo dirías a un diseñador. La IA crea la página completa (estructura, textos y tema) y después podrás <strong>editar cada bloque</strong> antes de publicar.</p>
+      <label class="field"><span class="label">Describe tu página</span>
+        <textarea class="input" id="ai-prompt" rows="4" placeholder="Ej: Una landing para mi clínica dental en Madrid que promocione el blanqueamiento con 20% de descuento este mes. Público adulto 25-50. Que transmita confianza y sea premium, con testimonios y un formulario para pedir cita."></textarea></label>
+      <details style="margin-bottom:10px"><summary class="muted" style="cursor:pointer;font-size:13px">Detalles opcionales (afinar)</summary>
+        <div style="padding-top:8px">
+          <label class="field"><span class="label">Negocio</span><input class="input" id="ai-business" placeholder="Clínica dental en Madrid especializada en estética"></label>
+          <label class="field"><span class="label">Oferta / servicio a promocionar</span><input class="input" id="ai-offer" placeholder="Blanqueamiento dental con 20% de descuento este mes"></label>
+          <div class="form-row">
+            <label class="field"><span class="label">Público objetivo</span><input class="input" id="ai-audience" placeholder="Adultos 25-50 de la zona"></label>
+            <label class="field"><span class="label">Objetivo</span><select class="input" id="ai-goal">
+              <option value="captar leads">Captar leads</option><option value="booking">Reservar citas</option>
+              <option value="vender">Vender directamente</option></select></label>
+          </div>
+          <label class="field"><span class="label">Tono</span><select class="input" id="ai-tone">
+            <option>cercano y profesional</option><option>premium y elegante</option><option>directo y urgente</option><option>divertido y fresco</option>
+          </select></label>
+        </div>
+      </details>
       <div class="modal-actions">
         <button class="btn secondary" id="cancel">Cancelar</button>
         <button class="btn" id="gen">Generar landing</button>
@@ -70,6 +76,7 @@ export async function renderFunnels(view, rest = []) {
         const result = await api('/ai/funnel', {
           method: 'POST',
           body: {
+            prompt: modal.querySelector('#ai-prompt').value,
             business: modal.querySelector('#ai-business').value,
             offer: modal.querySelector('#ai-offer').value,
             audience: modal.querySelector('#ai-audience').value,
