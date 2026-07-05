@@ -1,5 +1,6 @@
 import { api, state } from '../api.js';
 import { esc, toast, openModal, closeOverlay, formData } from '../ui.js';
+import { t } from '../i18n.js';
 
 const isAdmin = () => state.user?.role === 'admin';
 
@@ -11,8 +12,8 @@ export async function renderTraining(view) {
 
   view.innerHTML = `
   <div class="page-header">
-    <div><h1>Formación</h1><p class="muted" style="font-size:13px">Aprende a usar la plataforma${authored.length ? ' y crea formaciones para tus clientes' : ''}.</p></div>
-    ${isAdmin() ? '<button class="btn" id="course-new">+ Crear curso</button>' : ''}
+    <div><h1>${t('Formación', 'Training')}</h1><p class="muted" style="font-size:13px">${t('Aprende a usar la plataforma', 'Learn how to use the platform')}${authored.length ? t(' y crea formaciones para tus clientes', ' and create training for your clients') : ''}.</p></div>
+    ${isAdmin() ? `<button class="btn" id="course-new">${t('+ Crear curso', '+ Create course')}</button>` : ''}
   </div>
 
   ${available.length
@@ -22,16 +23,16 @@ export async function renderTraining(view) {
           <div class="card-body">
             <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
               <strong>${esc(c.title)}</strong>
-              ${c.owned ? '<span class="badge">Tuyo</span>' : `<span class="muted" style="font-size:11px">por ${esc(c.owner_name)}</span>`}
+              ${c.owned ? `<span class="badge">${t('Tuyo', 'Yours')}</span>` : `<span class="muted" style="font-size:11px">${t('por', 'by')} ${esc(c.owner_name)}</span>`}
             </div>
             <p class="muted" style="font-size:13px;margin:6px 0 12px">${esc(c.description || '')}</p>
             <div style="height:6px;background:var(--border,#eee);border-radius:4px;overflow:hidden">
               <div style="height:100%;width:${pct}%;background:var(--primary)"></div></div>
-            <div class="muted" style="font-size:12px;margin-top:6px">${c.completed_count}/${c.lesson_count} lecciones · ${pct}%</div>
+            <div class="muted" style="font-size:12px;margin-top:6px">${c.completed_count}/${c.lesson_count} ${t('lecciones', 'lessons')} · ${pct}%</div>
           </div>
         </div>`;
       }).join('')}</div>`
-    : `<div class="empty card" style="padding:40px">${isAdmin() ? 'Aún no hay cursos. Crea el primero para formar a tus clientes.' : 'Tu agencia todavía no ha publicado formación.'}</div>`}`;
+    : `<div class="empty card" style="padding:40px">${isAdmin() ? t('Aún no hay cursos. Crea el primero para formar a tus clientes.', 'No courses yet. Create the first one to train your clients.') : t('Tu agencia todavía no ha publicado formación.', 'Your agency has not published any training yet.')}</div>`}`;
 
   view.querySelectorAll('.course-card').forEach((el) =>
     el.addEventListener('click', () => openCourse(view, Number(el.dataset.id)))
@@ -39,11 +40,11 @@ export async function renderTraining(view) {
 
   view.querySelector('#course-new')?.addEventListener('click', () => {
     const modal = openModal(`
-      <h2>Nuevo curso</h2>
+      <h2>${t('Nuevo curso', 'New course')}</h2>
       <form id="course-form">
-        <label class="field"><span class="label">Título</span><input class="input" name="title" required placeholder="Cómo usar tu plataforma de marketing"></label>
-        <label class="field"><span class="label">Descripción</span><input class="input" name="description" placeholder="Onboarding paso a paso"></label>
-        <div class="modal-actions"><button type="button" class="btn secondary" id="cancel">Cancelar</button><button class="btn">Crear</button></div>
+        <label class="field"><span class="label">${t('Título', 'Title')}</span><input class="input" name="title" required placeholder="${t('Cómo usar tu plataforma de marketing', 'How to use your marketing platform')}"></label>
+        <label class="field"><span class="label">${t('Descripción', 'Description')}</span><input class="input" name="description" placeholder="${t('Onboarding paso a paso', 'Step-by-step onboarding')}"></label>
+        <div class="modal-actions"><button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button><button class="btn">${t('Crear', 'Create')}</button></div>
       </form>`);
     modal.querySelector('#cancel').addEventListener('click', closeOverlay);
     modal.querySelector('#course-form').addEventListener('submit', async (e) => {
@@ -51,7 +52,7 @@ export async function renderTraining(view) {
       try {
         const c = await api('/training/courses', { method: 'POST', body: formData(e.target) });
         closeOverlay();
-        toast('Curso creado');
+        toast(t('Curso creado', 'Course created'));
         openCourse(view, c.id);
       } catch (err) {
         toast(err.message, true);
@@ -68,25 +69,25 @@ async function openCourse(view, courseId) {
   const render = () => {
     view.innerHTML = `
     <div class="page-header">
-      <div><button class="btn ghost small" id="back">← Formación</button>
+      <div><button class="btn ghost small" id="back">${t('← Formación', '← Training')}</button>
         <h1 style="margin-top:6px">${esc(course.title)}</h1></div>
-      ${canEdit ? '<button class="btn secondary" id="lesson-new">+ Lección</button>' : ''}
+      ${canEdit ? `<button class="btn secondary" id="lesson-new">${t('+ Lección', '+ Lesson')}</button>` : ''}
     </div>
     <div class="grid-2" style="align-items:start">
       <div class="card">
-        <div class="card-title">Lecciones</div>
+        <div class="card-title">${t('Lecciones', 'Lessons')}</div>
         <div class="card-body">
           ${course.lessons.length ? course.lessons.map((l) => `
             <div class="appt-row lesson-row ${current && l.id === current.id ? 'active' : ''}" data-id="${l.id}" style="cursor:pointer;${current && l.id === current.id ? 'background:var(--hover,#f5f5ff)' : ''}">
               <span style="width:18px">${l.completed ? '✅' : '⚪'}</span>
               <div style="flex:1">${esc(l.title)}</div>
               ${canEdit ? `<button class="btn ghost small lesson-edit" data-id="${l.id}">✎</button><button class="btn ghost small lesson-del" data-id="${l.id}">✕</button>` : ''}
-            </div>`).join('') : '<p class="muted">Sin lecciones todavía.</p>'}
+            </div>`).join('') : `<p class="muted">${t('Sin lecciones todavía.', 'No lessons yet.')}</p>`}
         </div>
       </div>
       <div class="card">
         <div class="card-body" id="lesson-pane">
-          ${current ? lessonPane(current) : '<p class="muted">Selecciona o crea una lección.</p>'}
+          ${current ? lessonPane(current) : `<p class="muted">${t('Selecciona o crea una lección.', 'Select or create a lesson.')}</p>`}
         </div>
       </div>
     </div>`;
@@ -117,9 +118,9 @@ async function openCourse(view, courseId) {
       );
       view.querySelectorAll('.lesson-del').forEach((b) =>
         b.addEventListener('click', async () => {
-          if (!confirm('¿Eliminar esta lección?')) return;
+          if (!confirm(t('¿Eliminar esta lección?', 'Delete this lesson?'))) return;
           await api(`/training/lessons/${b.dataset.id}`, { method: 'DELETE' });
-          toast('Lección eliminada');
+          toast(t('Lección eliminada', 'Lesson deleted'));
           openCourse(view, courseId);
         })
       );
@@ -135,17 +136,17 @@ function lessonPane(l) {
         style="position:absolute;top:0;left:0;width:100%;height:100%"></iframe></div>` : ''}
     <h2 style="margin-bottom:8px">${esc(l.title)}</h2>
     <div style="white-space:pre-wrap;line-height:1.6">${esc(l.body || '')}</div>
-    <button class="btn ${l.completed ? 'secondary' : ''}" id="toggle-done" style="margin-top:16px">${l.completed ? '✓ Completada — desmarcar' : 'Marcar como completada'}</button>`;
+    <button class="btn ${l.completed ? 'secondary' : ''}" id="toggle-done" style="margin-top:16px">${l.completed ? t('✓ Completada — desmarcar', '✓ Completed — undo') : t('Marcar como completada', 'Mark as completed')}</button>`;
 }
 
 function lessonModal(view, course, lesson) {
   const modal = openModal(`
-    <h2>${lesson ? 'Editar' : 'Nueva'} lección</h2>
+    <h2>${lesson ? t('Editar lección', 'Edit lesson') : t('Nueva lección', 'New lesson')}</h2>
     <form id="lesson-form">
-      <label class="field"><span class="label">Título</span><input class="input" name="title" required value="${lesson ? esc(lesson.title) : ''}" placeholder="Bienvenida y primeros pasos"></label>
-      <label class="field"><span class="label">Vídeo de YouTube (URL o ID)</span><input class="input" name="youtube_url" value="${lesson ? esc(lesson.youtube_id) : ''}" placeholder="https://youtu.be/…"></label>
-      <label class="field"><span class="label">Contenido / notas</span><textarea class="input" name="body" rows="6" placeholder="Explica el paso…">${lesson ? esc(lesson.body || '') : ''}</textarea></label>
-      <div class="modal-actions"><button type="button" class="btn secondary" id="cancel">Cancelar</button><button class="btn">Guardar</button></div>
+      <label class="field"><span class="label">${t('Título', 'Title')}</span><input class="input" name="title" required value="${lesson ? esc(lesson.title) : ''}" placeholder="${t('Bienvenida y primeros pasos', 'Welcome and getting started')}"></label>
+      <label class="field"><span class="label">${t('Vídeo de YouTube (URL o ID)', 'YouTube video (URL or ID)')}</span><input class="input" name="youtube_url" value="${lesson ? esc(lesson.youtube_id) : ''}" placeholder="https://youtu.be/…"></label>
+      <label class="field"><span class="label">${t('Contenido / notas', 'Content / notes')}</span><textarea class="input" name="body" rows="6" placeholder="${t('Explica el paso…', 'Explain the step…')}">${lesson ? esc(lesson.body || '') : ''}</textarea></label>
+      <div class="modal-actions"><button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button><button class="btn">${t('Guardar', 'Save')}</button></div>
     </form>`);
   modal.querySelector('#cancel').addEventListener('click', closeOverlay);
   modal.querySelector('#lesson-form').addEventListener('submit', async (e) => {
@@ -154,7 +155,7 @@ function lessonModal(view, course, lesson) {
       if (lesson) await api(`/training/lessons/${lesson.id}`, { method: 'PUT', body: formData(e.target) });
       else await api(`/training/courses/${course.id}/lessons`, { method: 'POST', body: formData(e.target) });
       closeOverlay();
-      toast('Lección guardada');
+      toast(t('Lección guardada', 'Lesson saved'));
       openCourse(view, course.id);
     } catch (err) {
       toast(err.message, true);
