@@ -253,6 +253,63 @@ router.post('/pages/:pageId/submit', async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
+// ---- Generic inbound webhook receiver (connect any external app) ----
+// POST any JSON: email/phone (one required), first_name/last_name or name, tag,
+// and any extra fields (stored as custom fields). Upserts the contact and fires
+// contact_created / form_submitted / tag_added automations.
+router.post('/inbound/:token', async (req, res) => {
+  const hook = await db.get('SELECT * FROM inbound_webhooks WHERE token = ?', [req.params.token]);
+  if (!hook) return res.status(404).json({ error: 'Webhook not found' });
+  const loc = hook.location_id;
+  const data = req.body || {};
+  const email = String(data.email || '').trim();
+  const phone = String(data.phone || data.phone_number || '').trim();
+  if (!email && !phone) return res.status(400).json({ error: 'email or phone is required' });
+
+  let first_name = data.first_name || '';
+  let last_name = data.last_name || '';
+  if (!first_name && data.name) {
+    const parts = String(data.name).trim().split(/\s+/);
+    first_name = parts[0] || '';
+    last_name = parts.slice(1).join(' ');
+  }
+  const known = new Set(['email', 'phone', 'phone_number', 'first_name', 'last_name', 'name', 'tag']);
+  const custom = {};
+  for (const [k, v] of Object.entries(data)) if (!known.has(k) && v != null && typeof v !== 'object') custom[k] = v;
+
+  let contact = null;
+  if (email) contact = await db.get(`SELECT * FROM contacts WHERE location_id = ? AND email = ? AND email != ''`, [loc, email]);
+  if (!contact && phone) contact = await db.get(`SELECT * FROM contacts WHERE location_id = ? AND phone = ? AND phone != ''`, [loc, phone]);
+  let isNew = false;
+  if (!contact) {
+    const id = await db.insert(
+      `INSERT INTO contacts (location_id, first_name, last_name, email, phone, source, custom_fields)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [loc, first_name, last_name, email, phone, `webhook:${hook.name}`, JSON.stringify(custom)]
+    );
+    contact = await db.get('SELECT * FROM contacts WHERE id = ?', [id]);
+    isNew = true;
+  } else if (Object.keys(custom).length) {
+    let existing = {};
+    try {
+      existing = JSON.parse(contact.custom_fields || '{}');
+    } catch {
+      existing = {};
+    }
+    await db.run('UPDATE contacts SET custom_fields = ? WHERE id = ?', [JSON.stringify({ ...existing, ...custom }), contact.id]);
+  }
+
+  const tag = data.tag || hook.tag;
+  if (tag) await db.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [contact.id, tag]);
+  await db.run('UPDATE inbound_webhooks SET last_received_at = now(), received_count = received_count + 1 WHERE id = ?', [hook.id]);
+  await scoring.addScore(contact.id, 'form_submitted');
+  await automation.logActivity(loc, contact.id, 'form', `Webhook entrante "${hook.name}"`);
+  if (isNew) await automation.trigger(loc, 'contact_created', contact);
+  await automation.trigger(loc, 'form_submitted', contact, { webhook: hook.name });
+  if (tag) await automation.trigger(loc, 'tag_added', contact, { tag });
+  res.status(201).json({ ok: true, contact_id: contact.id, created: isNew });
+});
+
 // ---- Standalone public form ----
 const FORM_LABELS = {
   first_name: { es: 'Nombre', en: 'First name' }, last_name: { es: 'Apellidos', en: 'Last name' },

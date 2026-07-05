@@ -511,6 +511,32 @@ ALTER TABLE courses ADD COLUMN IF NOT EXISTS public_token TEXT;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_public INTEGER NOT NULL DEFAULT 0;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_public_token ON courses(public_token) WHERE public_token IS NOT NULL;
 
+-- Universal integration layer (v3.0): public API keys (external apps / Zapier /
+-- Make authenticate with these) and generic inbound webhooks (any app POSTs a
+-- lead into the CRM). Outbound webhooks already exist as a workflow action.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  last_used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_agency ON api_keys(agency_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+CREATE TABLE IF NOT EXISTS inbound_webhooks (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  tag TEXT DEFAULT '',
+  last_received_at TIMESTAMPTZ,
+  received_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_inbound_webhooks_location ON inbound_webhooks(location_id);
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -616,7 +642,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 
 let readyPromise = null;
 function ensureReady() {

@@ -1,7 +1,30 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const db = require('./db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'leadflow-dev-secret-change-me';
+const API_KEY_PREFIX = 'lf_';
+
+// Public API keys: a random secret shown once, stored only as a SHA-256 hash.
+function generateApiKey() {
+  const key = API_KEY_PREFIX + crypto.randomBytes(24).toString('hex');
+  return { key, prefix: key.slice(0, 10), hash: hashKey(key) };
+}
+function hashKey(key) {
+  return crypto.createHash('sha256').update(String(key)).digest('hex');
+}
+
+// Resolves an API key from headers (X-Api-Key or `Authorization: Bearer lf_…`).
+async function resolveApiKey(req) {
+  const header = req.headers.authorization || '';
+  const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const raw = req.headers['x-api-key'] || (bearer.startsWith(API_KEY_PREFIX) ? bearer : '');
+  if (!raw) return null;
+  const row = await db.get('SELECT * FROM api_keys WHERE key_hash = ?', [hashKey(raw)]);
+  if (!row) return { invalid: true };
+  db.run('UPDATE api_keys SET last_used_at = now() WHERE id = ?', [row.id]).catch(() => {});
+  return { agency_id: row.agency_id };
+}
 
 function signToken(user) {
   return jwt.sign({ id: user.id, agency_id: user.agency_id, role: user.role }, JWT_SECRET, {
@@ -36,6 +59,17 @@ async function isInSubtree(agencyId, rootId) {
 }
 
 async function requireAuth(req, res, next) {
+  // Public API key auth (external apps / Zapier / Make). Scope is fixed to the
+  // key's agency; a synthetic admin user is attached so routes work unchanged.
+  const apiAuth = await resolveApiKey(req);
+  if (apiAuth) {
+    if (apiAuth.invalid) return res.status(401).json({ error: 'Invalid API key' });
+    req.user = { id: null, agency_id: apiAuth.agency_id, homeAgencyId: apiAuth.agency_id, name: 'API', email: '', role: 'admin' };
+    req.actingAsChild = false;
+    req.apiKey = true;
+    return next();
+  }
+
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Authentication required' });
@@ -89,4 +123,4 @@ async function requireLocation(req, res, next) {
   next();
 }
 
-module.exports = { signToken, requireAuth, requireLocation, ancestorIds, isInSubtree, JWT_SECRET };
+module.exports = { signToken, requireAuth, requireLocation, ancestorIds, isInSubtree, generateApiKey, hashKey, JWT_SECRET };
