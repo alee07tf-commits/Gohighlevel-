@@ -28,6 +28,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/locations', require('./routes/locations'));
 app.use('/api/contacts', require('./routes/contacts'));
+app.use('/api/companies', require('./routes/companies'));
 app.use('/api/pipelines', require('./routes/pipelines'));
 app.use('/api/calendars', require('./routes/calendars'));
 app.use('/api/conversations', require('./routes/conversations'));

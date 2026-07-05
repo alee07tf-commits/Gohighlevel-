@@ -561,6 +561,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_connected_accounts_loc_app ON connected_ac
 ALTER TABLE connected_accounts ADD COLUMN IF NOT EXISTS webhook_token TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_connected_accounts_webhook_token ON connected_accounts(webhook_token) WHERE webhook_token IS NOT NULL;
 
+-- Companies / businesses (v3.9): a first-class object that groups contacts
+-- (GoHighLevel parity). Plus richer contact fields: a company link, additional
+-- emails/phones, and per-channel DND.
+CREATE TABLE IF NOT EXISTS companies (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  website TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
+  email TEXT DEFAULT '',
+  industry TEXT DEFAULT '',
+  address TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_companies_location ON companies(location_id);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS additional_emails TEXT DEFAULT '[]';
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS additional_phones TEXT DEFAULT '[]';
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS dnd_email INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS dnd_sms INTEGER NOT NULL DEFAULT 0;
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -666,7 +688,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 
 let readyPromise = null;
 function ensureReady() {

@@ -15,11 +15,17 @@ function parseCF(raw) {
     return {};
   }
 }
+function parseArr(raw) {
+  try { const v = JSON.parse(raw || '[]'); return Array.isArray(v) ? v.filter(Boolean) : []; } catch { return []; }
+}
+function enrich(c) {
+  return { ...c, custom_fields: parseCF(c.custom_fields), additional_emails: parseArr(c.additional_emails), additional_phones: parseArr(c.additional_phones) };
+}
 
 async function withTags(contact) {
   if (!contact) return contact;
   const tags = await db.all('SELECT tag FROM contact_tags WHERE contact_id = ? ORDER BY tag', [contact.id]);
-  return { ...contact, custom_fields: parseCF(contact.custom_fields), tags: tags.map((t) => t.tag) };
+  return { ...enrich(contact), tags: tags.map((t) => t.tag) };
 }
 
 // Attaches tags to many contacts with a single grouped query (avoids N+1).
@@ -30,7 +36,7 @@ async function withTagsBulk(rows) {
   const tagRows = await db.all(`SELECT contact_id, tag FROM contact_tags WHERE contact_id IN (${ph}) ORDER BY tag`, ids);
   const byId = {};
   for (const tr of tagRows) (byId[tr.contact_id] || (byId[tr.contact_id] = [])).push(tr.tag);
-  return rows.map((c) => ({ ...c, custom_fields: parseCF(c.custom_fields), tags: byId[c.id] || [] }));
+  return rows.map((c) => ({ ...enrich(c), tags: byId[c.id] || [] }));
 }
 
 router.get('/', async (req, res) => {
@@ -44,8 +50,9 @@ router.get('/', async (req, res) => {
   sql += ' WHERE c.location_id = ?';
   params.push(req.location.id);
   if (q) {
-    sql += ` AND (c.first_name || ' ' || c.last_name ILIKE ? OR c.email ILIKE ? OR c.phone ILIKE ?)`;
-    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    sql += ` AND (c.first_name || ' ' || c.last_name ILIKE ? OR c.email ILIKE ? OR c.phone ILIKE ?
+             OR c.additional_emails ILIKE ? OR c.additional_phones ILIKE ?)`;
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   sql += ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?';
   params.push(Number(limit), Number(offset));
@@ -54,12 +61,17 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { first_name, last_name, email, phone, source, tags, custom_fields } = req.body || {};
+  const { first_name, last_name, email, phone, source, tags, custom_fields, company_id } = req.body || {};
   if (!first_name && !email && !phone)
     return res.status(400).json({ error: 'At least one of first_name, email or phone is required' });
+  let companyId = company_id ? Number(company_id) : null;
+  if (companyId) {
+    const co = await db.get('SELECT id FROM companies WHERE id = ? AND location_id = ?', [companyId, req.location.id]);
+    if (!co) companyId = null;
+  }
   const id = await db.insert(
-    `INSERT INTO contacts (location_id, first_name, last_name, email, phone, source, custom_fields)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO contacts (location_id, first_name, last_name, email, phone, source, custom_fields, company_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.location.id,
       first_name || '',
@@ -68,6 +80,7 @@ router.post('/', async (req, res) => {
       phone || '',
       source || 'manual',
       JSON.stringify(custom_fields || {}),
+      companyId,
     ]
   );
   const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [id]);
@@ -88,6 +101,14 @@ async function getContact(req, res, next) {
   if (!contact) return res.status(404).json({ error: 'Contact not found' });
   req.contact = contact;
   next();
+}
+
+// Whether a contact's DND blocks a channel (global DND, or per-channel).
+function dndBlocks(c, channel) {
+  if (c.dnd) return true;
+  if (channel === 'email') return !!c.dnd_email;
+  if (channel === 'sms' || channel === 'whatsapp') return !!c.dnd_sms;
+  return false;
 }
 
 // Returns the caller-owned contact rows for a set of ids (scopes to location).
@@ -126,7 +147,7 @@ router.post('/bulk/message', async (req, res) => {
   const rows = await ownedContacts(ids, req.location.id);
   let sent = 0, skipped = 0;
   for (const c of rows) {
-    if (c.dnd) { skipped++; continue; }
+    if (dndBlocks(c, channel)) { skipped++; continue; }
     try { await messaging.sendByChannel(channel, req.location.id, await withTags(c), { subject, body }); sent++; }
     catch { skipped++; }
   }
@@ -212,6 +233,9 @@ router.get('/:id', getContact, async (req, res) => {
     const owner = await db.get('SELECT name FROM users WHERE id = ?', [contact.owner_user_id]);
     contact.owner_name = owner ? owner.name : null;
   }
+  if (contact.company_id) {
+    contact.company = await db.get('SELECT id, name FROM companies WHERE id = ? AND location_id = ?', [contact.company_id, req.location.id]);
+  }
   contact.appointments = await db.all(
     'SELECT * FROM appointments WHERE contact_id = ? ORDER BY starts_at DESC LIMIT 20',
     [contact.id]
@@ -229,9 +253,16 @@ router.put('/:id', getContact, async (req, res) => {
   } catch {
     return res.status(400).json({ error: 'custom_fields no es JSON válido' });
   }
+  const asArr = (v) => JSON.stringify(Array.isArray(v) ? v.filter(Boolean) : parseArr(v));
+  // Validate the company belongs to this location (or clear it).
+  let companyId = merged.company_id ? Number(merged.company_id) : null;
+  if (companyId) {
+    const co = await db.get('SELECT id FROM companies WHERE id = ? AND location_id = ?', [companyId, req.location.id]);
+    if (!co) companyId = null;
+  }
   await db.run(
-    `UPDATE contacts SET first_name=?, last_name=?, email=?, phone=?, source=?, dnd=?, owner_user_id=?, custom_fields=?,
-     updated_at=now() WHERE id=?`,
+    `UPDATE contacts SET first_name=?, last_name=?, email=?, phone=?, source=?, dnd=?, dnd_email=?, dnd_sms=?,
+     owner_user_id=?, company_id=?, additional_emails=?, additional_phones=?, custom_fields=?, updated_at=now() WHERE id=?`,
     [
       merged.first_name,
       merged.last_name,
@@ -239,7 +270,12 @@ router.put('/:id', getContact, async (req, res) => {
       merged.phone,
       merged.source,
       merged.dnd ? 1 : 0,
+      merged.dnd_email ? 1 : 0,
+      merged.dnd_sms ? 1 : 0,
       merged.owner_user_id || null,
+      companyId,
+      asArr(merged.additional_emails),
+      asArr(merged.additional_phones),
       customFieldsJson,
       req.contact.id,
     ]
@@ -289,7 +325,7 @@ router.post('/:id/notes', getContact, async (req, res) => {
 router.post('/:id/message', getContact, async (req, res) => {
   const { channel = 'sms', subject = '', body } = req.body || {};
   if (!body) return res.status(400).json({ error: 'body is required' });
-  if (req.contact.dnd) return res.status(400).json({ error: 'El contacto tiene DND activado' });
+  if (dndBlocks(req.contact, channel)) return res.status(400).json({ error: 'El contacto tiene DND activado para este canal' });
   const message = await messaging.sendByChannel(channel, req.location.id, await withTags(req.contact), { subject, body });
   res.status(201).json(message);
 });

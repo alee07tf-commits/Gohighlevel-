@@ -36,6 +36,7 @@ export async function renderContacts(view, rest = []) {
       <button class="btn secondary" id="export-csv" title="${t('Exportar CSV', 'Export CSV')}">CSV</button>
       <button class="btn secondary" id="import-csv" title="${t('Importar CSV', 'Import CSV')}">CSV</button>
       <button class="btn secondary" id="find-dupes" title="${t('Buscar duplicados', 'Find duplicates')}">²</button>
+      <button class="btn secondary" id="companies-btn">${t('Empresas', 'Companies')}</button>
       <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
       <button class="btn" id="add-contact">+ ${t('Añadir contacto', 'Add Contact')}</button>
     </div>
@@ -113,6 +114,7 @@ export async function renderContacts(view, rest = []) {
     });
     view.querySelector('#tag-filter').addEventListener('change', (e) => { tag = e.target.value; load(); });
     view.querySelector('#add-contact').addEventListener('click', () => contactModal(load));
+    view.querySelector('#companies-btn').addEventListener('click', () => companiesModal(load));
     view.querySelectorAll('[data-sl]').forEach((chip) =>
       chip.addEventListener('click', (e) => {
         if (e.target.classList.contains('sl-del')) return;
@@ -331,10 +333,59 @@ function filterBuilder(tags, current, curMatch, onApply) {
   });
 }
 
+// Companies management (list + create/edit/delete), GHL-style.
+async function companiesModal(onChanged) {
+  const companies = await api('/companies').catch(() => []);
+  const modal = openModal(`<h2>${t('Empresas', 'Companies')}</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:10px">${t('Agrupa contactos por empresa (B2B). Vincula un contacto a su empresa al editarlo.', 'Group contacts by company (B2B). Link a contact to its company when editing it.')}</p>
+    <div id="co-list">${companies.length
+      ? companies.map((co) => `<div class="appt-row" data-id="${co.id}"><div style="flex:1"><strong>${esc(co.name)}</strong>
+          <span class="muted" style="font-size:12px">${co.industry ? `· ${esc(co.industry)} ` : ''}· ${co.contact_count || 0} ${t('contactos', 'contacts')}</span></div>
+          <button class="btn ghost small co-edit" data-id="${co.id}">${t('Editar', 'Edit')}</button>
+          <button class="btn ghost small co-del" data-id="${co.id}">✕</button></div>`).join('')
+      : `<p class="muted">${t('Aún no hay empresas.', 'No companies yet.')}</p>`}</div>
+    <button class="btn secondary" id="co-new" style="margin-top:10px">+ ${t('Nueva empresa', 'New company')}</button>
+    <div class="modal-actions"><button class="btn" id="co-close">${t('Cerrar', 'Close')}</button></div>`);
+  const reload = () => { closeOverlay(); companiesModal(onChanged); onChanged && onChanged(); };
+  modal.querySelector('#co-close').addEventListener('click', closeOverlay);
+  modal.querySelector('#co-new').addEventListener('click', () => companyForm(reload));
+  modal.querySelectorAll('.co-edit').forEach((b) => b.addEventListener('click', async () => {
+    const co = await api(`/companies/${b.dataset.id}`);
+    companyForm(reload, co);
+  }));
+  modal.querySelectorAll('.co-del').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(t('¿Eliminar esta empresa? Los contactos no se borran, solo se desvinculan.', 'Delete this company? Contacts are kept, just unlinked.'))) return;
+    await api(`/companies/${b.dataset.id}`, { method: 'DELETE' });
+    reload();
+  }));
+}
+
+function companyForm(onSaved, company = null) {
+  const F = [['name', t('Nombre', 'Name'), true], ['website', 'Web'], ['phone', t('Teléfono', 'Phone')], ['email', 'Email'], ['industry', t('Sector', 'Industry')], ['address', t('Dirección', 'Address')]];
+  const modal = openModal(`<h2>${company ? t('Editar empresa', 'Edit company') : t('Nueva empresa', 'New company')}</h2>
+    <form id="co-form">
+      ${F.map(([k, label, req]) => `<label class="field"><span class="label">${esc(label)}</span><input class="input" name="${k}" value="${esc(company?.[k] || '')}" ${req ? 'required' : ''}></label>`).join('')}
+      <label class="field"><span class="label">${t('Notas', 'Notes')}</span><textarea class="input" name="notes" rows="2">${esc(company?.notes || '')}</textarea></label>
+      <div class="modal-actions"><button type="button" class="btn secondary" id="c">${t('Cancelar', 'Cancel')}</button><button class="btn">${t('Guardar', 'Save')}</button></div>
+    </form>`);
+  modal.querySelector('#c').addEventListener('click', closeOverlay);
+  modal.querySelector('#co-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      if (company) await api(`/companies/${company.id}`, { method: 'PUT', body: formData(e.target) });
+      else await api('/companies', { method: 'POST', body: formData(e.target) });
+      closeOverlay();
+      toast(t('Empresa guardada', 'Company saved'));
+      onSaved();
+    } catch (err) { toast(err.message, true); }
+  });
+}
+
 async function contactModal(onSaved, contact = null) {
-  const [customFields, team] = await Promise.all([
+  const [customFields, team, companies] = await Promise.all([
     api('/custom-fields'),
     api('/locations/team/users'),
+    api('/companies').catch(() => []),
   ]);
   const cfValues = contact?.custom_fields || {};
   const modal = openModal(`
@@ -346,11 +397,27 @@ async function contactModal(onSaved, contact = null) {
       </div>
       <label class="field"><span class="label">${t('Email', 'Email')}</span><input class="input" name="email" type="email" value="${esc(contact?.email || '')}"></label>
       <label class="field"><span class="label">${t('Teléfono', 'Phone')}</span><input class="input" name="phone" value="${esc(contact?.phone || '')}"></label>
+      <div class="form-row">
+        <label class="field"><span class="label">${t('Emails adicionales (coma)', 'Additional emails (comma)')}</span><input class="input" name="additional_emails_raw" value="${esc((contact?.additional_emails || []).join(', '))}"></label>
+        <label class="field"><span class="label">${t('Teléfonos adicionales (coma)', 'Additional phones (comma)')}</span><input class="input" name="additional_phones_raw" value="${esc((contact?.additional_phones || []).join(', '))}"></label>
+      </div>
       ${contact ? '' : `<label class="field"><span class="label">${t('Etiquetas (separadas por comas)', 'Tags (comma separated)')}</span><input class="input" name="tags_raw" placeholder="lead, vip"></label>`}
-      <label class="field"><span class="label">${t('Responsable', 'Owner')}</span><select class="input" name="owner_user_id">
-        <option value="">${t('— sin asignar —', '— unassigned —')}</option>
-        ${team.map((u) => `<option value="${u.id}" ${contact?.owner_user_id === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
-      </select></label>
+      <div class="form-row">
+        <label class="field"><span class="label">${t('Empresa', 'Company')}</span><select class="input" name="company_id">
+          <option value="">${t('— ninguna —', '— none —')}</option>
+          ${companies.map((co) => `<option value="${co.id}" ${contact?.company_id === co.id ? 'selected' : ''}>${esc(co.name)}</option>`).join('')}
+        </select></label>
+        <label class="field"><span class="label">${t('Responsable', 'Owner')}</span><select class="input" name="owner_user_id">
+          <option value="">${t('— sin asignar —', '— unassigned —')}</option>
+          ${team.map((u) => `<option value="${u.id}" ${contact?.owner_user_id === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+        </select></label>
+      </div>
+      <div class="flex" style="gap:14px;margin:4px 0 8px;font-size:13px">
+        <span class="muted">${t('No molestar:', 'Do not disturb:')}</span>
+        <label class="flex" style="gap:5px"><input type="checkbox" name="dnd" ${contact?.dnd ? 'checked' : ''}> ${t('Todo', 'All')}</label>
+        <label class="flex" style="gap:5px"><input type="checkbox" name="dnd_email" ${contact?.dnd_email ? 'checked' : ''}> Email</label>
+        <label class="flex" style="gap:5px"><input type="checkbox" name="dnd_sms" ${contact?.dnd_sms ? 'checked' : ''}> SMS</label>
+      </div>
       ${customFields
         .map(
           (f) => `<label class="field"><span class="label">${esc(f.name)}</span>
@@ -369,6 +436,11 @@ async function contactModal(onSaved, contact = null) {
     const data = formData(e.target);
     const tags = (data.tags_raw || '').split(',').map((t) => t.trim()).filter(Boolean);
     delete data.tags_raw;
+    const splitList = (s) => (s || '').split(',').map((x) => x.trim()).filter(Boolean);
+    data.additional_emails = splitList(data.additional_emails_raw); delete data.additional_emails_raw;
+    data.additional_phones = splitList(data.additional_phones_raw); delete data.additional_phones_raw;
+    data.company_id = Number(data.company_id) || null;
+    data.dnd = !!data.dnd; data.dnd_email = !!data.dnd_email; data.dnd_sms = !!data.dnd_sms;
     data.owner_user_id = Number(data.owner_user_id) || null;
     const custom_fields = { ...(contact?.custom_fields || {}) };
     modal.querySelectorAll('[data-cf]').forEach((inp) => { custom_fields[inp.dataset.cf] = inp.value; });
@@ -395,8 +467,11 @@ async function renderContactDetail(view, id) {
     <h1>${esc(fullName(c))}</h1>
     ${c.score >= 20 ? `<span class="badge amber">${c.score} pts</span>` : c.score > 0 ? `<span class="badge gray">${c.score} pts</span>` : ''}
     ${c.dnd ? '<span class="badge red">DND</span>' : ''}
+    ${!c.dnd && c.dnd_email ? '<span class="badge red">DND email</span>' : ''}
+    ${!c.dnd && c.dnd_sms ? '<span class="badge red">DND SMS</span>' : ''}
     <div class="spacer"></div>
     <button class="btn secondary" id="send-btn">${t('Enviar', 'Send')}</button>
+    <button class="btn secondary" id="task-btn">${t('Tarea', 'Task')}</button>
     <button class="btn secondary" id="wf-btn">Workflow</button>
     <button class="btn secondary" id="msg-btn">${t('Inbox', 'Inbox')}</button>
     <button class="btn secondary" id="edit-btn">${t('Editar', 'Edit')}</button>
@@ -406,7 +481,10 @@ async function renderContactDetail(view, id) {
     <div>
       <div class="card" style="margin-bottom:16px"><div class="card-title">${t('Detalles', 'Details')}</div><div class="card-body">
         <p><strong>${t('Email', 'Email')}:</strong> ${esc(c.email) || '<span class="muted">—</span>'}</p>
+        ${(c.additional_emails || []).map((e) => `<p class="muted" style="font-size:12px;margin-left:8px">+ ${esc(e)}</p>`).join('')}
         <p><strong>${t('Teléfono', 'Phone')}:</strong> ${esc(c.phone) || '<span class="muted">—</span>'}</p>
+        ${(c.additional_phones || []).map((p) => `<p class="muted" style="font-size:12px;margin-left:8px">+ ${esc(p)}</p>`).join('')}
+        ${c.company ? `<p><strong>${t('Empresa', 'Company')}:</strong> ${esc(c.company.name)}</p>` : ''}
         <p><strong>${t('Origen', 'Source')}:</strong> <span class="badge gray">${esc(c.source)}</span></p>
         ${c.owner_name ? `<p><strong>${t('Responsable', 'Owner')}:</strong> ${esc(c.owner_name)}</p>` : ''}
         ${Object.entries(c.custom_fields || {}).filter(([, v]) => v !== '' && v != null)
@@ -493,6 +571,22 @@ async function renderContactDetail(view, id) {
     modal.querySelector('#qs-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       try { await api(`/contacts/${id}/message`, { method: 'POST', body: formData(e.target) }); closeOverlay(); toast(t('Mensaje enviado', 'Message sent')); renderContactDetail(view, id); }
+      catch (err) { toast(err.message, true); }
+    });
+  });
+  view.querySelector('#task-btn').addEventListener('click', () => {
+    const modal = openModal(`<h2>${t('Nueva tarea', 'New task')}</h2>
+      <form id="tk-form">
+        <label class="field"><span class="label">${t('Título', 'Title')}</span><input class="input" name="title" required placeholder="${t('Llamar al cliente', 'Call the client')}"></label>
+        <label class="field"><span class="label">${t('Vence', 'Due')}</span><input class="input" name="due_at" type="datetime-local"></label>
+        <label class="field"><span class="label">${t('Notas', 'Notes')}</span><textarea class="input" name="notes" rows="2"></textarea></label>
+        <div class="modal-actions"><button type="button" class="btn secondary" id="c">${t('Cancelar', 'Cancel')}</button><button class="btn">${t('Crear tarea', 'Create task')}</button></div>
+      </form>`);
+    modal.querySelector('#c').addEventListener('click', closeOverlay);
+    modal.querySelector('#tk-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const d = formData(e.target);
+      try { await api('/tasks', { method: 'POST', body: { ...d, contact_id: Number(id), due_at: d.due_at || null } }); closeOverlay(); toast(t('Tarea creada', 'Task created')); renderContactDetail(view, id); }
       catch (err) { toast(err.message, true); }
     });
   });
