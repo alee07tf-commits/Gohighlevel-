@@ -6,6 +6,7 @@
 const db = require('../db');
 const ai = require('./ai');
 const automation = require('./automation');
+const billing = require('./billing');
 
 // Free slots for the next 7 days for one calendar (max ~40 slots).
 async function availableSlots(calendar, days = 7) {
@@ -127,6 +128,10 @@ Responde SOLO JSON válido: {"reply":"...", "book": "YYYY-MM-DDTHH:MM" | null, "
     const convo = history.map((m) => `${m.direction === 'inbound' ? 'CLIENTE' : 'ASISTENTE'}: ${m.body}`).join('\n');
     try {
       const text = await ai.complete(system, `${convo}\nCLIENTE: ${inbound}\n\nJSON:`, 700, aiCtx);
+      // A real Claude completion happened → meter it for SaaS rebilling, so the
+      // plan's "IA ×" markup actually debits the sub-account wallet (like GHL).
+      // No-op unless the sub-account is on a plan with AI rebilling enabled.
+      try { await billing.recordUsage(location.id, 'ai', 1); } catch {}
       const start = text.indexOf('{');
       decision = JSON.parse(text.slice(start, text.lastIndexOf('}') + 1));
     } catch (err) {
