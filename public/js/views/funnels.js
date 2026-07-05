@@ -39,7 +39,7 @@ export async function renderFunnels(view, rest = []) {
             </div></div>`
           )
           .join('')}</div>`
-      : '<div class="empty card" style="padding:60px"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>No funnels yet. Build landing pages that capture leads straight into your CRM.</div>'
+      : `<div class="empty card" style="padding:60px"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>${t('Aún no hay funnels. Crea landing pages que capturen leads directamente en tu CRM.', 'No funnels yet. Build landing pages that capture leads straight into your CRM.')}</div>`
   }`;
 
   view.querySelector('#ai-funnel').addEventListener('click', () => {
@@ -78,7 +78,7 @@ export async function renderFunnels(view, rest = []) {
           },
         });
         closeOverlay();
-        toast(result.generated_by === 'claude' ? 'Landing diseñada por Claude' : 'Landing generada con plantilla (conecta ANTHROPIC_API_KEY para diseño IA real)');
+        toast(result.generated_by === 'claude' ? t('Landing diseñada por Claude', 'Landing designed by Claude') : t('Landing generada con plantilla (conecta ANTHROPIC_API_KEY para diseño IA real)', 'Landing generated from template (connect ANTHROPIC_API_KEY for real AI design)'));
         location.hash = `#/funnels/${result.funnel_id}`;
       } catch (err) {
         toast(err.message, true);
@@ -88,14 +88,14 @@ export async function renderFunnels(view, rest = []) {
     });
   });
   view.querySelector('#new-funnel').addEventListener('click', async () => {
-    const name = prompt('Funnel name:');
+    const name = prompt(t('Nombre del funnel:', 'Funnel name:'));
     if (!name) return;
     const f = await api('/funnels', { method: 'POST', body: { name } });
     location.hash = `#/funnels/${f.id}`;
   });
   view.querySelectorAll('.del-funnel').forEach((b) =>
     b.addEventListener('click', async () => {
-      if (!confirm('Delete funnel and all its pages?')) return;
+      if (!confirm(t('¿Eliminar el funnel y todas sus páginas?', 'Delete funnel and all its pages?'))) return;
       await api(`/funnels/${b.dataset.id}`, { method: 'DELETE' });
       renderFunnels(view);
     })
@@ -114,30 +114,30 @@ async function renderBuilder(view, funnelId) {
 
   view.innerHTML = `
   <div class="page-header">
-    <a href="#/funnels" class="btn secondary small">← Funnels</a>
+    <a href="#/funnels" class="btn secondary small">${t('← Funnels', '← Funnels')}</a>
     <h1>${esc(funnel.name)}</h1>
     <select class="input" id="page-select" style="width:180px">
       ${funnel.pages.map((p) => `<option value="${p.id}" ${p.id === page?.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
     </select>
-    <button class="btn secondary small" id="new-page">+ Page</button>
-    <button class="btn secondary small" id="view-subs">Submissions</button>
+    <button class="btn secondary small" id="new-page">${t('+ Página', '+ Page')}</button>
+    <button class="btn secondary small" id="view-subs">${t('Envíos', 'Submissions')}</button>
     <div class="spacer"></div>
     <select class="input" id="theme-select" style="width:150px" title="Tema visual">
       ${Object.entries(THEMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
     </select>
     <button class="btn secondary small" id="ai-redesign" title="La IA rediseña esta página (podrás editarla después)">Rediseñar</button>
-    <label class="flex" style="font-size:13px"><input type="checkbox" id="published"> Published</label>
-    <a class="btn secondary" target="_blank" id="preview-link">Open ↗</a>
-    <button class="btn" id="save-page">Save</button>
+    <label class="flex" style="font-size:13px"><input type="checkbox" id="published"> ${t('Publicada', 'Published')}</label>
+    <a class="btn secondary" target="_blank" id="preview-link">${t('Abrir ↗', 'Open ↗')}</a>
+    <button class="btn" id="save-page">${t('Guardar', 'Save')}</button>
   </div>
   <div class="builder">
-    <div class="card"><div class="card-title">Page Blocks</div><div class="card-body">
+    <div class="card"><div class="card-title">${t('Bloques de la página', 'Page Blocks')}</div><div class="card-body">
       <div id="blocks"></div>
       <div class="flex" style="margin-top:10px">
         <select class="input" id="new-block-type">${Object.entries(BLOCK_TYPES)
           .map(([k, v]) => `<option value="${k}">${v}</option>`)
           .join('')}</select>
-        <button class="btn secondary" id="add-block">+ Add</button>
+        <button class="btn secondary" id="add-block">${t('+ Añadir', '+ Add')}</button>
       </div>
     </div></div>
     <iframe class="preview-frame" id="preview"></iframe>
@@ -161,37 +161,37 @@ async function renderBuilder(view, funnelId) {
       `<input class="input" data-i="${i}" data-k="${k}" placeholder="${ph}" value="${esc(val || '')}" style="margin-bottom:6px">`;
     switch (b.type) {
       case 'hero':
-        return input('headline', 'Headline', b.headline) + input('subheadline', 'Subheadline', b.subheadline) + input('cta', 'Button text', b.cta);
+        return input('headline', t('Titular', 'Headline'), b.headline) + input('subheadline', t('Subtítulo', 'Subheadline'), b.subheadline) + input('cta', t('Texto del botón', 'Button text'), b.cta);
       case 'text':
-        return input('headline', 'Headline', b.headline) +
-          `<textarea class="input" data-i="${i}" data-k="body" rows="3" placeholder="Body text">${esc(b.body || '')}</textarea>`;
+        return input('headline', t('Titular', 'Headline'), b.headline) +
+          `<textarea class="input" data-i="${i}" data-k="body" rows="3" placeholder="${t('Texto del cuerpo', 'Body text')}">${esc(b.body || '')}</textarea>`;
       case 'features':
-        return input('headline', 'Section headline', b.headline) +
-          `<textarea class="input" data-i="${i}" data-k="items_raw" rows="3" placeholder="One per line: Title | Description">${esc(
+        return input('headline', t('Título de la sección', 'Section headline'), b.headline) +
+          `<textarea class="input" data-i="${i}" data-k="items_raw" rows="3" placeholder="${t('Una por línea: Título | Descripción', 'One per line: Title | Description')}">${esc(
             (b.items || []).map((f) => `${f.title} | ${f.body}`).join('\n')
           )}</textarea>`;
       case 'testimonials':
-        return input('headline', 'Título de la sección', b.headline) +
-          `<textarea class="input" data-i="${i}" data-k="t_items_raw" rows="3" placeholder="Una por línea: Nombre | Testimonio">${esc(
-            (b.items || []).map((t) => `${t.name} | ${t.text}`).join('\n')
+        return input('headline', t('Título de la sección', 'Section headline'), b.headline) +
+          `<textarea class="input" data-i="${i}" data-k="t_items_raw" rows="3" placeholder="${t('Una por línea: Nombre | Testimonio', 'One per line: Name | Testimonial')}">${esc(
+            (b.items || []).map((tm) => `${tm.name} | ${tm.text}`).join('\n')
           )}</textarea>`;
       case 'pricing':
-        return input('headline', 'Título de la sección', b.headline) + input('button', 'Texto del botón', b.button) +
-          `<textarea class="input" data-i="${i}" data-k="p_items_raw" rows="3" placeholder="Uno por línea: Plan | Precio | característica; característica; …">${esc(
+        return input('headline', t('Título de la sección', 'Section headline'), b.headline) + input('button', t('Texto del botón', 'Button text'), b.button) +
+          `<textarea class="input" data-i="${i}" data-k="p_items_raw" rows="3" placeholder="${t('Uno por línea: Plan | Precio | característica; característica; …', 'One per line: Plan | Price | feature; feature; …')}">${esc(
             (b.items || []).map((p) => `${p.name} | ${p.price} | ${(p.features || []).join('; ')}`).join('\n')
           )}</textarea>`;
       case 'faq':
-        return input('headline', 'Título de la sección', b.headline) +
-          `<textarea class="input" data-i="${i}" data-k="f_items_raw" rows="4" placeholder="Una por línea: ¿Pregunta? | Respuesta">${esc(
+        return input('headline', t('Título de la sección', 'Section headline'), b.headline) +
+          `<textarea class="input" data-i="${i}" data-k="f_items_raw" rows="4" placeholder="${t('Una por línea: ¿Pregunta? | Respuesta', 'One per line: Question? | Answer')}">${esc(
             (b.items || []).map((f) => `${f.q} | ${f.a}`).join('\n')
           )}</textarea>`;
       case 'cta':
-        return input('headline', 'Titular', b.headline) + input('body', 'Texto de apoyo', b.body) + input('button', 'Texto del botón', b.button);
+        return input('headline', t('Titular', 'Headline'), b.headline) + input('body', t('Texto de apoyo', 'Support text'), b.body) + input('button', t('Texto del botón', 'Button text'), b.button);
       case 'form':
-        return input('headline', 'Form headline', b.headline) + input('button', 'Button text', b.button) +
-          input('tag', 'Tag applied to leads (fires automations)', b.tag) +
-          input('success_message', 'Success message', b.success_message) +
-          `<label style="font-size:12px" class="muted">Fields:
+        return input('headline', t('Titular del formulario', 'Form headline'), b.headline) + input('button', t('Texto del botón', 'Button text'), b.button) +
+          input('tag', t('Etiqueta aplicada a los leads (dispara automatizaciones)', 'Tag applied to leads (fires automations)'), b.tag) +
+          input('success_message', t('Mensaje de éxito', 'Success message'), b.success_message) +
+          `<label style="font-size:12px" class="muted">${t('Campos:', 'Fields:')}
             ${['first_name', 'last_name', 'email', 'phone', 'message']
               .map(
                 (f) => `<label style="margin-right:8px"><input type="checkbox" data-i="${i}" data-field="${f}" ${
@@ -219,7 +219,7 @@ async function renderBuilder(view, funnelId) {
             </div>`
           )
           .join('')
-      : '<p class="muted">Empty page — add a block below.</p>';
+      : `<p class="muted">${t('Página vacía — añade un bloque abajo.', 'Empty page — add a block below.')}</p>`;
 
     el.querySelectorAll('.rm').forEach((b) =>
       b.addEventListener('click', () => { blocks.splice(Number(b.dataset.i), 1); renderBlocks(); refreshPreview(); })
@@ -286,7 +286,7 @@ async function renderBuilder(view, funnelId) {
       iframe.src = `/f/${funnel.slug}/${page.slug}?t=${Date.now()}`;
     } else {
       iframe.srcdoc = `<body style="font-family:system-ui;padding:40px;color:#334155">
-        <h2>Draft preview</h2><p>Publish the page to see the live rendered version.</p>
+        <h2>${t('Vista previa (borrador)', 'Draft preview')}</h2><p>${t('Publica la página para ver la versión renderizada en vivo.', 'Publish the page to see the live rendered version.')}</p>
         <pre style="background:#f1f5f9;padding:14px;border-radius:8px;font-size:12px;white-space:pre-wrap">${esc(
           JSON.stringify(blocks, null, 2)
         )}</pre></body>`;
@@ -301,7 +301,7 @@ async function renderBuilder(view, funnelId) {
     page = updated;
     const idx = funnel.pages.findIndex((p) => p.id === page.id);
     funnel.pages[idx] = updated;
-    if (!silent) toast('Page saved');
+    if (!silent) toast(t('Página guardada', 'Page saved'));
   }
 
   view.querySelector('#page-select').addEventListener('change', (e) => {
@@ -309,7 +309,7 @@ async function renderBuilder(view, funnelId) {
     loadPage();
   });
   view.querySelector('#new-page').addEventListener('click', async () => {
-    const name = prompt('Page name:');
+    const name = prompt(t('Nombre de la página:', 'Page name:'));
     if (!name) return;
     const p = await api(`/funnels/${funnel.id}/pages`, { method: 'POST', body: { name } });
     funnel.pages.push(p);
@@ -339,18 +339,18 @@ async function renderBuilder(view, funnelId) {
   view.querySelector('#published').addEventListener('change', () => savePage());
   view.querySelector('#theme-select').addEventListener('change', async () => {
     await savePage(true);
-    toast('Tema aplicado');
+    toast(t('Tema aplicado', 'Theme applied'));
     refreshPreview();
   });
   view.querySelector('#ai-redesign').addEventListener('click', async () => {
-    if (!confirm('La IA rediseñará esta página (estructura y textos). Podrás editar el resultado. ¿Continuar?')) return;
+    if (!confirm(t('La IA rediseñará esta página (estructura y textos). Podrás editar el resultado. ¿Continuar?', 'AI will redesign this page (structure and copy). You can edit the result. Continue?'))) return;
     const btn = view.querySelector('#ai-redesign');
     btn.disabled = true;
     btn.textContent = 'Diseñando…';
     try {
-      const offer = prompt('¿Qué quieres promocionar en esta página?', funnel.name) || funnel.name;
+      const offer = prompt(t('¿Qué quieres promocionar en esta página?', 'What do you want to promote on this page?'), funnel.name) || funnel.name;
       await api('/ai/funnel', { method: 'POST', body: { offer, funnel_id: funnel.id, page_id: page.id } });
-      toast('Página rediseñada — revisa y edita antes de guardar');
+      toast(t('Página rediseñada — revisa y edita antes de guardar', 'Page redesigned — review and edit before saving'));
       renderBuilder(view, funnelId);
     } catch (err) {
       toast(err.message, true);
@@ -361,7 +361,7 @@ async function renderBuilder(view, funnelId) {
   view.querySelector('#view-subs').addEventListener('click', async () => {
     const subs = await api(`/funnels/${funnel.id}/submissions`);
     openModal(`
-      <h2>Form Submissions (${subs.length})</h2>
+      <h2>${t('Envíos del formulario', 'Form Submissions')} (${subs.length})</h2>
       ${
         subs.length
           ? subs
@@ -371,11 +371,11 @@ async function renderBuilder(view, funnelId) {
                   <div style="font-size:12px">${Object.entries(s.data)
                     .map(([k, v]) => `<div><strong>${esc(k)}:</strong> ${esc(v)}</div>`)
                     .join('')}</div>
-                  ${s.contact_id ? `<a href="#/contacts/${s.contact_id}" onclick="document.getElementById('modal-root').innerHTML=''">View contact →</a>` : ''}
+                  ${s.contact_id ? `<a href="#/contacts/${s.contact_id}" onclick="document.getElementById('modal-root').innerHTML=''">${t('Ver contacto →', 'View contact →')}</a>` : ''}
                 </div>`
               )
               .join('')
-          : '<div class="empty">No submissions yet</div>'
+          : `<div class="empty">${t('Aún no hay envíos', 'No submissions yet')}</div>`
       }`);
   });
 
