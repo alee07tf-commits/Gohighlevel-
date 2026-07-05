@@ -616,6 +616,22 @@ CREATE INDEX IF NOT EXISTS idx_campaign_recipients_token ON campaign_recipients(
 ALTER TABLE forms ADD COLUMN IF NOT EXISTS notify_email TEXT DEFAULT '';
 ALTER TABLE forms ADD COLUMN IF NOT EXISTS required_fields TEXT NOT NULL DEFAULT '[]';
 
+-- Payments parity (v3.16): a reusable product/service catalog, and invoice
+-- discount + tax so totals match GoHighLevel's invoicing.
+CREATE TABLE IF NOT EXISTS products (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  price DOUBLE PRECISION NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'EUR',
+  recurring TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_products_location ON products(location_id);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS discount DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION NOT NULL DEFAULT 0;
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -721,7 +737,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 23;
+const SCHEMA_VERSION = 24;
 
 let readyPromise = null;
 function ensureReady() {

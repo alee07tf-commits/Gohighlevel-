@@ -17,6 +17,7 @@ export async function renderPayments(view) {
   <div class="page-header">
     <h1>${t('Pagos', 'Payments')}</h1>
     <div class="spacer"></div>
+    <button class="btn secondary" id="products-btn">${t('Productos', 'Products')}</button>
     <button class="btn" id="new-invoice">${t('+ Factura', '+ Invoice')}</button>
   </div>
   <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
@@ -50,6 +51,31 @@ export async function renderPayments(view) {
   </div>`;
 
   view.querySelector('#new-invoice').addEventListener('click', invoiceModal);
+  view.querySelector('#products-btn').addEventListener('click', productsModal);
+
+  async function productsModal() {
+    const products = await api('/payments/products').catch(() => []);
+    const modal = openModal(`<h2>${t('Productos y servicios', 'Products & services')}</h2>
+      <div id="pr-list">${products.length
+        ? products.map((p) => `<div class="appt-row"><div style="flex:1"><strong>${esc(p.name)}</strong> · ${fmtMoney(p.price, p.currency)}${p.recurring ? ` <span class="badge indigo">${t('mensual', 'monthly')}</span>` : ''}${p.description ? `<div class="muted" style="font-size:12px">${esc(p.description)}</div>` : ''}</div>
+            <button class="btn ghost small pr-del" data-id="${p.id}">✕</button></div>`).join('')
+        : `<p class="muted">${t('Sin productos aún.', 'No products yet.')}</p>`}</div>
+      <form id="pr-form" style="margin-top:10px"><div class="form-row">
+        <label class="field" style="flex:2"><span class="label">${t('Nombre', 'Name')}</span><input class="input" name="name" required></label>
+        <label class="field"><span class="label">${t('Precio', 'Price')}</span><input class="input" name="price" type="number" step="0.01" required></label>
+        <label class="field"><span class="label">${t('Recurrencia', 'Recurrence')}</span><select class="input" name="recurring"><option value="">${t('Puntual', 'One-time')}</option><option value="monthly">${t('Mensual', 'Monthly')}</option></select></label>
+      </div>
+        <div class="modal-actions"><button type="button" class="btn secondary" id="c">${t('Cerrar', 'Close')}</button><button class="btn">+ ${t('Añadir', 'Add')}</button></div></form>`);
+    const reload = () => { closeOverlay(); productsModal(); };
+    modal.querySelector('#c').addEventListener('click', closeOverlay);
+    modal.querySelectorAll('.pr-del').forEach((b) => b.addEventListener('click', async () => { await api(`/payments/products/${b.dataset.id}`, { method: 'DELETE' }); reload(); }));
+    modal.querySelector('#pr-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(e.target).entries());
+      try { await api('/payments/products', { method: 'POST', body: d }); reload(); }
+      catch (err) { toast(err.message, true); }
+    });
+  }
   view.querySelectorAll('.paid-inv').forEach((b) =>
     b.addEventListener('click', async () => {
       if (!confirm(t('¿Marcar como cobrada (efectivo/transferencia)? Disparará las automatizaciones de pago.', 'Mark as paid (cash/transfer)? This will trigger the payment automations.'))) return;
@@ -93,8 +119,9 @@ export async function renderPayments(view) {
     })
   );
 
-  function invoiceModal() {
+  async function invoiceModal() {
     const items = [{ name: '', qty: 1, price: '' }];
+    const products = await api('/payments/products').catch(() => []);
     const modal = openModal(`
       <h2>${t('Nueva Factura', 'New Invoice')}</h2>
       <label class="field"><span class="label">${t('Concepto / título', 'Description / title')}</span><input class="input" id="inv-title" placeholder="${t('Tratamiento blanqueamiento', 'Whitening treatment')}"></label>
@@ -112,7 +139,14 @@ export async function renderPayments(view) {
       </div>
       <div class="card-title" style="padding:0;margin-bottom:6px">${t('Líneas', 'Line items')}</div>
       <div id="inv-items"></div>
-      <button type="button" class="btn secondary small" id="add-item">${t('+ línea', '+ line')}</button>
+      <div class="flex" style="gap:6px;margin-top:4px">
+        <button type="button" class="btn secondary small" id="add-item">${t('+ línea', '+ line')}</button>
+        ${products.length ? `<select class="input" id="prod-pick" style="width:auto"><option value="">${t('+ producto…', '+ product…')}</option>${products.map((p) => `<option value="${p.id}">${esc(p.name)} · ${p.price} ${esc(p.currency)}</option>`).join('')}</select>` : ''}
+      </div>
+      <div class="form-row" style="margin-top:8px">
+        <label class="field"><span class="label">${t('Descuento (importe)', 'Discount (amount)')}</span><input class="input" id="inv-discount" type="number" step="0.01" min="0" value="0"></label>
+        <label class="field"><span class="label">${t('Impuesto (%)', 'Tax (%)')}</span><input class="input" id="inv-tax" type="number" step="0.01" min="0" value="0"></label>
+      </div>
       <div class="modal-actions">
         <button class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
         <button class="btn" id="save">${t('Crear factura', 'Create invoice')}</button>
@@ -138,6 +172,11 @@ export async function renderPayments(view) {
     }
     renderItems();
     modal.querySelector('#add-item').addEventListener('click', () => { items.push({ name: '', qty: 1, price: '' }); renderItems(); });
+    modal.querySelector('#prod-pick')?.addEventListener('change', (e) => {
+      const p = products.find((x) => x.id === Number(e.target.value));
+      if (p) { if (items.length === 1 && !items[0].name && !items[0].price) items.pop(); items.push({ name: p.name, qty: 1, price: p.price }); renderItems(); }
+      e.target.value = '';
+    });
 
     let timer;
     modal.querySelector('#inv-contact-search').addEventListener('input', (e) => {
@@ -169,6 +208,8 @@ export async function renderPayments(view) {
             kind: modal.querySelector('#inv-kind').value,
             recurring: modal.querySelector('#inv-recurring').value,
             due_date: modal.querySelector('#inv-due').value,
+            discount: Number(modal.querySelector('#inv-discount').value) || 0,
+            tax_rate: Number(modal.querySelector('#inv-tax').value) || 0,
             items: items.filter((it) => it.name && Number(it.price) > 0),
           },
         });

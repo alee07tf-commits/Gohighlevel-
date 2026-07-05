@@ -17,6 +17,35 @@ async function nextNumber(locationId) {
   return `INV-${String(n + 1).padStart(4, '0')}`;
 }
 
+// ---- Product / service catalog (reusable invoice line items) ----
+router.get('/products', async (req, res) => {
+  res.json(await db.all('SELECT * FROM products WHERE location_id = ? ORDER BY name', [req.location.id]));
+});
+router.post('/products', async (req, res) => {
+  const { name, description, price, currency, recurring } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  const id = await db.insert(
+    'INSERT INTO products (location_id, name, description, price, currency, recurring) VALUES (?, ?, ?, ?, ?, ?)',
+    [req.location.id, name, description || '', Number(price) || 0, currency || 'EUR', recurring === 'monthly' ? 'monthly' : '']
+  );
+  res.status(201).json(await db.get('SELECT * FROM products WHERE id = ?', [id]));
+});
+router.put('/products/:id', async (req, res) => {
+  const p = await db.get('SELECT * FROM products WHERE id = ? AND location_id = ?', [req.params.id, req.location.id]);
+  if (!p) return res.status(404).json({ error: 'Product not found' });
+  const b = req.body || {};
+  await db.run('UPDATE products SET name=?, description=?, price=?, currency=?, recurring=? WHERE id=?', [
+    b.name || p.name, b.description ?? p.description, b.price != null ? Number(b.price) : p.price,
+    b.currency || p.currency, b.recurring !== undefined ? (b.recurring === 'monthly' ? 'monthly' : '') : p.recurring, p.id,
+  ]);
+  res.json(await db.get('SELECT * FROM products WHERE id = ?', [p.id]));
+});
+router.delete('/products/:id', async (req, res) => {
+  const info = await db.run('DELETE FROM products WHERE id = ? AND location_id = ?', [req.params.id, req.location.id]);
+  if (!info.changes) return res.status(404).json({ error: 'Product not found' });
+  res.json({ ok: true });
+});
+
 router.get('/', async (req, res) => {
   const rows = await db.all(
     `SELECT i.*, c.first_name, c.last_name, c.email FROM invoices i
@@ -34,13 +63,16 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { contact_id, title, items, currency, due_date, kind, recurring } = req.body || {};
+  const { contact_id, title, items, currency, due_date, kind, recurring, discount, tax_rate } = req.body || {};
   const list = Array.isArray(items) ? items : [];
-  const total = list.reduce((sum, it) => sum + (Number(it.qty) || 1) * (Number(it.price) || 0), 0);
-  if (!list.length || total <= 0) return res.status(400).json({ error: 'At least one item with a price is required' });
+  const subtotal = list.reduce((sum, it) => sum + (Number(it.qty) || 1) * (Number(it.price) || 0), 0);
+  const disc = Math.max(0, Number(discount) || 0);
+  const tax = Math.max(0, Number(tax_rate) || 0);
+  const total = Math.max(0, (subtotal - disc)) * (1 + tax / 100);
+  if (!list.length || subtotal <= 0) return res.status(400).json({ error: 'At least one item with a price is required' });
   const id = await db.insert(
-    `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, due_date, token, kind, recurring)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, due_date, token, kind, recurring, discount, tax_rate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.location.id,
       contact_id || null,
@@ -48,11 +80,12 @@ router.post('/', async (req, res) => {
       title || '',
       JSON.stringify(list),
       currency || 'EUR',
-      total,
+      Number(total.toFixed(2)),
       due_date || '',
       crypto.randomBytes(16).toString('hex'),
       kind === 'quote' ? 'quote' : 'invoice',
       recurring === 'monthly' ? 'monthly' : '',
+      disc, tax,
     ]
   );
   res.status(201).json(parsed(await db.get('SELECT * FROM invoices WHERE id = ?', [id])));
