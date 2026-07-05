@@ -96,35 +96,35 @@ export async function renderPayments(view) {
   function invoiceModal() {
     const items = [{ name: '', qty: 1, price: '' }];
     const modal = openModal(`
-      <h2>Nueva Factura</h2>
-      <label class="field"><span class="label">Concepto / título</span><input class="input" id="inv-title" placeholder="Tratamiento blanqueamiento"></label>
-      <label class="field"><span class="label">Contacto (buscar)</span>
-        <input class="input" id="inv-contact-search" placeholder="nombre o email" autocomplete="off">
+      <h2>${t('Nueva Factura', 'New Invoice')}</h2>
+      <label class="field"><span class="label">${t('Concepto / título', 'Description / title')}</span><input class="input" id="inv-title" placeholder="${t('Tratamiento blanqueamiento', 'Whitening treatment')}"></label>
+      <label class="field"><span class="label">${t('Contacto (buscar)', 'Contact (search)')}</span>
+        <input class="input" id="inv-contact-search" placeholder="${t('nombre o email', 'name or email')}" autocomplete="off">
         <input type="hidden" id="inv-contact-id"><div id="inv-contact-results"></div></label>
       <div class="form-row">
-        <label class="field"><span class="label">Tipo</span><select class="input" id="inv-kind">
-          <option value="invoice">Factura</option><option value="quote">Presupuesto</option></select></label>
-        <label class="field"><span class="label">Recurrencia</span><select class="input" id="inv-recurring">
-          <option value="">Puntual</option><option value="monthly">Mensual (auto)</option></select></label>
-        <label class="field"><span class="label">Moneda</span><select class="input" id="inv-currency">
+        <label class="field"><span class="label">${t('Tipo', 'Type')}</span><select class="input" id="inv-kind">
+          <option value="invoice">${t('Factura', 'Invoice')}</option><option value="quote">${t('Presupuesto', 'Quote')}</option></select></label>
+        <label class="field"><span class="label">${t('Recurrencia', 'Recurrence')}</span><select class="input" id="inv-recurring">
+          <option value="">${t('Puntual', 'One-time')}</option><option value="monthly">${t('Mensual (auto)', 'Monthly (auto)')}</option></select></label>
+        <label class="field"><span class="label">${t('Moneda', 'Currency')}</span><select class="input" id="inv-currency">
           <option>EUR</option><option>USD</option><option>MXN</option><option>COP</option><option>ARS</option></select></label>
-        <label class="field"><span class="label">Vencimiento</span><input class="input" id="inv-due" type="date"></label>
+        <label class="field"><span class="label">${t('Vencimiento', 'Due date')}</span><input class="input" id="inv-due" type="date"></label>
       </div>
-      <div class="card-title" style="padding:0;margin-bottom:6px">Líneas</div>
+      <div class="card-title" style="padding:0;margin-bottom:6px">${t('Líneas', 'Line items')}</div>
       <div id="inv-items"></div>
-      <button type="button" class="btn secondary small" id="add-item">+ línea</button>
+      <button type="button" class="btn secondary small" id="add-item">${t('+ línea', '+ line')}</button>
       <div class="modal-actions">
-        <button class="btn secondary" id="cancel">Cancelar</button>
-        <button class="btn" id="save">Crear factura</button>
+        <button class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
+        <button class="btn" id="save">${t('Crear factura', 'Create invoice')}</button>
       </div>`);
 
     function renderItems() {
       modal.querySelector('#inv-items').innerHTML = items
         .map(
           (it, i) => `<div class="flex" style="margin-bottom:8px">
-            <input class="input" data-i="${i}" data-k="name" placeholder="Descripción" value="${esc(it.name)}" style="flex:3">
+            <input class="input" data-i="${i}" data-k="name" placeholder="${t('Descripción', 'Description')}" value="${esc(it.name)}" style="flex:3">
             <input class="input" data-i="${i}" data-k="qty" type="number" min="1" value="${it.qty}" style="flex:1">
-            <input class="input" data-i="${i}" data-k="price" type="number" step="0.01" placeholder="Precio" value="${esc(it.price)}" style="flex:1">
+            <input class="input" data-i="${i}" data-k="price" type="number" step="0.01" placeholder="${t('Precio', 'Price')}" value="${esc(it.price)}" style="flex:1">
             <button type="button" class="btn ghost small rm-item" data-i="${i}">✕</button>
           </div>`
         )
@@ -173,7 +173,7 @@ export async function renderPayments(view) {
           },
         });
         closeOverlay();
-        toast('Factura creada');
+        toast(t('Factura creada', 'Invoice created'));
         renderPayments(view);
       } catch (err) { toast(err.message, true); }
     });
