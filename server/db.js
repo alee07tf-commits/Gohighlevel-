@@ -640,6 +640,9 @@ ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS seo_image TEXT DEFAULT '';
 ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS head_code TEXT DEFAULT '';
 ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS body_code TEXT DEFAULT '';
 
+-- Training parity (v3.18): group lessons into modules/sections within a course.
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS section TEXT DEFAULT '';
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -745,7 +748,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 25;
+const SCHEMA_VERSION = 26;
 
 let readyPromise = null;
 function ensureReady() {

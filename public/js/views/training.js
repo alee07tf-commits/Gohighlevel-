@@ -170,6 +170,7 @@ function lessonModal(view, course, lesson) {
     <h2>${lesson ? t('Editar lección', 'Edit lesson') : t('Nueva lección', 'New lesson')}</h2>
     <form id="lesson-form">
       <label class="field"><span class="label">${t('Título', 'Title')}</span><input class="input" name="title" required value="${lesson ? esc(lesson.title) : ''}" placeholder="${t('Bienvenida y primeros pasos', 'Welcome and getting started')}"></label>
+      <label class="field"><span class="label">${t('Módulo / sección (opcional)', 'Module / section (optional)')}</span><input class="input" name="section" value="${lesson ? esc(lesson.section || '') : ''}" placeholder="${t('Introducción', 'Introduction')}"></label>
       <label class="field"><span class="label">${t('Vídeo de YouTube (URL o ID)', 'YouTube video (URL or ID)')}</span><input class="input" name="youtube_url" value="${lesson ? esc(lesson.youtube_id) : ''}" placeholder="https://youtu.be/…"></label>
       <label class="field"><span class="label">${t('Contenido / notas', 'Content / notes')}</span><textarea class="input" name="body" rows="6" placeholder="${t('Explica el paso…', 'Explain the step…')}">${lesson ? esc(lesson.body || '') : ''}</textarea></label>
       <div class="modal-actions"><button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button><button class="btn">${t('Guardar', 'Save')}</button></div>

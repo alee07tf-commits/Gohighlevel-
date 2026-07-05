@@ -138,8 +138,8 @@ router.post('/courses/:id/lessons', async (req, res) => {
   if (!title) return res.status(400).json({ error: 'title es obligatorio' });
   const { n } = await db.get('SELECT COUNT(*)::int AS n FROM lessons WHERE course_id = ?', [course.id]);
   const id = await db.insert(
-    'INSERT INTO lessons (course_id, title, body, youtube_id, position) VALUES (?, ?, ?, ?, ?)',
-    [course.id, title, req.body?.body || '', parseYouTubeId(req.body?.youtube_url || req.body?.youtube_id), req.body?.position === undefined ? n : Number(req.body.position) || 0]
+    'INSERT INTO lessons (course_id, title, body, youtube_id, position, section) VALUES (?, ?, ?, ?, ?, ?)',
+    [course.id, title, req.body?.body || '', parseYouTubeId(req.body?.youtube_url || req.body?.youtube_id), req.body?.position === undefined ? n : Number(req.body.position) || 0, req.body?.section || '']
   );
   res.status(201).json(await db.get('SELECT * FROM lessons WHERE id = ?', [id]));
 });
@@ -160,11 +160,12 @@ router.put('/lessons/:id', async (req, res) => {
   const yt = b.youtube_url !== undefined || b.youtube_id !== undefined
     ? parseYouTubeId(b.youtube_url || b.youtube_id)
     : lesson.youtube_id;
-  await db.run('UPDATE lessons SET title = ?, body = ?, youtube_id = ?, position = ? WHERE id = ?', [
+  await db.run('UPDATE lessons SET title = ?, body = ?, youtube_id = ?, position = ?, section = ? WHERE id = ?', [
     b.title || lesson.title,
     b.body ?? lesson.body,
     yt,
     b.position === undefined ? lesson.position : Number(b.position) || 0,
+    b.section ?? lesson.section,
     lesson.id,
   ]);
   res.json(await db.get('SELECT * FROM lessons WHERE id = ?', [lesson.id]));
