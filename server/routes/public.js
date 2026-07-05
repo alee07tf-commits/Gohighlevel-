@@ -8,6 +8,7 @@ const scoring = require('../services/scoring');
 const customValues = require('../services/customValues');
 const leads = require('../services/leads');
 const secretbox = require('../services/secretbox');
+const shopify = require('../services/shopify');
 
 const router = express.Router();
 
@@ -393,6 +394,64 @@ router.post('/meta/webhook', async (req, res) => {
     }
   } catch (err) {
     console.error('meta leadgen ingest failed:', err.message);
+  }
+});
+
+// ---- Shopify store webhooks (orders + customers → CRM) ----
+// Creates an opportunity in the sub-account's first pipeline for an order.
+async function createOrderOpportunity(locationId, contactId, order) {
+  const pipeline = await db.get('SELECT * FROM pipelines WHERE location_id = ? ORDER BY id LIMIT 1', [locationId]);
+  if (!pipeline) return false;
+  const stage = await db.get('SELECT * FROM stages WHERE pipeline_id = ? ORDER BY position LIMIT 1', [pipeline.id]);
+  if (!stage) return false;
+  const paid = String(order.financial_status || '').toLowerCase() === 'paid';
+  const info = shopify.mapOrder(order);
+  await db.run(
+    `INSERT INTO opportunities (location_id, pipeline_id, stage_id, contact_id, title, value, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [locationId, pipeline.id, stage.id, contactId, `Shopify ${info.number || 'order'}`.trim(), info.total, paid ? 'won' : 'open']
+  );
+  return true;
+}
+
+router.post('/shopify/webhook', async (req, res) => {
+  const shop = req.get('X-Shopify-Shop-Domain') || '';
+  const topic = req.get('X-Shopify-Topic') || '';
+  const hmac = req.get('X-Shopify-Hmac-Sha256') || '';
+  const secret = process.env.SHOPIFY_API_SECRET || '';
+  // Verify the payload signature when the app secret is configured.
+  if (secret && !shopify.verifyHmac(req.rawBody, hmac, secret)) {
+    return res.status(401).json({ error: 'invalid hmac' });
+  }
+  const acct = await db.get(`SELECT * FROM connected_accounts WHERE app = 'shopify' AND external_id = ?`, [shop]);
+  if (!acct) return res.status(404).json({ error: 'store not connected' });
+
+  const loc = acct.location_id;
+  const payload = req.body || {};
+  const person = shopify.mapCustomer(payload);
+  if (!person.email && !person.phone) return res.status(202).json({ ok: true, skipped: 'no contact info' });
+
+  try {
+    if (topic.startsWith('orders/')) {
+      const info = shopify.mapOrder(payload);
+      const { contact_id } = await leads.ingestLead({
+        location_id: loc, ...person, custom: info.custom,
+        source: 'shopify:order', tag: 'shopify',
+        activityLabel: `Pedido de Shopify ${info.number}`.trim(),
+      });
+      await createOrderOpportunity(loc, contact_id, payload);
+      return res.status(200).json({ ok: true, contact_id });
+    }
+    // customers/create, customers/update
+    const { contact_id } = await leads.ingestLead({
+      location_id: loc, ...person, source: 'shopify:customer', tag: 'shopify',
+      activityLabel: 'Cliente de Shopify',
+    });
+    return res.status(200).json({ ok: true, contact_id });
+  } catch (err) {
+    if (err.status === 400) return res.status(202).json({ ok: true, skipped: err.message });
+    console.error('shopify webhook failed:', err.message);
+    return res.status(200).json({ ok: false });
   }
 });
 

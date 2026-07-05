@@ -13,7 +13,9 @@ if ((process.env.VERCEL && !process.env.DATABASE_URL) || process.env.AUTO_SEED) 
 }
 
 const app = express();
-app.use(express.json({ limit: '4mb' }));
+// Keep the raw body around so webhook receivers that sign the payload (Shopify,
+// Stripe…) can verify the HMAC. Cheap: just holds a reference to the buffer.
+app.use(express.json({ limit: '4mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 // Lazy scheduler tick: on serverless there is no resident interval, so any
 // traffic opportunistically processes due jobs (throttled to 1/min).
