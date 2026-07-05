@@ -3,9 +3,10 @@ import { esc, openModal, closeOverlay, formData, toast, fmtDate, fullName } from
 import { t } from '../i18n.js';
 
 export async function renderCalendar(view) {
-  const [calendars, appointments] = await Promise.all([
+  const [calendars, appointments, team] = await Promise.all([
     api('/calendars'),
     api('/calendars/appointments/all'),
+    api('/locations/team/users').catch(() => []),
   ]);
   const now = new Date().toISOString().slice(0, 19);
   const upcoming = appointments.filter((a) => a.starts_at >= now && a.status === 'confirmed');
@@ -162,6 +163,12 @@ export async function renderCalendar(view) {
         </div>
         <label class="field"><span class="label">${t('Recordatorio automático (horas antes de la cita, 0 = desactivado)', 'Automatic reminder (hours before the appointment, 0 = disabled)')}</span>
           <input class="input" name="reminder_hours" type="number" value="24" min="0"></label>
+        ${team.length
+          ? `<div class="field"><span class="label">${t('Round-robin: repartir reservas entre (opcional)', 'Round-robin: distribute bookings among (optional)')}</span>
+              <div class="flex" style="flex-wrap:wrap;gap:10px">
+                ${team.map((u) => `<label class="flex" style="font-size:13px;gap:5px"><input type="checkbox" class="assignee-cb" value="${u.id}"> ${esc(u.name)}</label>`).join('')}
+              </div></div>`
+          : ''}
         <div class="modal-actions">
           <button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
           <button class="btn">${t('Crear', 'Create')}</button>
@@ -171,7 +178,9 @@ export async function renderCalendar(view) {
     modal.querySelector('#cal-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       try {
-        await api('/calendars', { method: 'POST', body: formData(e.target) });
+        const body = formData(e.target);
+        body.assignees = [...modal.querySelectorAll('.assignee-cb:checked')].map((c) => Number(c.value));
+        await api('/calendars', { method: 'POST', body });
         closeOverlay();
         toast(t('Calendario creado', 'Calendar created'));
         renderCalendar(view);

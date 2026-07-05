@@ -28,12 +28,21 @@ router.get('/', async (req, res) => {
   res.json(await db.all('SELECT * FROM calendars WHERE location_id = ? ORDER BY id', [req.location.id]));
 });
 
+// Keeps only user ids that belong to the caller's agency (for round-robin).
+async function validAssignees(list, agencyId) {
+  const ids = Array.isArray(list) ? list.map(Number).filter(Boolean) : [];
+  if (!ids.length) return [];
+  const ph = ids.map(() => '?').join(',');
+  const rows = await db.all(`SELECT id FROM users WHERE agency_id = ? AND id IN (${ph})`, [agencyId, ...ids]);
+  return rows.map((r) => r.id);
+}
+
 router.post('/', async (req, res) => {
-  const { name, description, duration_minutes, start_hour, end_hour, days, reminder_hours, capacity } = req.body || {};
+  const { name, description, duration_minutes, start_hour, end_hour, days, reminder_hours, capacity, assignees } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });
   const id = await db.insert(
-    `INSERT INTO calendars (location_id, name, slug, description, duration_minutes, start_hour, end_hour, days, reminder_hours, capacity)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO calendars (location_id, name, slug, description, duration_minutes, start_hour, end_hour, days, reminder_hours, capacity, assignees)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.location.id,
       name,
@@ -45,9 +54,22 @@ router.post('/', async (req, res) => {
       JSON.stringify(days || [1, 2, 3, 4, 5]),
       Number.isFinite(Number(reminder_hours)) && reminder_hours !== undefined ? Number(reminder_hours) : 24,
       Math.max(1, Number(capacity) || 1),
+      JSON.stringify(await validAssignees(assignees, req.user.agency_id)),
     ]
   );
   res.status(201).json(await db.get('SELECT * FROM calendars WHERE id = ?', [id]));
+});
+
+// Update a calendar (currently used for the round-robin assignee list).
+router.put('/:id', async (req, res) => {
+  const cal = await db.get('SELECT * FROM calendars WHERE id = ? AND location_id = ?', [req.params.id, req.location.id]);
+  if (!cal) return res.status(404).json({ error: 'Calendar not found' });
+  const b = req.body || {};
+  const assignees = b.assignees !== undefined ? await validAssignees(b.assignees, req.user.agency_id) : JSON.parse(cal.assignees || '[]');
+  await db.run('UPDATE calendars SET name=?, description=?, assignees=? WHERE id=?', [
+    b.name || cal.name, b.description ?? cal.description, JSON.stringify(assignees), cal.id,
+  ]);
+  res.json(await db.get('SELECT * FROM calendars WHERE id = ?', [cal.id]));
 });
 
 router.delete('/:id', async (req, res) => {

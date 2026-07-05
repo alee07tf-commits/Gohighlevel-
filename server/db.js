@@ -480,6 +480,30 @@ CREATE TABLE IF NOT EXISTS course_progress (
   completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, lesson_id)
 );
+
+-- Standalone forms (v2.7): embeddable lead-capture forms that live outside a
+-- funnel and post to /form/<slug>, creating/updating a contact and firing the
+-- form_submitted trigger. Submissions reuse the form_submissions table.
+CREATE TABLE IF NOT EXISTS forms (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  headline TEXT DEFAULT '',
+  fields TEXT NOT NULL DEFAULT '["first_name","email","phone"]',
+  tag TEXT DEFAULT '',
+  success_message TEXT DEFAULT '¡Gracias! Te contactaremos pronto.',
+  redirect_url TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_forms_location ON forms(location_id);
+ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS form_id INTEGER;
+
+-- Round-robin booking (v2.7): a calendar can distribute bookings across a set of
+-- team members in rotation; the chosen member is stored on the appointment.
+ALTER TABLE calendars ADD COLUMN IF NOT EXISTS assignees TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE calendars ADD COLUMN IF NOT EXISTS round_robin_next INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER REFERENCES users(id);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -552,7 +576,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 
 let readyPromise = null;
 function ensureReady() {

@@ -19,6 +19,7 @@ import { renderAgency } from './views/agency.js';
 import { renderClients } from './views/clients.js';
 import { renderTraining } from './views/training.js';
 import { renderAnalytics } from './views/analytics.js';
+import { renderForms } from './views/forms.js';
 
 const IC = {
   dashboard: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -38,13 +39,14 @@ const IC = {
   clients: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   training: '<svg viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
   analytics: '<svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg>',
+  forms: '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
 };
 
 function navSections() {
   const isAdmin = state.user?.role === 'admin';
   return [
     { title: t('Workspace', 'Workspace'), items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
-    { title: t('Crecimiento', 'Growth'), items: ['prospecting', 'marketing', 'funnels', 'automations', 'payments', 'reputation', 'analytics'] },
+    { title: t('Crecimiento', 'Growth'), items: ['prospecting', 'marketing', 'funnels', 'forms', 'automations', 'payments', 'reputation', 'analytics'] },
     { title: t('Formación', 'Training'), items: ['training'] },
     // The agency layer is admin-only: "Clientes" manages the agencies below you
     // in the tenant tree; the agency console is SaaS/cross-account/white-label.
@@ -64,6 +66,7 @@ const NAV = [
   { path: 'marketing', label: () => t('Marketing', 'Marketing'), view: renderMarketing },
   { path: 'automations', label: () => t('Automatizaciones', 'Automations'), view: renderAutomations },
   { path: 'funnels', label: () => t('Sitios y Embudos', 'Sites & Funnels'), view: renderFunnels },
+  { path: 'forms', label: () => t('Formularios', 'Forms'), view: renderForms },
   { path: 'reputation', label: () => t('Reputación', 'Reputation'), view: renderReputation },
   { path: 'tasks', label: () => t('Tareas', 'Tasks'), view: renderTasks },
   { path: 'clients', label: () => t('Clientes', 'Clients'), view: renderClients },

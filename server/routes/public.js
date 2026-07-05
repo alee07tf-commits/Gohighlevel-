@@ -253,6 +253,82 @@ router.post('/pages/:pageId/submit', async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
+// ---- Standalone public form ----
+const FORM_LABELS = {
+  first_name: { es: 'Nombre', en: 'First name' }, last_name: { es: 'Apellidos', en: 'Last name' },
+  email: { es: 'Email', en: 'Email' }, phone: { es: 'Teléfono', en: 'Phone' }, message: { es: 'Mensaje', en: 'Message' },
+};
+router.get('/form/:slug', async (req, res) => {
+  const form = await db.get('SELECT * FROM forms WHERE slug = ?', [req.params.slug]);
+  if (!form) return res.status(404).send('Form not found');
+  const loc = await db.get('SELECT * FROM locations WHERE id = ?', [form.location_id]);
+  const brand = (loc && loc.brand_color) || '#4f46e5';
+  const fields = (() => { try { return JSON.parse(form.fields || '[]'); } catch { return ['email']; } })();
+  const inputs = fields
+    .map((f) => {
+      const label = esc((FORM_LABELS[f] || { es: f }).es);
+      if (f === 'message') return `<label>${label}<textarea name="${f}" rows="4"></textarea></label>`;
+      const type = f === 'email' ? 'email' : f === 'phone' ? 'tel' : 'text';
+      return `<label>${label}<input name="${f}" type="${type}" ${f === 'email' ? 'required' : ''}></label>`;
+    })
+    .join('');
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(form.name)}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',system-ui,sans-serif;background:#f4f4f7;color:#1a202c;padding:24px}
+.card{max-width:460px;margin:40px auto;background:#fff;border-radius:14px;padding:32px;box-shadow:0 6px 22px rgba(0,0,0,.09)}
+h1{font-size:1.5rem;margin-bottom:6px}.sub{color:#64748b;margin-bottom:18px}
+label{display:block;font-size:.85rem;font-weight:600;margin:12px 0 4px;color:#374151}
+input,textarea{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:8px;font-size:.95rem;font-family:inherit}
+button{width:100%;margin-top:20px;background:${esc(brand)};color:#fff;border:none;border-radius:9px;padding:13px;font-size:1rem;font-weight:700;cursor:pointer}
+.ok{display:none;text-align:center;padding:20px;background:#ecfdf5;border:1px solid #10b981;color:#065f46;border-radius:10px;margin-top:16px}
+.head-bar{height:4px;background:${esc(brand)};border-radius:4px;margin:-32px -32px 20px}</style></head>
+<body><div class="card"><div class="head-bar"></div>
+<h1>${esc(form.headline || form.name)}</h1>
+<div class="sub">${esc(loc ? loc.name || loc.company || '' : '')}</div>
+<form id="f">${inputs}<button type="submit">Enviar</button></form>
+<div class="ok" id="ok">${esc(form.success_message || '¡Gracias! Te contactaremos pronto.')}</div></div>
+<script>
+document.getElementById('f').addEventListener('submit',async(e)=>{e.preventDefault();
+const data=Object.fromEntries(new FormData(e.target).entries());
+const r=await fetch('/api/public/form/${esc(form.slug)}/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+if(r.ok){${form.redirect_url ? `location.href=${JSON.stringify(form.redirect_url)};` : `e.target.style.display='none';document.getElementById('ok').style.display='block';`}}
+else{const j=await r.json().catch(()=>({}));alert(j.error||'Error');}});
+</script></body></html>`;
+  res.send(html);
+});
+
+router.post('/form/:slug/submit', async (req, res) => {
+  const form = await db.get('SELECT * FROM forms WHERE slug = ?', [req.params.slug]);
+  if (!form) return res.status(404).json({ error: 'Form not found' });
+  const data = req.body || {};
+  const email = (data.email || '').trim();
+  const phone = (data.phone || '').trim();
+  if (!email && !phone) return res.status(400).json({ error: 'email or phone is required' });
+
+  let contact = null;
+  if (email) contact = await db.get(`SELECT * FROM contacts WHERE location_id = ? AND email = ? AND email != ''`, [form.location_id, email]);
+  if (!contact && phone) contact = await db.get(`SELECT * FROM contacts WHERE location_id = ? AND phone = ? AND phone != ''`, [form.location_id, phone]);
+  let isNew = false;
+  if (!contact) {
+    const id = await db.insert(
+      `INSERT INTO contacts (location_id, first_name, last_name, email, phone, source) VALUES (?, ?, ?, ?, ?, ?)`,
+      [form.location_id, data.first_name || '', data.last_name || '', email, phone, `form:${form.slug}`]
+    );
+    contact = await db.get('SELECT * FROM contacts WHERE id = ?', [id]);
+    isNew = true;
+  }
+  if (form.tag) await db.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [contact.id, form.tag]);
+  await db.run('INSERT INTO form_submissions (location_id, form_id, contact_id, data) VALUES (?, ?, ?, ?)', [
+    form.location_id, form.id, contact.id, JSON.stringify(data),
+  ]);
+  await scoring.addScore(contact.id, 'form_submitted');
+  await automation.logActivity(form.location_id, contact.id, 'form', `Submitted form "${form.name}"`);
+  if (isNew) await automation.trigger(form.location_id, 'contact_created', contact);
+  await automation.trigger(form.location_id, 'form_submitted', contact, { form_id: form.id });
+  if (form.tag) await automation.trigger(form.location_id, 'tag_added', contact, { tag: form.tag });
+  res.status(201).json({ ok: true });
+});
+
 // ---- Public booking widget ----
 router.get('/book/:slug', async (req, res) => {
   const calendar = await db.get('SELECT * FROM calendars WHERE slug = ?', [req.params.slug]);
@@ -333,10 +409,24 @@ router.post('/book/:slug', async (req, res) => {
     isNew = true;
   }
 
+  // Round-robin assignment across the calendar's team members, if configured.
+  let assignedUserId = null;
+  try {
+    const assignees = JSON.parse(calendar.assignees || '[]');
+    if (Array.isArray(assignees) && assignees.length) {
+      assignedUserId = assignees[(calendar.round_robin_next || 0) % assignees.length] || null;
+      await db.run('UPDATE calendars SET round_robin_next = round_robin_next + 1 WHERE id = ?', [calendar.id]);
+      if (assignedUserId)
+        await db.run('UPDATE contacts SET owner_user_id = ? WHERE id = ? AND owner_user_id IS NULL', [assignedUserId, contact.id]);
+    }
+  } catch {
+    /* malformed assignees → skip assignment */
+  }
+
   const apptId = await db.insert(
-    `INSERT INTO appointments (location_id, calendar_id, contact_id, title, starts_at, ends_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [calendar.location_id, calendar.id, contact.id, `${calendar.name} with ${name}`, startsAt, endsAt]
+    `INSERT INTO appointments (location_id, calendar_id, contact_id, title, starts_at, ends_at, assigned_user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [calendar.location_id, calendar.id, contact.id, `${calendar.name} with ${name}`, startsAt, endsAt, assignedUserId]
   );
 
   await scoring.addScore(contact.id, 'appointment_booked');
