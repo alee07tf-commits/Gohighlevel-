@@ -131,7 +131,40 @@ export async function renderAutomations(view) {
             ${['sms', 'whatsapp', 'email'].map((c) => `<option ${a.config.channel === c ? 'selected' : ''}>${c}</option>`).join('')}
           </select><p class="muted" style="font-size:11px;margin-top:4px">${t('4-5★ → tu link de Google (configúralo en Reputación) · 1-3★ → feedback privado', '4-5★ → your Google link (set it up in Reputation) · 1-3★ → private feedback')}</p>`;
         case 'branch': {
-          const branchActions = (list) => (list || []).map((n) => `${n.type}${n.config?.tag ? ':' + n.config.tag : ''}`).join(', ') || t('vacío', 'empty');
+          // Nested action types allowed inside a branch (no nested wait/branch).
+          const NESTED = ['add_tag', 'remove_tag', 'send_email', 'send_sms', 'send_whatsapp', 'add_note', 'create_task', 'send_review_request', 'create_opportunity', 'webhook'];
+          const nf = (n, side, j, k, ph, kind = 'input', extra = '') => {
+            const base = `class="input branch-f" data-i="${i}" data-side="${side}" data-ni="${j}" data-nk="${k}"`;
+            if (kind === 'textarea') return `<textarea ${base} rows="2" placeholder="${ph}" ${extra}>${esc(n.config[k] || '')}</textarea>`;
+            return `<input ${base} placeholder="${ph}" value="${esc(n.config[k] ?? '')}" ${extra}>`;
+          };
+          const nestedInput = (n, side, j) => {
+            switch (n.type) {
+              case 'add_tag': case 'remove_tag': return nf(n, side, j, 'tag', t('etiqueta', 'tag'));
+              case 'send_email': return nf(n, side, j, 'subject', t('Asunto', 'Subject'), 'input', 'style="margin-bottom:4px"') + nf(n, side, j, 'body', t('Cuerpo', 'Body'), 'textarea');
+              case 'send_sms': case 'send_whatsapp': case 'add_note': return nf(n, side, j, 'body', t('Texto — admite campos de fusión', 'Text — merge fields supported'), 'textarea');
+              case 'create_task': return nf(n, side, j, 'title', t('Título de tarea', 'Task title'));
+              case 'create_opportunity': return nf(n, side, j, 'title', t('Título', 'Title'), 'input', 'style="margin-bottom:4px"') + nf(n, side, j, 'value', t('Valor', 'Value'), 'input', 'type="number"');
+              case 'webhook': return nf(n, side, j, 'url', 'https://…');
+              case 'send_review_request': return `<select class="input branch-f" data-i="${i}" data-side="${side}" data-ni="${j}" data-nk="channel">${['sms', 'whatsapp', 'email'].map((c) => `<option ${n.config.channel === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
+              default: return '';
+            }
+          };
+          const sideEditor = (side, label) => {
+            const list = a.config[side] || [];
+            return `<div style="border-left:3px solid var(--border,#e5e7eb);padding-left:10px;margin-top:8px">
+              <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:4px">${label}</div>
+              ${list.map((n, j) => `<div class="block-item" style="padding:6px;margin-bottom:6px">
+                  <div class="b-head" style="margin-bottom:4px"><span style="font-size:12px">${ACTION_LABELS[n.type] || n.type}</span>
+                    <button type="button" class="btn ghost small branch-rm" data-i="${i}" data-side="${side}" data-ni="${j}">✕</button></div>
+                  ${nestedInput(n, side, j)}
+                </div>`).join('') || `<p class="muted" style="font-size:11px">${t('sin acciones', 'no actions')}</p>`}
+              <select class="input branch-add" data-i="${i}" data-side="${side}" style="margin-top:4px">
+                <option value="">${t('+ Añadir acción…', '+ Add action…')}</option>
+                ${NESTED.map((tp) => `<option value="${tp}">${ACTION_LABELS[tp] || tp}</option>`).join('')}
+              </select>
+            </div>`;
+          };
           return `<div class="form-row">
               <select class="input" data-i="${i}" data-k="field">
                 ${['tag', 'score', 'source', 'email', 'phone'].map((f) => `<option ${a.config.field === f ? 'selected' : ''}>${f}</option>`).join('')}
@@ -141,11 +174,8 @@ export async function renderAutomations(view) {
               </select>
               <input class="input" data-i="${i}" data-k="value" placeholder="${t('valor', 'value')}" value="${esc(a.config.value ?? '')}">
             </div>
-            <p class="muted" style="font-size:11px;margin:4px 0">${t('SI se cumple', 'IF true')} → <strong>${esc(branchActions(a.config.then))}</strong> · ${t('SI NO', 'IF false')} → <strong>${esc(branchActions(a.config.otherwise))}</strong></p>
-            <div class="flex">
-              <button type="button" class="btn secondary small edit-branch" data-i="${i}" data-side="then">${t('Editar SI ✓', 'Edit IF ✓')}</button>
-              <button type="button" class="btn secondary small edit-branch" data-i="${i}" data-side="otherwise">${t('Editar SI NO ✗', 'Edit IF NOT ✗')}</button>
-            </div>`;
+            ${sideEditor('then', t('SI se cumple ✓ → hacer:', 'IF true ✓ → do:'))}
+            ${sideEditor('otherwise', t('SI NO ✗ → hacer:', 'IF false ✗ → do:'))}`;
         }
         case 'create_opportunity':
           return `<input class="input" data-i="${i}" data-k="title" placeholder="${t('Título de oportunidad', 'Opportunity title')}" value="${esc(a.config.title || '')}" style="margin-bottom:6px">
@@ -177,29 +207,32 @@ export async function renderAutomations(view) {
           actions[Number(input.dataset.i)].config[input.dataset.k] = input.value;
         })
       );
-      listEl.querySelectorAll('.edit-branch').forEach((btn) =>
-        btn.addEventListener('click', () => {
-          const action = actions[Number(btn.dataset.i)];
-          const side = btn.dataset.side;
-          const simple = ['add_tag', 'remove_tag', 'send_email', 'send_sms', 'send_whatsapp', 'add_note', 'create_task', 'send_review_request'];
-          const current = JSON.stringify(action.config[side] || [], null, 2);
-          const example = '[\n  { "type": "add_tag", "config": { "tag": "caliente" } },\n  { "type": "send_sms", "config": { "body": "Hola {{first_name}}!" } }\n]';
-          const value = prompt(
-            t(
-              `Acciones de la rama ${side === 'then' ? 'SI ✓' : 'SI NO ✗'} (JSON).\nTipos: ${simple.join(', ')}\nEjemplo: ${example}`,
-              `Branch actions ${side === 'then' ? 'IF ✓' : 'IF NOT ✗'} (JSON).\nTypes: ${simple.join(', ')}\nExample: ${example}`
-            ),
-            current
-          );
-          if (value === null) return;
-          try {
-            const parsed = JSON.parse(value);
-            if (!Array.isArray(parsed)) throw new Error(t('Debe ser una lista []', 'Must be a list []'));
-            action.config[side] = parsed;
-            renderActions();
-          } catch (err) {
-            toast(t('JSON inválido: ', 'Invalid JSON: ') + err.message, true);
-          }
+      // Visual branch editor: edit nested THEN/OTHERWISE actions inline.
+      listEl.querySelectorAll('.branch-f').forEach((el) => {
+        const handler = () => {
+          const a = actions[Number(el.dataset.i)];
+          const side = el.dataset.side;
+          if (!Array.isArray(a.config[side])) a.config[side] = [];
+          a.config[side][Number(el.dataset.ni)].config[el.dataset.nk] = el.value;
+        };
+        el.addEventListener('input', handler);
+        el.addEventListener('change', handler);
+      });
+      listEl.querySelectorAll('.branch-add').forEach((sel) =>
+        sel.addEventListener('change', () => {
+          if (!sel.value) return;
+          const a = actions[Number(sel.dataset.i)];
+          const side = sel.dataset.side;
+          if (!Array.isArray(a.config[side])) a.config[side] = [];
+          a.config[side].push({ type: sel.value, config: {} });
+          renderActions();
+        })
+      );
+      listEl.querySelectorAll('.branch-rm').forEach((b) =>
+        b.addEventListener('click', () => {
+          const a = actions[Number(b.dataset.i)];
+          a.config[b.dataset.side].splice(Number(b.dataset.ni), 1);
+          renderActions();
         })
       );
     }

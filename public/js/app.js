@@ -169,12 +169,14 @@ function renderShell(activePath) {
   };
   document.getElementById('logout-btn').addEventListener('click', doLogout);
   document.getElementById('drawer-logout').addEventListener('click', doLogout);
-  // Language switch: re-render the whole shell + current view in the new language.
+  // Language switch: persist and reload so EVERY module re-evaluates in the new
+  // language — including label maps built with t() at module load (which a
+  // re-render alone wouldn't refresh).
   sidebar.querySelectorAll('.lang-btn').forEach((b) =>
     b.addEventListener('click', () => {
       if (getLang() === b.dataset.lang) return;
       setLang(b.dataset.lang);
-      route();
+      location.reload();
     })
   );
   document.getElementById('global-search').addEventListener('click', () => {
