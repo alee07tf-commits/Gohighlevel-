@@ -31,9 +31,15 @@ export async function renderClients(view) {
             <span><strong>${c.contacts}</strong> contactos</span>
             ${c.clients ? `<span><strong>${c.clients}</strong> clientes</span>` : ''}
           </div>
+          ${c.slug
+            ? `<div class="access-link" style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
+                 <code class="inline" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(location.origin)}/#/login/${esc(c.slug)}</code>
+                 <button class="btn ghost small client-copy" data-link="${esc(location.origin)}/#/login/${esc(c.slug)}" title="Copiar enlace de acceso del cliente">Copiar</button>
+               </div>`
+            : ''}
           <div style="display:flex;gap:8px">
             <button class="btn small client-enter" data-id="${c.id}">Entrar →</button>
-            <button class="btn secondary small client-edit" data-id="${c.id}" data-name="${esc(c.name)}" data-color="${esc(c.brand_color || '#4f46e5')}">Editar</button>
+            <button class="btn secondary small client-edit" data-id="${c.id}" data-name="${esc(c.name)}" data-color="${esc(c.brand_color || '#4f46e5')}" data-slug="${esc(c.slug || '')}" data-logo="${esc(c.logo_url || '')}">Editar</button>
             <button class="btn ghost small client-del" data-id="${c.id}" title="Eliminar">✕</button>
           </div>
         </div>
@@ -48,6 +54,25 @@ export async function renderClients(view) {
       toast('Has entrado en el cliente');
       location.hash = '#/dashboard';
       window.dispatchEvent(new HashChangeEvent('hashchange'));
+    })
+  );
+
+  // Copy the client's branded login link to hand it over.
+  view.querySelectorAll('.client-copy').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const link = b.dataset.link;
+      try {
+        await navigator.clipboard.writeText(link);
+        toast('Enlace de acceso copiado');
+      } catch {
+        // Clipboard API can be unavailable (insecure context) — fall back.
+        const ta = document.createElement('textarea');
+        ta.value = link;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); toast('Enlace de acceso copiado'); } catch { toast(link); }
+        ta.remove();
+      }
     })
   );
 
@@ -68,9 +93,15 @@ export async function renderClients(view) {
     b.addEventListener('click', () => {
       const modal = openModal(`
         <h2>Editar cliente</h2>
+        <p class="muted" style="font-size:12px;margin-bottom:12px">Marca blanca del cliente: se aplica a su app y a su página de acceso.</p>
         <form id="client-edit-form">
-          <label class="field"><span class="label">Nombre</span><input class="input" name="name" value="${esc(b.dataset.name)}" required></label>
-          <label class="field"><span class="label">Color de marca</span><input class="input" name="brand_color" type="color" value="${esc(b.dataset.color)}" style="height:38px;padding:3px"></label>
+          <label class="field"><span class="label">Nombre (marca)</span><input class="input" name="name" value="${esc(b.dataset.name)}" required></label>
+          <div class="form-row">
+            <label class="field"><span class="label">Color de marca</span><input class="input" name="brand_color" type="color" value="${esc(b.dataset.color)}" style="height:38px;padding:3px"></label>
+            <label class="field"><span class="label">Identificador (URL)</span><input class="input" name="slug" value="${esc(b.dataset.slug)}" placeholder="mi-cliente"></label>
+          </div>
+          <label class="field"><span class="label">Logo URL</span><input class="input" name="logo_url" value="${esc(b.dataset.logo)}" placeholder="https://…/logo.png"></label>
+          <label class="field"><span class="label">Titular en su página de acceso</span><input class="input" name="signup_headline" placeholder="Accede a tu cuenta"></label>
           <div class="modal-actions"><button type="button" class="btn secondary" id="cancel">Cancelar</button><button class="btn">Guardar</button></div>
         </form>`);
       modal.querySelector('#cancel').addEventListener('click', closeOverlay);

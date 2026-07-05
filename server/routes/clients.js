@@ -12,6 +12,27 @@ const provisioning = require('../services/provisioning');
 const router = express.Router();
 router.use(requireAuth);
 
+function slugify(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+// A slug unique across all agencies (used for the client's branded login link).
+// `q` is a db handle (may be a transaction handle).
+async function uniqueSlug(q, base, exceptId) {
+  const root = slugify(base) || 'cliente';
+  let cand = root;
+  for (let i = 2; ; i++) {
+    const clash = await q.get('SELECT id FROM agencies WHERE slug = ? AND id != ?', [cand, exceptId || 0]);
+    if (!clash) return cand;
+    cand = `${root}-${i}`;
+  }
+}
+
 // List the direct child agencies of the effective agency, with a light rollup.
 router.get('/', async (req, res) => {
   const children = await db.all(
@@ -64,6 +85,9 @@ router.post('/', async (req, res) => {
       agency_name,
       req.user.agency_id,
     ]);
+    // Give the client a unique slug so it gets a branded login link out of the box.
+    const slug = await uniqueSlug(t, agency_name, aid);
+    await t.run('UPDATE agencies SET slug = ? WHERE id = ?', [slug, aid]);
     await t.insert('INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)', [
       aid, admin_name || agency_name, admin_email, bcrypt.hashSync(admin_password, 10), 'admin',
     ]);
@@ -91,13 +115,17 @@ router.put('/:id', async (req, res) => {
   ]);
   if (!child) return res.status(404).json({ error: 'Cliente no encontrado' });
   const b = req.body || {};
-  await db.run('UPDATE agencies SET name = ?, brand_color = ?, logo_url = ? WHERE id = ?', [
+  // Slug: keep the current one unless a new value is provided; ensure uniqueness.
+  const slug = b.slug !== undefined ? await uniqueSlug(db, b.slug, child.id) : child.slug || (await uniqueSlug(db, child.name, child.id));
+  await db.run('UPDATE agencies SET name = ?, slug = ?, brand_color = ?, logo_url = ?, signup_headline = ? WHERE id = ?', [
     b.name || child.name,
+    slug,
     b.brand_color ?? child.brand_color,
     b.logo_url ?? child.logo_url,
+    b.signup_headline ?? child.signup_headline,
     child.id,
   ]);
-  res.json(await db.get('SELECT id, name, slug, brand_color, logo_url FROM agencies WHERE id = ?', [child.id]));
+  res.json(await db.get('SELECT id, name, slug, brand_color, logo_url, signup_headline FROM agencies WHERE id = ?', [child.id]));
 });
 
 // Delete a direct child agency — only when it is empty (no sub-accounts and no

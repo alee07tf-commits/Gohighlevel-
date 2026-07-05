@@ -1,21 +1,61 @@
 import { api, setSession } from '../api.js';
 import { formData, toast, esc } from '../ui.js';
 
-function authShell(inner) {
-  return `<div class="auth-wrap"><div class="auth-card">
-    <div class="logo">Lead<span>Flow</span></div>${inner}</div></div>`;
+// Default (unbranded) LeadFlow header, or a client's white-label header when a
+// brand slug is present in the URL (`#/login/<slug>`).
+function authShell(inner, brand) {
+  const logo = brand
+    ? `<div class="logo">${
+        brand.logo_url
+          ? `<img src="${esc(brand.logo_url)}" alt="${esc(brand.name)}" style="max-height:38px">`
+          : esc(brand.name)
+      }</div>`
+    : '<div class="logo">Lead<span>Flow</span></div>';
+  return `<div class="auth-wrap"><div class="auth-card">${logo}${inner}</div></div>`;
 }
 
-export function renderLogin(root) {
-  root.innerHTML = authShell(`
-    <p class="sub">Sign in to your agency account</p>
+// Fetch a tenant's public branding (unauthenticated). Returns null if none.
+async function loadBrand(slug) {
+  if (!slug) return null;
+  try {
+    const res = await fetch(`/api/public/brand/${encodeURIComponent(slug)}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function applyBrandColor(brand) {
+  const c = brand && brand.brand_color;
+  const root = document.documentElement.style;
+  if (c && /^#[0-9a-fA-F]{6}$/.test(c)) {
+    root.setProperty('--primary', c);
+    root.setProperty('--primary-dark', c);
+  } else {
+    root.removeProperty('--primary');
+    root.removeProperty('--primary-dark');
+  }
+}
+
+export async function renderLogin(root, brandSlug) {
+  const brand = await loadBrand(brandSlug);
+  applyBrandColor(brand);
+  const sub = brand
+    ? brand.headline || `Accede a tu cuenta de ${esc(brand.name)}`
+    : 'Sign in to your agency account';
+  root.innerHTML = authShell(
+    `
+    <p class="sub">${esc(sub)}</p>
     <form id="login-form">
       <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" required></label>
       <label class="field"><span class="label">Password</span><input class="input" name="password" type="password" required></label>
-      <button class="btn" style="width:100%">Sign In</button>
+      <button class="btn" style="width:100%">${brand ? 'Entrar' : 'Sign In'}</button>
     </form>
-    <p class="alt">New agency? <a href="#/register">Create an account</a></p>
-    <p class="alt muted">Demo: <code class="inline">demo@leadflow.app</code> / <code class="inline">demo123</code></p>`);
+    ${brand ? '' : '<p class="alt">New agency? <a href="#/register">Create an account</a></p>'}
+    ${brand ? '' : '<p class="alt muted">Demo: <code class="inline">demo@leadflow.app</code> / <code class="inline">demo123</code></p>'}`,
+    brand
+  );
 
   root.querySelector('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();

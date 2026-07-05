@@ -168,9 +168,10 @@ async function seedDemo() {
     // A sample client = a child agency with its own admin login and first
     // sub-account. Shows the recursive model: this client sees the course above
     // and can manage its own sub-accounts. Login: cliente@leadflow.app / demo123
-    const clientAgencyId = await t.insert('INSERT INTO agencies (name, parent_agency_id) VALUES (?, ?)', [
-      'Cliente Demo — Bright Smile', agencyId,
-    ]);
+    const clientAgencyId = await t.insert(
+      'INSERT INTO agencies (name, parent_agency_id, slug, brand_color) VALUES (?, ?, ?, ?)',
+      ['Cliente Demo — Bright Smile', agencyId, 'bright-smile', '#0ea5e9']
+    );
     await t.run('INSERT INTO users (agency_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)', [
       clientAgencyId, 'Cliente Demo', 'cliente@leadflow.app', bcrypt.hashSync('demo123', 10), 'admin',
     ]);

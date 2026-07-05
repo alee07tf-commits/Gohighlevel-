@@ -40,6 +40,22 @@ const PAGE_CSS = `
   .footer{text-align:center;color:#9ca3af;font-size:.8rem;padding:30px}
 `;
 
+// Public white-label branding for a tenant, keyed by its slug. Powers the
+// branded client login page so a handed-off account looks like the client's
+// own product (logo + colour + name) before the client even signs in.
+router.get('/brand/:slug', async (req, res) => {
+  const a = await db.get('SELECT name, brand_color, logo_url, signup_headline FROM agencies WHERE slug = ?', [
+    req.params.slug,
+  ]);
+  if (!a) return res.status(404).json({ error: 'not found' });
+  res.json({
+    name: a.name,
+    brand_color: a.brand_color || '#4f46e5',
+    logo_url: a.logo_url || '',
+    headline: a.signup_headline || '',
+  });
+});
+
 
 // ---- Landing page themes (Claude design picks one; user can change it) ----
 function themeCss(theme, brand) {

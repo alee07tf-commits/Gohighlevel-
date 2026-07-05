@@ -172,7 +172,8 @@ async function route() {
   const hash = location.hash.replace(/^#\//, '') || 'dashboard';
   const [path, ...rest] = hash.split('/');
 
-  if (path === 'login') return renderLogin(document.getElementById('app'));
+  // `#/login/<slug>` shows a client's white-label login (logo + colour + name).
+  if (path === 'login') return renderLogin(document.getElementById('app'), rest[0]);
   if (path === 'register') return renderRegister(document.getElementById('app'));
 
   if (!state.token) {
