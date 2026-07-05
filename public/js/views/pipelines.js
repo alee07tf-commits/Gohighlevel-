@@ -1,5 +1,12 @@
 import { api } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast, fmtMoney, fullName } from '../ui.js';
+import { t } from '../i18n.js';
+
+const STATUS_LABEL = {
+  open: () => t('Abierta', 'Open'),
+  won: () => t('Ganada', 'Won'),
+  lost: () => t('Perdida', 'Lost'),
+};
 
 export async function renderPipelines(view) {
   const pipelines = await api('/pipelines');
@@ -8,14 +15,14 @@ export async function renderPipelines(view) {
 
   view.innerHTML = `
   <div class="page-header">
-    <h1>Opportunities</h1>
+    <h1>${t('Oportunidades', 'Opportunities')}</h1>
     <select class="input" id="pipeline-select" style="width:220px">
       ${pipelines.map((p) => `<option value="${p.id}" ${p.id === currentId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
     </select>
-    <button class="btn secondary small" id="new-pipeline">+ Pipeline</button>
-    <button class="btn secondary small" id="new-stage">+ Stage</button>
+    <button class="btn secondary small" id="new-pipeline">${t('+ Pipeline', '+ Pipeline')}</button>
+    <button class="btn secondary small" id="new-stage">${t('+ Etapa', '+ Stage')}</button>
     <div class="spacer"></div>
-    <button class="btn" id="new-opp">+ Opportunity</button>
+    <button class="btn" id="new-opp">${t('+ Oportunidad', '+ Opportunity')}</button>
   </div>
   <div id="board"></div>`;
 
@@ -24,7 +31,7 @@ export async function renderPipelines(view) {
   async function loadBoard() {
     const pipeline = pipelines.find((p) => p.id === currentId);
     if (!pipeline) {
-      board.innerHTML = `<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>No pipelines yet. Create one to start tracking deals.</div>`;
+      board.innerHTML = `<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>${t('Aún no hay pipelines. Crea uno para empezar a seguir tus oportunidades.', 'No pipelines yet. Create one to start tracking deals.')}</div>`;
       return;
     }
     sessionStorage.setItem('lf_pipeline', currentId);
@@ -52,14 +59,14 @@ export async function renderPipelines(view) {
         })
         .join('')}
       <div class="kanban-col" data-stage="__closed">
-        <div class="col-head"><span>Closed</span></div>
+        <div class="col-head"><span>${t('Cerradas', 'Closed')}</span></div>
         <div class="kanban-cards">
           ${opps
             .filter((o) => o.status !== 'open')
             .map(
               (o) => `<div class="kanban-card" data-id="${o.id}" style="opacity:.75">
                 <div class="k-title">${esc(o.title)}</div>
-                <div class="k-meta"><span class="badge ${o.status === 'won' ? 'green' : 'red'}">${o.status}</span>
+                <div class="k-meta"><span class="badge ${o.status === 'won' ? 'green' : 'red'}">${(STATUS_LABEL[o.status] || (() => o.status))()}</span>
                 <span class="k-value">${fmtMoney(o.value)}</span></div></div>`
             )
             .join('')}
@@ -92,28 +99,28 @@ export async function renderPipelines(view) {
 
   function oppModal(opp = null) {
     const pipeline = pipelines.find((p) => p.id === currentId);
-    if (!pipeline) return toast('Create a pipeline first', true);
+    if (!pipeline) return toast(t('Primero crea un pipeline', 'Create a pipeline first'), true);
     const modal = openModal(`
-      <h2>${opp ? 'Edit' : 'New'} Opportunity</h2>
+      <h2>${opp ? t('Editar oportunidad', 'Edit Opportunity') : t('Nueva oportunidad', 'New Opportunity')}</h2>
       <form id="opp-form">
-        <label class="field"><span class="label">Title</span><input class="input" name="title" required value="${esc(opp?.title || '')}"></label>
+        <label class="field"><span class="label">${t('Título', 'Title')}</span><input class="input" name="title" required value="${esc(opp?.title || '')}"></label>
         <div class="form-row">
-          <label class="field"><span class="label">Value ($)</span><input class="input" name="value" type="number" step="0.01" value="${opp?.value ?? ''}"></label>
-          <label class="field"><span class="label">Stage</span><select class="input" name="stage_id">
+          <label class="field"><span class="label">${t('Valor ($)', 'Value ($)')}</span><input class="input" name="value" type="number" step="0.01" value="${opp?.value ?? ''}"></label>
+          <label class="field"><span class="label">${t('Etapa', 'Stage')}</span><select class="input" name="stage_id">
             ${pipeline.stages.map((s) => `<option value="${s.id}" ${opp?.stage_id === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
           </select></label>
         </div>
-        <label class="field"><span class="label">Contact (search by name/email)</span>
-          <input class="input" id="contact-search" placeholder="Leave empty for none" autocomplete="off">
+        <label class="field"><span class="label">${t('Contacto (buscar por nombre/email)', 'Contact (search by name/email)')}</span>
+          <input class="input" id="contact-search" placeholder="${t('Dejar vacío para ninguno', 'Leave empty for none')}" autocomplete="off">
           <input type="hidden" name="contact_id" value="${opp?.contact_id || ''}">
           <div id="contact-results"></div></label>
-        ${opp ? `<label class="field"><span class="label">Status</span><select class="input" name="status">
-          ${['open', 'won', 'lost'].map((s) => `<option ${opp.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+        ${opp ? `<label class="field"><span class="label">${t('Estado', 'Status')}</span><select class="input" name="status">
+          ${['open', 'won', 'lost'].map((s) => `<option value="${s}" ${opp.status === s ? 'selected' : ''}>${STATUS_LABEL[s]()}</option>`).join('')}
         </select></label>` : ''}
         <div class="modal-actions">
-          ${opp ? '<button type="button" class="btn danger" id="del-opp">Delete</button>' : ''}
-          <button type="button" class="btn secondary" id="cancel">Cancel</button>
-          <button class="btn">${opp ? 'Save' : 'Create'}</button>
+          ${opp ? `<button type="button" class="btn danger" id="del-opp">${t('Eliminar', 'Delete')}</button>` : ''}
+          <button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
+          <button class="btn">${opp ? t('Guardar', 'Save') : t('Crear', 'Create')}</button>
         </div>
       </form>`);
 
@@ -140,7 +147,7 @@ export async function renderPipelines(view) {
 
     modal.querySelector('#cancel').addEventListener('click', closeOverlay);
     modal.querySelector('#del-opp')?.addEventListener('click', async () => {
-      if (!confirm('Delete this opportunity?')) return;
+      if (!confirm(t('¿Eliminar esta oportunidad?', 'Delete this opportunity?'))) return;
       await api(`/pipelines/opportunities/${opp.id}`, { method: 'DELETE' });
       closeOverlay();
       loadBoard();
@@ -167,14 +174,14 @@ export async function renderPipelines(view) {
   });
   view.querySelector('#new-opp').addEventListener('click', () => oppModal());
   view.querySelector('#new-pipeline').addEventListener('click', async () => {
-    const name = prompt('Pipeline name:');
+    const name = prompt(t('Nombre del pipeline:', 'Pipeline name:'));
     if (!name) return;
     await api('/pipelines', { method: 'POST', body: { name } });
     renderPipelines(view);
   });
   view.querySelector('#new-stage').addEventListener('click', async () => {
-    if (!currentId) return toast('Create a pipeline first', true);
-    const name = prompt('Stage name:');
+    if (!currentId) return toast(t('Primero crea un pipeline', 'Create a pipeline first'), true);
+    const name = prompt(t('Nombre de la etapa:', 'Stage name:'));
     if (!name) return;
     await api(`/pipelines/${currentId}/stages`, { method: 'POST', body: { name } });
     renderPipelines(view);
