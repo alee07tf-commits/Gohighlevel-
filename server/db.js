@@ -612,6 +612,10 @@ ALTER TABLE campaign_recipients ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ;
 ALTER TABLE campaign_recipients ADD COLUMN IF NOT EXISTS clicked_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_campaign_recipients_token ON campaign_recipients(token);
 
+-- Forms parity (v3.15): a submission-notification email and required-field list.
+ALTER TABLE forms ADD COLUMN IF NOT EXISTS notify_email TEXT DEFAULT '';
+ALTER TABLE forms ADD COLUMN IF NOT EXISTS required_fields TEXT NOT NULL DEFAULT '[]';
+
 -- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
 -- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
 -- essentially every request.
@@ -717,7 +721,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 22;
+const SCHEMA_VERSION = 23;
 
 let readyPromise = null;
 function ensureReady() {

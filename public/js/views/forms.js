@@ -87,20 +87,28 @@ export async function renderForms(view) {
 
   async function formModal(form = null) {
     const selected = (() => { try { return JSON.parse(form?.fields || '["first_name","email","phone"]'); } catch { return ['email']; } })();
+    const required = (() => { try { return JSON.parse(form?.required_fields || '[]'); } catch { return []; } })();
+    const customFields = await api('/custom-fields').catch(() => []);
+    const allFields = [...FIELDS, ...customFields.map((cf) => [cf.key, () => cf.name])];
+    const fieldRow = ([k, label]) => `<div class="flex" style="gap:8px;font-size:13px;align-items:center">
+        <label class="flex" style="gap:5px;flex:1"><input type="checkbox" class="fld-cb" value="${esc(k)}" ${selected.includes(k) ? 'checked' : ''} ${k === 'email' ? 'disabled checked' : ''}> ${esc(label())}</label>
+        <label class="flex muted" style="gap:4px;font-size:11px"><input type="checkbox" class="req-cb" value="${esc(k)}" ${required.includes(k) ? 'checked' : ''} ${k === 'email' ? 'disabled checked' : ''}> ${t('obligatorio', 'required')}</label>
+      </div>`;
     const modal = openModal(`
       <h2>${form ? t('Editar formulario', 'Edit form') : t('Nuevo formulario', 'New form')}</h2>
       <form id="form-form">
         <label class="field"><span class="label">${t('Nombre', 'Name')}</span><input class="input" name="name" required value="${esc(form?.name || '')}" placeholder="${t('Contacto rápido', 'Quick contact')}"></label>
         <label class="field"><span class="label">${t('Titular', 'Headline')}</span><input class="input" name="headline" value="${esc(form?.headline || '')}" placeholder="${t('Déjanos tus datos', 'Leave us your details')}"></label>
-        <div class="field"><span class="label">${t('Campos', 'Fields')}</span>
-          <div class="flex" style="flex-wrap:wrap;gap:10px">
-            ${FIELDS.map(([k, label]) => `<label class="flex" style="font-size:13px;gap:5px"><input type="checkbox" class="fld-cb" value="${k}" ${selected.includes(k) ? 'checked' : ''} ${k === 'email' ? 'disabled checked' : ''}> ${label()}</label>`).join('')}
-          </div></div>
+        <div class="field"><span class="label">${t('Campos (marca cuáles y si son obligatorios)', 'Fields (pick which and whether required)')}</span>
+          <div style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow:auto">${allFields.map(fieldRow).join('')}</div></div>
         <div class="form-row">
           <label class="field"><span class="label">${t('Etiqueta al enviar', 'Tag on submit')}</span><input class="input" name="tag" value="${esc(form?.tag || '')}" placeholder="lead"></label>
-          <label class="field"><span class="label">${t('Redirección tras enviar (opcional)', 'Redirect after submit (optional)')}</span><input class="input" name="redirect_url" value="${esc(form?.redirect_url || '')}" placeholder="https://…/gracias"></label>
+          <label class="field"><span class="label">${t('Avisar por email a (opcional)', 'Notify by email (optional)')}</span><input class="input" name="notify_email" value="${esc(form?.notify_email || '')}" placeholder="equipo@agencia.com"></label>
         </div>
-        <label class="field"><span class="label">${t('Mensaje de éxito', 'Success message')}</span><input class="input" name="success_message" value="${esc(form?.success_message || '')}" placeholder="${t('¡Gracias! Te contactaremos pronto.', 'Thanks! We will reach out soon.')}"></label>
+        <div class="form-row">
+          <label class="field"><span class="label">${t('Redirección tras enviar (opcional)', 'Redirect after submit (optional)')}</span><input class="input" name="redirect_url" value="${esc(form?.redirect_url || '')}" placeholder="https://…/gracias"></label>
+          <label class="field"><span class="label">${t('Mensaje de éxito', 'Success message')}</span><input class="input" name="success_message" value="${esc(form?.success_message || '')}" placeholder="${t('¡Gracias!', 'Thanks!')}"></label>
+        </div>
         <div class="modal-actions"><button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button><button class="btn">${t('Guardar', 'Save')}</button></div>
       </form>`);
     modal.querySelector('#cancel').addEventListener('click', closeOverlay);
@@ -108,6 +116,7 @@ export async function renderForms(view) {
       e.preventDefault();
       const body = formData(e.target);
       body.fields = [...modal.querySelectorAll('.fld-cb:checked')].map((c) => c.value);
+      body.required_fields = [...modal.querySelectorAll('.req-cb:checked')].map((c) => c.value).filter((k) => body.fields.includes(k));
       try {
         if (form) await api(`/forms/${form.id}`, { method: 'PUT', body });
         else await api('/forms', { method: 'POST', body });

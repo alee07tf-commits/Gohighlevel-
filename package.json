@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "seed": "node server/seed.js",
-    "test": "NODE_ENV=test node --test tests/api.test.js tests/v12.test.js tests/api2.test.js tests/funnel-ai.test.js tests/v16.test.js tests/v17.test.js tests/v18.test.js tests/v19.test.js tests/v20.test.js tests/v21.test.js tests/v22.test.js tests/v23.test.js tests/v24.test.js tests/v25.test.js tests/v26.test.js tests/v27.test.js tests/v28.test.js tests/v29.test.js tests/v30.test.js tests/v31.test.js tests/v32.test.js tests/v33.test.js tests/v34.test.js tests/v35.test.js tests/v36.test.js tests/v37.test.js tests/v38.test.js tests/v39.test.js tests/v40.test.js tests/v41.test.js tests/v42.test.js tests/v43.test.js tests/v44.test.js"
+    "test": "NODE_ENV=test node --test tests/api.test.js tests/v12.test.js tests/api2.test.js tests/funnel-ai.test.js tests/v16.test.js tests/v17.test.js tests/v18.test.js tests/v19.test.js tests/v20.test.js tests/v21.test.js tests/v22.test.js tests/v23.test.js tests/v24.test.js tests/v25.test.js tests/v26.test.js tests/v27.test.js tests/v28.test.js tests/v29.test.js tests/v30.test.js tests/v31.test.js tests/v32.test.js tests/v33.test.js tests/v34.test.js tests/v35.test.js tests/v36.test.js tests/v37.test.js tests/v38.test.js tests/v39.test.js tests/v40.test.js tests/v41.test.js tests/v42.test.js tests/v43.test.js tests/v44.test.js tests/v45.test.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.3",

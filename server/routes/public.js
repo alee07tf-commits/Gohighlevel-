@@ -527,12 +527,15 @@ router.get('/form/:slug', async (req, res) => {
   const loc = await db.get('SELECT * FROM locations WHERE id = ?', [form.location_id]);
   const brand = (loc && loc.brand_color) || '#4f46e5';
   const fields = (() => { try { return JSON.parse(form.fields || '[]'); } catch { return ['email']; } })();
+  const required = (() => { try { return JSON.parse(form.required_fields || '[]'); } catch { return []; } })();
   const inputs = fields
     .map((f) => {
       const label = esc((FORM_LABELS[f] || { es: f }).es);
-      if (f === 'message') return `<label>${label}<textarea name="${f}" rows="4"></textarea></label>`;
+      const req = f === 'email' || required.includes(f) ? 'required' : '';
+      const star = req ? ' *' : '';
+      if (f === 'message') return `<label>${label}${star}<textarea name="${f}" rows="4" ${req}></textarea></label>`;
       const type = f === 'email' ? 'email' : f === 'phone' ? 'tel' : 'text';
-      return `<label>${label}<input name="${f}" type="${type}" ${f === 'email' ? 'required' : ''}></label>`;
+      return `<label>${label}${star}<input name="${f}" type="${type}" ${req}></label>`;
     })
     .join('');
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
@@ -581,6 +584,17 @@ router.post('/form/:slug/submit', async (req, res) => {
     isNew = true;
   }
   if (form.tag) await db.run('INSERT INTO contact_tags (contact_id, tag) VALUES (?, ?) ON CONFLICT DO NOTHING', [contact.id, form.tag]);
+
+  // Persist any non-standard submitted fields as contact custom fields.
+  const standard = new Set(['first_name', 'last_name', 'email', 'phone', 'message']);
+  const custom = {};
+  for (const [k, v] of Object.entries(data)) if (!standard.has(k) && v != null && typeof v !== 'object' && String(v).trim() !== '') custom[k] = v;
+  if (Object.keys(custom).length) {
+    let existing = {};
+    try { existing = JSON.parse(contact.custom_fields || '{}'); } catch { existing = {}; }
+    await db.run('UPDATE contacts SET custom_fields = ? WHERE id = ?', [JSON.stringify({ ...existing, ...custom }), contact.id]);
+  }
+
   await db.run('INSERT INTO form_submissions (location_id, form_id, contact_id, data) VALUES (?, ?, ?, ?)', [
     form.location_id, form.id, contact.id, JSON.stringify(data),
   ]);
@@ -589,6 +603,16 @@ router.post('/form/:slug/submit', async (req, res) => {
   if (isNew) await automation.trigger(form.location_id, 'contact_created', contact);
   await automation.trigger(form.location_id, 'form_submitted', contact, { form_id: form.id });
   if (form.tag) await automation.trigger(form.location_id, 'tag_added', contact, { tag: form.tag });
+
+  // Notify the team by email when configured (best-effort).
+  if (form.notify_email) {
+    try {
+      const messaging = require('../services/messaging');
+      const summary = Object.entries(data).map(([k, v]) => `${k}: ${v}`).join('\n');
+      await messaging.sendEmail(form.location_id, { email: form.notify_email, first_name: '', last_name: '' },
+        `Nuevo envío del formulario "${form.name}"`, `Nuevo lead desde ${form.name}:\n\n${summary}`);
+    } catch { /* notification is best-effort */ }
+  }
   res.status(201).json({ ok: true });
 });
 
