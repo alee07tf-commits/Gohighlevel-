@@ -41,9 +41,110 @@ async function processJob(job) {
       if (contact.phone) await messaging.sendSms(job.location_id, contact, body);
       return 'reminder sent';
     }
+    case 'daily_briefing': {
+      const location = await db.get('SELECT * FROM locations WHERE id = ?', [job.location_id]);
+      if (!location || !location.briefing_enabled) return 'skipped (briefing disabled)';
+      // Always queue tomorrow's run first so a failure below can't kill the loop.
+      await scheduleDailyBriefing(location.id, location.briefing_hour, true);
+      const to = location.briefing_email || location.email;
+      if (!to) return 'skipped (no briefing email configured)';
+
+      const appts = await db.all(
+        `SELECT a.*, c.first_name, c.last_name FROM appointments a LEFT JOIN contacts c ON c.id = a.contact_id
+         WHERE a.location_id = ? AND a.status = 'confirmed'
+           AND a.starts_at >= now() AND a.starts_at < now() + interval '24 hours'
+         ORDER BY a.starts_at LIMIT 10`,
+        [location.id]
+      );
+      const hot = await db.all(
+        `SELECT * FROM contacts WHERE location_id = ? AND score >= 20 ORDER BY score DESC LIMIT 5`,
+        [location.id]
+      );
+      const overdue = await db.all(
+        `SELECT t.*, c.first_name, c.last_name FROM tasks t LEFT JOIN contacts c ON c.id = t.contact_id
+         WHERE t.location_id = ? AND t.status = 'open' AND t.due_at IS NOT NULL AND t.due_at <= now()
+         ORDER BY t.due_at LIMIT 8`,
+        [location.id]
+      );
+      const unread = await db.get(
+        'SELECT COUNT(*)::int AS n FROM conversations WHERE location_id = ? AND unread > 0',
+        [location.id]
+      );
+      const name = (r) => [r.first_name, r.last_name].filter(Boolean).join(' ') || 'Sin contacto';
+      const lines = [
+        `☀️ Briefing diario — ${location.name}`,
+        '',
+        `📅 Citas próximas 24h (${appts.length}):`,
+        ...(appts.length
+          ? appts.map((a) => `  • ${new Date(a.starts_at).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })} — ${a.title} (${name(a)})`)
+          : ['  • Ninguna']),
+        '',
+        `🔥 Leads calientes (${hot.length}):`,
+        ...(hot.length ? hot.map((c) => `  • ${name(c)} — ${c.score} pts (${c.phone || c.email})`) : ['  • Ninguno']),
+        '',
+        `⏰ Tareas vencidas (${overdue.length}):`,
+        ...(overdue.length ? overdue.map((t) => `  • ${t.title}${t.contact_id ? ` — ${name(t)}` : ''}`) : ['  • Ninguna']),
+        '',
+        `💬 Conversaciones sin leer: ${unread.n}`,
+      ];
+      const providers = require('./providers');
+      const result = await providers.deliverEmail({
+        to,
+        subject: `☀️ Briefing ${location.name} — ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}`,
+        text: lines.join('\n'),
+        fromName: 'LeadFlow',
+      });
+      return result.ok ? `briefing sent to ${to} (${result.provider})` : `briefing failed: ${result.error}`;
+    }
+    case 'campaign_send': {
+      const campaign = await db.get('SELECT * FROM campaigns WHERE id = ?', [payload.campaign_id]);
+      if (!campaign || campaign.status === 'sent') return 'skipped (campaign gone or already sent)';
+      const marketing = require('../routes/marketing');
+      const sent = await marketing.deliverCampaign(campaign);
+      return `campaign sent to ${sent} contact(s)`;
+    }
+    case 'recurring_invoice': {
+      const prev = await db.get('SELECT * FROM invoices WHERE id = ?', [payload.invoice_id]);
+      if (!prev || !prev.recurring) return 'skipped (invoice gone or not recurring)';
+      const crypto = require('crypto');
+      const { n } = await db.get('SELECT COUNT(*)::int AS n FROM invoices WHERE location_id = ?', [prev.location_id]);
+      const newId = await db.insert(
+        `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, status, token, kind, recurring)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'sent', ?, 'invoice', ?)`,
+        [prev.location_id, prev.contact_id, `INV-${String(n + 1).padStart(4, '0')}`, prev.title, prev.items,
+         prev.currency, prev.total, crypto.randomBytes(16).toString('hex'), prev.recurring]
+      );
+      const inv = await db.get('SELECT * FROM invoices WHERE id = ?', [newId]);
+      if (inv.contact_id) {
+        const contact = await db.get('SELECT * FROM contacts WHERE id = ?', [inv.contact_id]);
+        const messaging = require('./messaging');
+        const url = `${process.env.APP_URL || ''}/pay/${inv.token}`;
+        await messaging.sendEmail(inv.location_id, contact,
+          `Factura ${inv.number} — suscripción`,
+          `Hola {{first_name}}, aquí tienes tu factura recurrente ${inv.number} (${inv.total.toFixed(2)} ${inv.currency}). Puedes pagarla aquí: ${url}`);
+      }
+      // Queue the next cycle.
+      await schedule(prev.location_id, new Date(Date.now() + 30 * 86_400_000).toISOString(), 'recurring_invoice', {
+        invoice_id: newId,
+      });
+      return `recurring invoice ${inv.number} issued`;
+    }
     default:
       return `unknown job type "${job.type}"`;
   }
+}
+
+// Schedules the next daily briefing at the location's configured hour (UTC).
+// Replaces any pending briefing job for the location to avoid duplicates.
+async function scheduleDailyBriefing(locationId, hour, forceTomorrow = false) {
+  await db.run(
+    `UPDATE scheduled_jobs SET status = 'done', result = 'superseded' WHERE location_id = ? AND type = 'daily_briefing' AND status = 'pending'`,
+    [locationId]
+  );
+  const next = new Date();
+  next.setUTCHours(Number(hour) || 8, 0, 0, 0);
+  if (forceTomorrow || next.getTime() <= Date.now()) next.setUTCDate(next.getUTCDate() + 1);
+  return schedule(locationId, next.toISOString(), 'daily_briefing', {});
 }
 
 // Process due jobs; returns how many were handled.
@@ -88,4 +189,4 @@ function lazyTick() {
   tick().catch((err) => console.error('lazy tick failed:', err.message));
 }
 
-module.exports = { schedule, tick, lazyTick, scheduleAppointmentReminder };
+module.exports = { schedule, tick, lazyTick, scheduleAppointmentReminder, scheduleDailyBriefing };

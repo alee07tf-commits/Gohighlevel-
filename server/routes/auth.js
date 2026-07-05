@@ -41,9 +41,33 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/me', requireAuth, async (req, res) => {
+  // agency = the effective scope (may be a client we've drilled into);
+  // homeAgency = the tenant the user actually belongs to; parentAgency lets the
+  // UI offer "← back" when acting inside a child.
   const agency = await db.get('SELECT * FROM agencies WHERE id = ?', [req.user.agency_id]);
+  const homeAgency =
+    req.user.homeAgencyId === req.user.agency_id
+      ? agency
+      : await db.get('SELECT id, name, slug, brand_color, logo_url FROM agencies WHERE id = ?', [req.user.homeAgencyId]);
+  const parentAgency =
+    req.actingAsChild && agency.parent_agency_id
+      ? await db.get('SELECT id, name FROM agencies WHERE id = ?', [agency.parent_agency_id])
+      : null;
+  const { client_count } = await db.get(
+    'SELECT COUNT(*)::int AS client_count FROM agencies WHERE parent_agency_id = ?',
+    [req.user.agency_id]
+  );
   const locations = await db.all('SELECT * FROM locations WHERE agency_id = ?', [req.user.agency_id]);
-  res.json({ user: req.user, agency, locations });
+  res.json({
+    user: req.user,
+    agency,
+    homeAgency,
+    parentAgency,
+    actingAsChild: req.actingAsChild,
+    clientCount: client_count,
+    canManageClients: req.user.role === 'admin',
+    locations,
+  });
 });
 
 module.exports = router;

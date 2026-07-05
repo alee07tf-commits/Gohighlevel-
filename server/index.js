@@ -13,7 +13,9 @@ if ((process.env.VERCEL && !process.env.DATABASE_URL) || process.env.AUTO_SEED) 
 }
 
 const app = express();
-app.use(express.json({ limit: '4mb' }));
+// Keep the raw body around so webhook receivers that sign the payload (Shopify,
+// Stripe…) can verify the HMAC. Cheap: just holds a reference to the buffer.
+app.use(express.json({ limit: '4mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 // Lazy scheduler tick: on serverless there is no resident interval, so any
 // traffic opportunistically processes due jobs (throttled to 1/min).
@@ -26,22 +28,45 @@ app.use((req, res, next) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/locations', require('./routes/locations'));
 app.use('/api/contacts', require('./routes/contacts'));
+app.use('/api/companies', require('./routes/companies'));
 app.use('/api/pipelines', require('./routes/pipelines'));
 app.use('/api/calendars', require('./routes/calendars'));
 app.use('/api/conversations', require('./routes/conversations'));
+app.use('/api/snippets', require('./routes/snippets'));
 app.use('/api/marketing', require('./routes/marketing'));
 app.use('/api/workflows', require('./routes/workflows'));
 app.use('/api/funnels', require('./routes/funnels'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/forms', require('./routes/forms'));
+app.use('/api/api-keys', require('./routes/api-keys'));
+app.use('/api/inbound-webhooks', require('./routes/inbound'));
+app.use('/api/apps', require('./routes/apps'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/system', require('./routes/system'));
+app.use('/api/payments', require('./routes/payments'));
+app.use('/api/tasks', require('./routes/tasks'));
+app.use('/api/custom-fields', require('./routes/custom-fields'));
+app.use('/api/custom-values', require('./routes/custom-values'));
+app.use('/api/integrations', require('./routes/integrations'));
+app.use('/api/plans', require('./routes/plans'));
+app.use('/api/billing', require('./routes/billing'));
+app.use('/api/agency', require('./routes/agency'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/training', require('./routes/training'));
+app.use('/api/reputation', require('./routes/reputation'));
+app.use('/api/snapshots', require('./routes/snapshots'));
+app.use('/api/prospecting', require('./routes/prospecting'));
 app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/public', require('./routes/public'));
+app.use('/api/public/chat', require('./routes/chat-public'));
+app.get('/widget.js', require('./routes/chat-public').widgetScript);
 
-// Public pretty URLs: funnels (/f/...), booking (/book/...), reports (/r/...).
-for (const prefix of ['/f', '/book', '/r']) {
+// Public pretty URLs: funnels (/f/...), booking (/book/...), reports (/r/...),
+// invoice payment (/pay/...) and review gate (/review/...).
+for (const prefix of ['/f', '/book', '/r', '/pay', '/review', '/l', '/signup', '/form', '/course']) {
   app.use(prefix, (req, res, next) => {
     req.url = prefix + req.url;
     require('./routes/public')(req, res, next);

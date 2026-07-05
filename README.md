@@ -66,6 +66,27 @@ Cada push a la rama conectada redespliega automáticamente en Vercel. La rama de
 | **Informe del cliente (v1.2)** | Informe white-label con link público (`/r/<token>`), narrativa escrita por IA (o plantilla), envío por email al cliente. |
 | **Content AI (v1.2)** | Botón "✨ Generar con IA" en campañas: redacta emails/SMS/WhatsApp con Claude (`ANTHROPIC_API_KEY`). |
 | **CSV (v1.2)** | Importación/exportación de contactos con deduplicación (sin disparar automatizaciones en masa). |
+| **Plantillas + alta automática (v1.8)** | Biblioteca de snapshots a nivel agencia: guarda la config de una sub-cuenta como plantilla reutilizable y marca una por defecto. Al crear una sub-cuenta nueva se carga la plantilla automáticamente (pipelines, workflows, funnels, calendarios, plantillas, campos) y se siembran sus **Valores del negocio** (`{{custom_values.business_name}}`…) — lista para trabajar en segundos. |
+| **Integraciones por sub-cuenta (v1.9)** | Cada sub-cuenta puede traer sus propias claves (Stripe, Twilio, email, IA, prospección) con herencia estilo GoHighLevel: **sub-cuenta → agencia → servidor**. Los secretos se guardan cifrados (AES-256-GCM). En Settings ves el origen efectivo de cada canal. |
+| **SaaS Mode (v2.0)** | Panel de **Agencia** (solo admin): resumen cross-sub-cuenta, **planes** con precio/plantilla/rebilling, y **página de registro con tu marca** (`/signup/<agencia>`). Al registrarse un cliente (pago con el Stripe de la agencia, o modo simulado) se **crea y configura su sub-cuenta sola** desde la plantilla del plan, se abre su **suscripción** y **wallet**, y se envían las credenciales. El **rebilling** mide el uso de canales y lo cobra al wallet con tu margen. White-label: color, logo y nombre de la agencia en la app. |
+| **Marketplace de integraciones (v3.x)** | Catálogo de 34 apps con logos oficiales, en **dos niveles como GoHighLevel**: *Servicios incluidos* (SMS/WhatsApp/Email/IA que provee la agencia; el cliente los usa sin poner nada) y *Marketplace* (el cliente conecta su cuenta por OAuth o API key). **Entitlements por plan**: el plan decide qué funciones trae; el backend es central. **Capa universal**: API keys, webhooks entrantes/salientes, listo para Zapier/Make/n8n. |
+| **Integraciones con lógica profunda (v3.x)** | **Meta Lead Ads** (leads FB/IG → contacto), **Shopify** (pedidos/clientes → contacto + oportunidad, HMAC), **Calendly** (reservas → cita, firma), **Stripe** (cobro de facturas + ciclo de suscripción, firma), y **motor de salida** (Google Calendar / Zoom / HubSpot: al reservar cita o crear contacto se llama a su API con el token guardado). El resto del catálogo queda *connect-ready* con el mismo patrón. |
+
+## Integraciones — puesta en marcha
+
+Las integraciones se activan **sin tocar código**, añadiendo credenciales en variables de entorno (OAuth) o desde la UI (API key). Dos vías según el tipo:
+
+- **Servicios incluidos (gestionados por la agencia)** — configúralos una vez en **Agencia → Servicios de la plataforma**; bajan en cascada a todos los clientes: `TWILIO_*` (SMS/WhatsApp), `RESEND_API_KEY`+`MAIL_FROM` (email), `ANTHROPIC_API_KEY` (IA).
+- **Marketplace (cuenta del cliente)** — OAuth: pon el `*_CLIENT_ID`/`*_SECRET` de cada app y registra el redirect **`https://TU-DOMINIO/api/apps/oauth/callback`**. API-key: el cliente pega su clave desde el Marketplace.
+
+**Webhooks entrantes** (apúntalos en el panel del proveedor; la URL exacta aparece en la tarjeta al conectar):
+
+| App | URL de webhook | Firma / verificación |
+|---|---|---|
+| Meta Lead Ads | `/api/public/meta/webhook` | `META_VERIFY_TOKEN` |
+| Shopify | `/api/public/shopify/webhook` | `SHOPIFY_API_SECRET` (HMAC) |
+| Calendly | `/api/public/calendly/<token>` | `CALENDLY_WEBHOOK_SIGNING_KEY` |
+| Stripe | `/api/webhooks/stripe` | `STRIPE_WEBHOOK_SECRET` |
 
 ## Arquitectura
 
@@ -85,7 +106,7 @@ server/
 public/              # SPA vanilla JS sin build (hash routing, ES modules)
   services/         # providers (Resend/SendGrid/Twilio), messaging, automation,
                      # scheduler, scoring, ai (Claude)
-tests/               # 21 tests end-to-end de API (node:test + supertest)
+tests/               # 139+ tests end-to-end de API (node:test + supertest)
 ```
 
 - **Canales con fallback**: sin claves, email/SMS/WhatsApp funcionan en modo simulado (registrados en el inbox). Añade las variables de `.env.example` para activarlos de verdad — sin tocar código. El estado de cada canal se ve en **Settings → Integraciones**.

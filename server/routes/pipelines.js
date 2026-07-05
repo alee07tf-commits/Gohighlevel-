@@ -66,27 +66,47 @@ router.post('/:id/stages', getPipeline, async (req, res) => {
 
 // ---- Opportunities ----
 router.get('/:id/opportunities', getPipeline, async (req, res) => {
+  const { owner, q, status } = req.query;
+  const where = ['o.pipeline_id = ?'];
+  const params = [req.pipeline.id];
+  if (owner) { where.push('o.owner_user_id = ?'); params.push(Number(owner)); }
+  if (status) { where.push('o.status = ?'); params.push(status); }
+  if (q) {
+    where.push(`(o.title ILIKE ? OR c.first_name || ' ' || c.last_name ILIKE ? OR c.email ILIKE ?)`);
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
   res.json(
     await db.all(
-      `SELECT o.*, c.first_name, c.last_name, c.email FROM opportunities o
+      `SELECT o.*, c.first_name, c.last_name, c.email, u.name AS owner_name FROM opportunities o
        LEFT JOIN contacts c ON c.id = o.contact_id
-       WHERE o.pipeline_id = ? ORDER BY o.created_at DESC`,
-      [req.pipeline.id]
+       LEFT JOIN users u ON u.id = o.owner_user_id
+       WHERE ${where.join(' AND ')} ORDER BY o.created_at DESC`,
+      params
     )
   );
 });
 
+// Reject a contact_id that isn't in this sub-account (prevents attaching — and
+// then reading back via the LEFT JOIN — another tenant's contact PII).
+async function assertOwnedContact(contactId, locationId) {
+  if (contactId === undefined || contactId === null || contactId === '') return true;
+  const owns = await db.get('SELECT id FROM contacts WHERE id = ? AND location_id = ?', [contactId, locationId]);
+  return Boolean(owns);
+}
+
 router.post('/:id/opportunities', getPipeline, async (req, res) => {
-  const { title, value, contact_id, stage_id } = req.body || {};
+  const { title, value, contact_id, stage_id, owner_user_id, source } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title is required' });
+  if (!(await assertOwnedContact(contact_id, req.location.id)))
+    return res.status(400).json({ error: 'Contacto no encontrado en esta sub-cuenta' });
   const stage = stage_id
     ? await db.get('SELECT * FROM stages WHERE id = ? AND pipeline_id = ?', [stage_id, req.pipeline.id])
     : await db.get('SELECT * FROM stages WHERE pipeline_id = ? ORDER BY position LIMIT 1', [req.pipeline.id]);
   if (!stage) return res.status(400).json({ error: 'Pipeline has no stages' });
   const id = await db.insert(
-    `INSERT INTO opportunities (location_id, pipeline_id, stage_id, contact_id, title, value)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [req.location.id, req.pipeline.id, stage.id, contact_id || null, title, Number(value) || 0]
+    `INSERT INTO opportunities (location_id, pipeline_id, stage_id, contact_id, title, value, owner_user_id, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [req.location.id, req.pipeline.id, stage.id, contact_id || null, title, Number(value) || 0, owner_user_id || null, source || '']
   );
   if (contact_id) {
     await require('../services/scoring').addScore(contact_id, 'opportunity_created');
@@ -102,6 +122,10 @@ router.put('/opportunities/:oppId', async (req, res) => {
   ]);
   if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
   const merged = { ...opp, ...req.body };
+  if (merged.status && !['open', 'won', 'lost'].includes(merged.status))
+    return res.status(400).json({ error: 'Estado no válido' });
+  if (!(await assertOwnedContact(req.body.contact_id, req.location.id)))
+    return res.status(400).json({ error: 'Contacto no encontrado en esta sub-cuenta' });
   if (req.body.stage_id) {
     const stage = await db.get('SELECT * FROM stages WHERE id = ? AND pipeline_id = ?', [
       req.body.stage_id,
@@ -110,8 +134,10 @@ router.put('/opportunities/:oppId', async (req, res) => {
     if (!stage) return res.status(400).json({ error: 'Stage does not belong to this pipeline' });
   }
   await db.run(
-    `UPDATE opportunities SET title=?, value=?, stage_id=?, status=?, contact_id=?, updated_at=now() WHERE id=?`,
-    [merged.title, Number(merged.value) || 0, merged.stage_id, merged.status, merged.contact_id, opp.id]
+    `UPDATE opportunities SET title=?, value=?, stage_id=?, status=?, contact_id=?, owner_user_id=?, lost_reason=?, source=?, updated_at=now() WHERE id=?`,
+    [merged.title, Number(merged.value) || 0, merged.stage_id, merged.status,
+     merged.contact_id, merged.owner_user_id || null,
+     merged.status === 'lost' ? (merged.lost_reason || '') : '', merged.source || '', opp.id]
   );
 
   if (req.body.stage_id && Number(req.body.stage_id) !== opp.stage_id && opp.contact_id) {

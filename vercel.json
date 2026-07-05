@@ -1,11 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "regions": ["fra1"],
   "functions": {
     "api/index.js": {
       "maxDuration": 30,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "node_modules/@electric-sql/pglite/dist/**"
     }
   },
-  "crons": [{ "path": "/api/cron/tick", "schedule": "0 * * * *" }]
+  "crons": [{ "path": "/api/cron/tick", "schedule": "0 8 * * *" }]
 }
