@@ -45,6 +45,23 @@ router.post('/request', async (req, res) => {
   res.status(201).json(rr);
 });
 
+// Bulk review requests: send to everyone with a tag (or all), skipping DND on
+// the chosen channel. Returns how many were sent.
+router.post('/request-bulk', async (req, res) => {
+  const { tag, channel = 'sms' } = req.body || {};
+  const contacts = tag
+    ? await db.all(`SELECT c.* FROM contacts c JOIN contact_tags ct ON ct.contact_id = c.id WHERE c.location_id = ? AND ct.tag = ?`, [req.location.id, tag])
+    : await db.all('SELECT * FROM contacts WHERE location_id = ?', [req.location.id]);
+  const base = `${req.protocol}://${req.get('host')}`;
+  const isEmail = channel === 'email';
+  let sent = 0;
+  for (const c of contacts) {
+    if (c.dnd || (isEmail && c.dnd_email) || (!isEmail && c.dnd_sms)) continue;
+    try { await module.exports.sendReviewRequest(req.location, c, channel, base); sent++; } catch { /* skip */ }
+  }
+  res.json({ ok: true, sent, total: contacts.length });
+});
+
 // Reviews AI: suggested response to a piece of feedback.
 router.post('/:id/suggest-reply', async (req, res) => {
   const rr = await db.get(

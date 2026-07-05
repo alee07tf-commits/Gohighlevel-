@@ -14,6 +14,7 @@ export async function renderReputation(view) {
     <h1>${t('Reputación', 'Reputation')}</h1>
     <div class="spacer"></div>
     <button class="btn secondary" id="edit-links">${t('Links de reseña', 'Review links')}</button>
+    <button class="btn secondary" id="bulk-request">${t('Pedir en masa', 'Bulk request')}</button>
     <button class="btn" id="new-request">${t('+ Pedir reseña', '+ Request review')}</button>
   </div>
   <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
@@ -96,6 +97,24 @@ export async function renderReputation(view) {
   );
   view.querySelector('#edit-links').addEventListener('click', linksModal);
   view.querySelector('#cfg-now')?.addEventListener('click', (e) => { e.preventDefault(); linksModal(); });
+
+  view.querySelector('#bulk-request').addEventListener('click', async () => {
+    const tags = await api('/contacts/meta/tags').catch(() => []);
+    const modal = openModal(`<h2>${t('Pedir reseñas en masa', 'Bulk review requests')}</h2>
+      <label class="field"><span class="label">${t('A contactos con la etiqueta (vacío = todos)', 'To contacts with tag (empty = all)')}</span>
+        <select class="input" id="bq-tag"><option value="">${t('— todos —', '— everyone —')}</option>${tags.map((tg) => `<option value="${esc(tg.tag)}">${esc(tg.tag)} (${tg.count})</option>`).join('')}</select></label>
+      <label class="field"><span class="label">${t('Canal', 'Channel')}</span><select class="input" id="bq-channel"><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></label>
+      <div class="modal-actions"><button class="btn secondary" id="c">${t('Cancelar', 'Cancel')}</button><button class="btn" id="bq-send">${t('Enviar', 'Send')}</button></div>`);
+    modal.querySelector('#c').addEventListener('click', closeOverlay);
+    modal.querySelector('#bq-send').addEventListener('click', async () => {
+      try {
+        const r = await api('/reputation/request-bulk', { method: 'POST', body: { tag: modal.querySelector('#bq-tag').value, channel: modal.querySelector('#bq-channel').value } });
+        closeOverlay();
+        toast(t(`Enviadas ${r.sent} de ${r.total}`, `Sent ${r.sent} of ${r.total}`));
+        renderReputation(view);
+      } catch (err) { toast(err.message, true); }
+    });
+  });
 
   view.querySelector('#new-request').addEventListener('click', () => {
     const modal = openModal(`
