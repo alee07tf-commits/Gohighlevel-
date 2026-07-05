@@ -1,4 +1,4 @@
-# LeadFlow — Estado del proyecto (archivo de memoria)
+# Upcro — Estado del proyecto (archivo de memoria)
 
 > Documento vivo. Resume qué es el proyecto, qué está hecho, cómo está montado, qué
 > falta y las trampas conocidas. Sirve para retomar el trabajo sin perder contexto
@@ -9,8 +9,10 @@
 
 ## 1. Qué es
 
-**LeadFlow** — un clon de **GoHighLevel (GHL)** para la agencia de marketing **Upcross** (usuario: alee07tf@gmail.com).
-Objetivo: paridad total con GHL módulo a módulo + un marketplace de integraciones nativas, más un modelo SaaS (la agencia revende sub-cuentas a sus clientes).
+**Upcro** — el software es un clon de **GoHighLevel (GHL)**. La marca es **Upcro**, que es a la vez:
+(1) el nombre del **software/plataforma**, y (2) la **cuenta de agencia** del usuario (alee07tf@gmail.com), porque
+como agencia también presta los servicios (SMS/WhatsApp/Email/IA gestionados) a sus clientes.
+Objetivo: paridad total con GHL módulo a módulo + un marketplace de integraciones nativas, más un modelo SaaS (la agencia Upcro revende sub-cuentas a sus clientes).
 
 Idioma del producto: **español primero** (con EN vía i18n). El usuario habla español.
 
@@ -167,4 +169,4 @@ npm run seed
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-Login demo: `demo@leadflow.app` / `demo123`.
+Login demo: `demo@upcro.app` / `demo123`.

@@ -380,7 +380,7 @@ export async function renderSettings(view) {
     const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `leadflow-snapshot-${(current?.name || 'cuenta').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
+    a.download = `upcro-snapshot-${(current?.name || 'cuenta').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   });

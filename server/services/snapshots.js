@@ -10,7 +10,7 @@ const crypto = require('crypto');
 async function serializeLocation(db, locId) {
   const pipelines = await db.all('SELECT * FROM pipelines WHERE location_id = ?', [locId]);
   return {
-    kind: 'leadflow-snapshot',
+    kind: 'upcro-snapshot',
     version: 2,
     pipelines: await Promise.all(
       pipelines.map(async (p) => ({

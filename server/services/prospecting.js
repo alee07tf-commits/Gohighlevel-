@@ -97,7 +97,7 @@ async function scanWebsite(url) {
     const res = await fetch(url.startsWith('http') ? url : `https://${url}`, {
       signal: controller.signal,
       redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadFlowBot/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; UpcroBot/1.0)' },
     });
     const html = (await res.text()).slice(0, 400_000);
     const tech = {};

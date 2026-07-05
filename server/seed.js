@@ -4,8 +4,8 @@ seedDemo()
   .then((seeded) => {
     console.log(
       seeded
-        ? 'Seeded demo agency. Login: demo@leadflow.app / demo123'
-        : 'Demo data already seeded. Login: demo@leadflow.app / demo123'
+        ? 'Seeded demo agency. Login: demo@upcro.app / demo123'
+        : 'Demo data already seeded. Login: demo@upcro.app / demo123'
     );
     process.exit(0);
   })

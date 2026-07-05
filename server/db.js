@@ -383,7 +383,7 @@ CREATE TABLE IF NOT EXISTS location_integrations (
   UNIQUE (location_id, provider)
 );
 
--- SaaS Mode (Phase 3): the agency resells LeadFlow. Plans are the products a
+-- SaaS Mode (Phase 3): the agency resells Upcro. Plans are the products a
 -- client buys; a subscription ties a sub-account to a plan; wallets + usage
 -- power rebilling of metered channels with an agency markup.
 CREATE TABLE IF NOT EXISTS plans (
@@ -733,7 +733,7 @@ if (process.env.DATABASE_URL) {
   const { PGlite } = require('@electric-sql/pglite');
   let dataDir;
   if (process.env.NODE_ENV === 'test') dataDir = 'memory://';
-  else if (process.env.VERCEL) dataDir = '/tmp/leadflow-pglite';
+  else if (process.env.VERCEL) dataDir = '/tmp/upcro-pglite';
   else dataDir = process.env.PGLITE_DIR || path.join(__dirname, '..', 'data', 'pglite');
   if (dataDir !== 'memory://') fs.mkdirSync(dataDir, { recursive: true });
   const pglite = new PGlite(dataDir);

@@ -1,7 +1,7 @@
 {
-  "name": "leadflow",
+  "name": "upcro",
   "version": "1.2.0",
-  "description": "LeadFlow - All-in-one CRM & marketing platform for agencies (GoHighLevel-style)",
+  "description": "Upcro - All-in-one CRM & marketing platform for agencies (GoHighLevel-style)",
   "main": "server/index.js",
   "type": "commonjs",
   "scripts": {

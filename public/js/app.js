@@ -108,7 +108,7 @@ function renderShell(activePath) {
     <div class="sidebar-scrim" id="sidebar-scrim"></div>
     <aside class="sidebar" id="sidebar">
       <div class="logo"><span class="logo-chip">${state.agency?.logo_url ? `<img src="${esc(state.agency.logo_url)}" alt="" style="width:18px;height:18px;object-fit:contain">` : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 10-12h-7z"/></svg>'}</span>
-        <span class="logo-text">${esc(state.agency?.name || 'LeadFlow')}<span class="logo-sub">${state.agency?.slug ? t('Agencia', 'Agency') : t('plataforma', 'platform')}</span></span></div>
+        <span class="logo-text">${esc(state.agency?.name || 'Upcro')}<span class="logo-sub">${state.agency?.slug ? t('Agencia', 'Agency') : t('plataforma', 'platform')}</span></span></div>
       <div class="search-box" id="global-search">${icon('search', 15)} <span style="flex:1">${t('Buscar contactos…', 'Search contacts…')}</span> <span class="kbd">⌘K</span></div>
       <nav>
         ${navSections().map(

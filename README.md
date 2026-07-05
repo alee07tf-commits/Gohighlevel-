@@ -1,4 +1,4 @@
-# ⚡ LeadFlow — v1.2
+# ⚡ Upcro — v1.2
 
 Plataforma todo-en-uno de CRM y marketing para agencias, estilo **GoHighLevel**: multi-tenant (agencia → sub-cuentas de clientes), CRM, pipelines, calendarios con reservas públicas, inbox unificado, email marketing, automatizaciones y constructor de funnels con captura de leads.
 
@@ -8,7 +8,7 @@ Plataforma todo-en-uno de CRM y marketing para agencias, estilo **GoHighLevel**:
 
 ```bash
 npm install
-npm run seed     # (opcional) datos de demo — login: demo@leadflow.app / demo123
+npm run seed     # (opcional) datos de demo — login: demo@upcro.app / demo123
 npm start        # abre http://localhost:3000
 ```
 

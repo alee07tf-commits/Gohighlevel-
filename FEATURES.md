@@ -1,10 +1,10 @@
-# LeadFlow vs GoHighLevel — Mapa de funcionalidades y roadmap
+# Upcro vs GoHighLevel — Mapa de funcionalidades y roadmap
 
 > Actualizado tras **v1.7** — feature-complete: núcleo de las 14 categorías de GHL cubierto. Basado en investigación propia + listado detallado de las ~14 categorías de GHL (2026).
 >
 > Dificultad de lo pendiente: 🟢 Fácil (1–3 días) · 🟡 Media (~1–2 semanas) · 🔴 Difícil (semanas + servicios externos) · 🟣 Muy difícil (nivel producto)
 
-## ✅ Implementado en LeadFlow (v1.7)
+## ✅ Implementado en Upcro (v1.7)
 
 | Categoría GHL | Lo que ya tenemos |
 |---|---|
@@ -66,4 +66,4 @@ Todo funciona en modo simulado sin claves (registrado en el inbox), y cambia a e
 1. **Conectar claves reales** (Resend + Twilio + Stripe + Claude) — 0 código, solo configuración.
 2. **v1.4**: smart lists, drip sequences, trigger links + QR, duplicados, estimates, chat widget.
 3. **v1.5**: Conversation AI (chatbot que agenda) + Reviews AI — el diferenciador grande.
-4. **v2.0**: SaaS mode con rebilling (Stripe Connect) para revender LeadFlow como producto propio.
+4. **v2.0**: SaaS mode con rebilling (Stripe Connect) para revender Upcro como producto propio.
