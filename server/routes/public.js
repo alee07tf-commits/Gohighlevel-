@@ -329,6 +329,49 @@ router.post('/form/:slug/submit', async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
+// ---- Public client-facing course (membership academy) ----
+router.get('/course/:token', async (req, res) => {
+  const course = await db.get('SELECT * FROM courses WHERE public_token = ? AND is_public = 1', [req.params.token]);
+  if (!course) return res.status(404).send('Course not found');
+  const lessons = await db.all('SELECT * FROM lessons WHERE course_id = ? ORDER BY position, id', [course.id]);
+  const agency = await db.get('SELECT name, brand_color, logo_url FROM agencies WHERE id = ?', [course.agency_id]);
+  const brand = (agency && agency.brand_color) || '#4f46e5';
+  const lessonHtml = lessons
+    .map(
+      (l, i) => `<div class="lesson" data-id="${l.id}">
+      <div class="lh"><span class="num">${i + 1}</span><h3>${esc(l.title)}</h3>
+        <label class="done"><input type="checkbox" class="cb" data-id="${l.id}"> ${'Completada'}</label></div>
+      ${l.youtube_id ? `<div class="video"><iframe src="https://www.youtube.com/embed/${esc(l.youtube_id)}" allowfullscreen loading="lazy"></iframe></div>` : ''}
+      ${l.body ? `<div class="body">${esc(l.body).replace(/\n/g, '<br>')}</div>` : ''}
+    </div>`
+    )
+    .join('');
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(course.title)}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',system-ui,sans-serif;background:#f4f4f7;color:#1a202c}
+.top{background:${esc(brand)};color:#fff;padding:34px 20px;text-align:center}.top h1{font-size:1.8rem}.top p{opacity:.9;margin-top:6px}
+.wrap{max-width:760px;margin:0 auto;padding:24px}
+.bar{height:8px;background:#e5e7eb;border-radius:6px;overflow:hidden;margin-bottom:20px}.bar>div{height:100%;background:${esc(brand)};width:0;transition:width .3s}
+.lesson{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.lh{display:flex;align-items:center;gap:10px}.lh h3{flex:1;font-size:1.1rem}.num{background:${esc(brand)};color:#fff;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700}
+.done{font-size:.8rem;color:#64748b;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.video{position:relative;padding-bottom:56.25%;height:0;margin:14px 0;border-radius:8px;overflow:hidden}.video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.body{line-height:1.6;color:#334155;margin-top:8px}.foot{text-align:center;color:#9ca3af;font-size:.8rem;padding:20px}</style></head>
+<body><div class="top">${agency && agency.logo_url ? `<img src="${esc(agency.logo_url)}" style="max-height:40px;margin-bottom:8px">` : ''}
+<h1>${esc(course.title)}</h1>${course.description ? `<p>${esc(course.description)}</p>` : ''}</div>
+<div class="wrap"><div class="bar"><div id="prog"></div></div>${lessonHtml || '<p>Próximamente.</p>'}
+<div class="foot">${esc(agency ? agency.name : '')}</div></div>
+<script>
+const KEY='lfcourse_${esc(course.public_token)}';
+const done=new Set(JSON.parse(localStorage.getItem(KEY)||'[]'));
+const cbs=[...document.querySelectorAll('.cb')];
+function paint(){cbs.forEach(cb=>{cb.checked=done.has(cb.dataset.id)});document.getElementById('prog').style.width=(cbs.length?Math.round(done.size/cbs.length*100):0)+'%';}
+cbs.forEach(cb=>cb.addEventListener('change',()=>{cb.checked?done.add(cb.dataset.id):done.delete(cb.dataset.id);localStorage.setItem(KEY,JSON.stringify([...done]));paint();}));
+paint();
+</script></body></html>`;
+  res.send(html);
+});
+
 // ---- Public booking widget ----
 router.get('/book/:slug', async (req, res) => {
   const calendar = await db.get('SELECT * FROM calendars WHERE slug = ?', [req.params.slug]);

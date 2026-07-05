@@ -59,7 +59,7 @@ app.get('/widget.js', require('./routes/chat-public').widgetScript);
 
 // Public pretty URLs: funnels (/f/...), booking (/book/...), reports (/r/...),
 // invoice payment (/pay/...) and review gate (/review/...).
-for (const prefix of ['/f', '/book', '/r', '/pay', '/review', '/l', '/signup', '/form']) {
+for (const prefix of ['/f', '/book', '/r', '/pay', '/review', '/l', '/signup', '/form', '/course']) {
   app.use(prefix, (req, res, next) => {
     req.url = prefix + req.url;
     require('./routes/public')(req, res, next);

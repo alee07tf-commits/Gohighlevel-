@@ -504,6 +504,12 @@ ALTER TABLE form_submissions ADD COLUMN IF NOT EXISTS form_id INTEGER;
 ALTER TABLE calendars ADD COLUMN IF NOT EXISTS assignees TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE calendars ADD COLUMN IF NOT EXISTS round_robin_next INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER REFERENCES users(id);
+
+-- Client-facing memberships (v2.8): a course can be published to a public
+-- academy page (/course/<token>) so a business shares it with its end-customers.
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS public_token TEXT;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_public INTEGER NOT NULL DEFAULT 0;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_public_token ON courses(public_token) WHERE public_token IS NOT NULL;
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -576,7 +582,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 
 let readyPromise = null;
 function ensureReady() {

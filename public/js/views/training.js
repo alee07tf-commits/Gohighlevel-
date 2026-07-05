@@ -71,7 +71,14 @@ async function openCourse(view, courseId) {
     <div class="page-header">
       <div><button class="btn ghost small" id="back">${t('← Formación', '← Training')}</button>
         <h1 style="margin-top:6px">${esc(course.title)}</h1></div>
-      ${canEdit ? `<button class="btn secondary" id="lesson-new">${t('+ Lección', '+ Lesson')}</button>` : ''}
+      ${canEdit ? `<div class="flex" style="gap:6px">
+        ${course.is_public
+          ? `<a class="btn ghost small" href="/course/${esc(course.public_token)}" target="_blank">${t('Ver público', 'View public')} ↗</a>
+             <button class="btn ghost small" id="copy-course">${t('Copiar enlace', 'Copy link')}</button>
+             <button class="btn secondary small" id="unpublish-course">${t('Despublicar', 'Unpublish')}</button>`
+          : `<button class="btn secondary small" id="publish-course" title="${t('Publica este curso como academia para tus clientes finales', 'Publish this course as an academy for your end-customers')}">${t('Publicar para clientes', 'Publish for clients')}</button>`}
+        <button class="btn secondary" id="lesson-new">${t('+ Lección', '+ Lesson')}</button>
+      </div>` : ''}
     </div>
     <div class="grid-2" style="align-items:start">
       <div class="card">
@@ -93,6 +100,25 @@ async function openCourse(view, courseId) {
     </div>`;
 
     view.querySelector('#back').addEventListener('click', () => renderTraining(view));
+    view.querySelector('#publish-course')?.addEventListener('click', async () => {
+      const r = await api(`/training/courses/${course.id}/publish`, { method: 'POST' });
+      course.is_public = 1;
+      course.public_token = r.public_token;
+      toast(t('Curso publicado', 'Course published'));
+      render();
+    });
+    view.querySelector('#unpublish-course')?.addEventListener('click', async () => {
+      await api(`/training/courses/${course.id}/unpublish`, { method: 'POST' });
+      course.is_public = 0;
+      toast(t('Curso despublicado', 'Course unpublished'));
+      render();
+    });
+    view.querySelector('#copy-course')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(`${location.origin}/course/${course.public_token}`).then(
+        () => toast(t('Enlace copiado', 'Link copied')),
+        () => toast(`${location.origin}/course/${course.public_token}`)
+      );
+    });
     view.querySelectorAll('.lesson-row').forEach((r) =>
       r.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;

@@ -4,6 +4,7 @@
 // client that resells can author its own courses for its clients. Videos are
 // YouTube embeds — we store only the video id, never files.
 const express = require('express');
+const crypto = require('crypto');
 const db = require('../db');
 const { requireAuth, ancestorIds } = require('../auth');
 
@@ -192,6 +193,24 @@ router.post('/lessons/:id/complete', async (req, res) => {
 router.delete('/lessons/:id/complete', async (req, res) => {
   await db.run('DELETE FROM course_progress WHERE user_id = ? AND lesson_id = ?', [req.user.id, req.params.id]);
   res.json({ ok: true, completed: false });
+});
+
+// Publish a course as a public, client-facing academy page (/course/<token>).
+router.post('/courses/:id/publish', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const course = await loadOwnedCourse(req, req.params.id);
+  if (!course) return res.status(404).json({ error: 'Curso no encontrado' });
+  const token = course.public_token || crypto.randomBytes(9).toString('hex');
+  await db.run('UPDATE courses SET is_public = 1, public_token = ? WHERE id = ?', [token, course.id]);
+  res.json({ ok: true, public_token: token });
+});
+
+router.post('/courses/:id/unpublish', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const course = await loadOwnedCourse(req, req.params.id);
+  if (!course) return res.status(404).json({ error: 'Curso no encontrado' });
+  await db.run('UPDATE courses SET is_public = 0 WHERE id = ?', [course.id]);
+  res.json({ ok: true });
 });
 
 module.exports = router;
