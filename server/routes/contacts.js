@@ -7,10 +7,29 @@ const scoring = require('../services/scoring');
 const router = express.Router();
 router.use(requireAuth, requireLocation);
 
+function parseCF(raw) {
+  try {
+    return JSON.parse(raw || '{}');
+  } catch {
+    return {};
+  }
+}
+
 async function withTags(contact) {
   if (!contact) return contact;
   const tags = await db.all('SELECT tag FROM contact_tags WHERE contact_id = ? ORDER BY tag', [contact.id]);
-  return { ...contact, custom_fields: JSON.parse(contact.custom_fields || '{}'), tags: tags.map((t) => t.tag) };
+  return { ...contact, custom_fields: parseCF(contact.custom_fields), tags: tags.map((t) => t.tag) };
+}
+
+// Attaches tags to many contacts with a single grouped query (avoids N+1).
+async function withTagsBulk(rows) {
+  if (!rows.length) return [];
+  const ids = rows.map((r) => r.id);
+  const ph = ids.map(() => '?').join(',');
+  const tagRows = await db.all(`SELECT contact_id, tag FROM contact_tags WHERE contact_id IN (${ph}) ORDER BY tag`, ids);
+  const byId = {};
+  for (const tr of tagRows) (byId[tr.contact_id] || (byId[tr.contact_id] = [])).push(tr.tag);
+  return rows.map((c) => ({ ...c, custom_fields: parseCF(c.custom_fields), tags: byId[c.id] || [] }));
 }
 
 router.get('/', async (req, res) => {
@@ -30,7 +49,7 @@ router.get('/', async (req, res) => {
   sql += ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?';
   params.push(Number(limit), Number(offset));
   const rows = await db.all(sql, params);
-  res.json(await Promise.all(rows.map(withTags)));
+  res.json(await withTagsBulk(rows));
 });
 
 router.post('/', async (req, res) => {
@@ -170,8 +189,8 @@ router.post('/:id/notes', getContact, async (req, res) => {
 
 // ---- CSV import/export ----
 router.get('/export/csv', async (req, res) => {
-  const rows = await db.all('SELECT * FROM contacts WHERE location_id = ? ORDER BY id', [req.location.id]);
-  const withT = await Promise.all(rows.map(withTags));
+  const rows = await db.all('SELECT * FROM contacts WHERE location_id = ? ORDER BY id LIMIT 50000', [req.location.id]);
+  const withT = await withTagsBulk(rows);
   const escCsv = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
   const csv = [
     'first_name,last_name,email,phone,source,tags,score,created_at',

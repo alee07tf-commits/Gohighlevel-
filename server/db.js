@@ -510,6 +510,40 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER REFER
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS public_token TEXT;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_public INTEGER NOT NULL DEFAULT 0;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_public_token ON courses(public_token) WHERE public_token IS NOT NULL;
+
+-- Indexes on hot filter/JOIN columns (v2.9 perf pass). Pure performance; these
+-- back tenant-scoping (location_id/agency_id) and per-entity lookups that run on
+-- essentially every request.
+CREATE INDEX IF NOT EXISTS idx_locations_agency ON locations(agency_id);
+CREATE INDEX IF NOT EXISTS idx_users_agency ON users(agency_id);
+CREATE INDEX IF NOT EXISTS idx_pipelines_location ON pipelines(location_id);
+CREATE INDEX IF NOT EXISTS idx_stages_pipeline ON stages(pipeline_id);
+CREATE INDEX IF NOT EXISTS idx_opps_contact ON opportunities(contact_id);
+CREATE INDEX IF NOT EXISTS idx_opps_pipeline ON opportunities(pipeline_id);
+CREATE INDEX IF NOT EXISTS idx_calendars_location ON calendars(location_id);
+CREATE INDEX IF NOT EXISTS idx_appts_calendar ON appointments(calendar_id);
+CREATE INDEX IF NOT EXISTS idx_appts_contact ON appointments(contact_id);
+CREATE INDEX IF NOT EXISTS idx_notes_contact ON notes(contact_id);
+CREATE INDEX IF NOT EXISTS idx_wf_actions_wf ON workflow_actions(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_wf_runs_wf ON workflow_runs(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflows_location ON workflows(location_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_location ON campaigns(location_id);
+CREATE INDEX IF NOT EXISTS idx_camp_recipients_campaign ON campaign_recipients(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_email_templates_location ON email_templates(location_id);
+CREATE INDEX IF NOT EXISTS idx_funnels_location ON funnels(location_id);
+CREATE INDEX IF NOT EXISTS idx_form_subs_location ON form_submissions(location_id);
+CREATE INDEX IF NOT EXISTS idx_form_subs_form ON form_submissions(form_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_location ON tasks(location_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_contact ON tasks(contact_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_location ON invoices(location_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_contact ON invoices(contact_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_location ON subscriptions(location_id);
+CREATE INDEX IF NOT EXISTS idx_usage_events_loc_created ON usage_events(location_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_review_requests_location ON review_requests(location_id);
+CREATE INDEX IF NOT EXISTS idx_review_requests_contact ON review_requests(contact_id);
+CREATE INDEX IF NOT EXISTS idx_plans_agency ON plans(agency_id);
+CREATE INDEX IF NOT EXISTS idx_custom_values_location ON custom_values(location_id);
+CREATE INDEX IF NOT EXISTS idx_contact_tags_tag ON contact_tags(tag);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -582,7 +616,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 
 let readyPromise = null;
 function ensureReady() {

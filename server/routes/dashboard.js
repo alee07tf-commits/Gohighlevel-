@@ -8,67 +8,47 @@ router.use(requireAuth, requireLocation);
 
 router.get('/', async (req, res) => {
   const loc = req.location.id;
-  const one = async (sql, ...p) => db.get(sql, p);
+  const g = (sql) => db.get(sql, [loc]);
+  // All independent reads issued together (one round-trip batch on a pool).
+  const [
+    contacts, contactsWeek, openOpps, pipelineVal, wonVal, upcomingCount, unread, formsWeek,
+    recentContacts, recentActivity, upcoming, hotLeads,
+  ] = await Promise.all([
+    g('SELECT COUNT(*)::int AS n FROM contacts WHERE location_id = ?'),
+    g(`SELECT COUNT(*)::int AS n FROM contacts WHERE location_id = ? AND created_at >= now() - interval '7 days'`),
+    g(`SELECT COUNT(*)::int AS n FROM opportunities WHERE location_id = ? AND status = 'open'`),
+    g(`SELECT COALESCE(SUM(value),0)::float AS v FROM opportunities WHERE location_id = ? AND status = 'open'`),
+    g(`SELECT COALESCE(SUM(value),0)::float AS v FROM opportunities WHERE location_id = ? AND status = 'won'`),
+    g(`SELECT COUNT(*)::int AS n FROM appointments WHERE location_id = ? AND starts_at >= now() AND status = 'confirmed'`),
+    g('SELECT COUNT(*)::int AS n FROM conversations WHERE location_id = ? AND unread > 0'),
+    g(`SELECT COUNT(*)::int AS n FROM form_submissions WHERE location_id = ? AND created_at >= now() - interval '7 days'`),
+    db.all('SELECT * FROM contacts WHERE location_id = ? ORDER BY created_at DESC LIMIT 6', [loc]),
+    db.all(
+      `SELECT a.*, c.first_name, c.last_name FROM activities a
+       LEFT JOIN contacts c ON c.id = a.contact_id
+       WHERE a.location_id = ? ORDER BY a.created_at DESC LIMIT 12`,
+      [loc]
+    ),
+    db.all(
+      `SELECT a.*, c.first_name, c.last_name FROM appointments a
+       LEFT JOIN contacts c ON c.id = a.contact_id
+       WHERE a.location_id = ? AND a.starts_at >= now() AND a.status = 'confirmed'
+       ORDER BY a.starts_at LIMIT 6`,
+      [loc]
+    ),
+    scoring.hotLeads(loc, 5),
+  ]);
 
   const stats = {
-    contacts: (await one('SELECT COUNT(*)::int AS n FROM contacts WHERE location_id = ?', loc)).n,
-    contacts_this_week: (
-      await one(
-        `SELECT COUNT(*)::int AS n FROM contacts WHERE location_id = ? AND created_at >= now() - interval '7 days'`,
-        loc
-      )
-    ).n,
-    open_opportunities: (
-      await one(`SELECT COUNT(*)::int AS n FROM opportunities WHERE location_id = ? AND status = 'open'`, loc)
-    ).n,
-    pipeline_value: (
-      await one(
-        `SELECT COALESCE(SUM(value),0)::float AS v FROM opportunities WHERE location_id = ? AND status = 'open'`,
-        loc
-      )
-    ).v,
-    won_value: (
-      await one(
-        `SELECT COALESCE(SUM(value),0)::float AS v FROM opportunities WHERE location_id = ? AND status = 'won'`,
-        loc
-      )
-    ).v,
-    upcoming_appointments: (
-      await one(
-        `SELECT COUNT(*)::int AS n FROM appointments WHERE location_id = ? AND starts_at >= now() AND status = 'confirmed'`,
-        loc
-      )
-    ).n,
-    unread_conversations: (
-      await one('SELECT COUNT(*)::int AS n FROM conversations WHERE location_id = ? AND unread > 0', loc)
-    ).n,
-    form_submissions_week: (
-      await one(
-        `SELECT COUNT(*)::int AS n FROM form_submissions WHERE location_id = ? AND created_at >= now() - interval '7 days'`,
-        loc
-      )
-    ).n,
+    contacts: contacts.n,
+    contacts_this_week: contactsWeek.n,
+    open_opportunities: openOpps.n,
+    pipeline_value: pipelineVal.v,
+    won_value: wonVal.v,
+    upcoming_appointments: upcomingCount.n,
+    unread_conversations: unread.n,
+    form_submissions_week: formsWeek.n,
   };
-
-  const recentContacts = await db.all(
-    'SELECT * FROM contacts WHERE location_id = ? ORDER BY created_at DESC LIMIT 6',
-    [loc]
-  );
-  const recentActivity = await db.all(
-    `SELECT a.*, c.first_name, c.last_name FROM activities a
-     LEFT JOIN contacts c ON c.id = a.contact_id
-     WHERE a.location_id = ? ORDER BY a.created_at DESC LIMIT 12`,
-    [loc]
-  );
-  const upcoming = await db.all(
-    `SELECT a.*, c.first_name, c.last_name FROM appointments a
-     LEFT JOIN contacts c ON c.id = a.contact_id
-     WHERE a.location_id = ? AND a.starts_at >= now() AND a.status = 'confirmed'
-     ORDER BY a.starts_at LIMIT 6`,
-    [loc]
-  );
-
-  const hotLeads = await scoring.hotLeads(loc, 5);
 
   res.json({ stats, recentContacts, recentActivity, upcoming, hotLeads });
 });

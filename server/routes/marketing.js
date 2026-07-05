@@ -51,16 +51,16 @@ router.delete('/templates/:id', async (req, res) => {
 // ---- Campaigns ----
 router.get('/campaigns', async (req, res) => {
   const campaigns = await db.all('SELECT * FROM campaigns WHERE location_id = ? ORDER BY id DESC', [req.location.id]);
-  res.json(
-    await Promise.all(
-      campaigns.map(async (c) => ({
-        ...c,
-        recipient_count: (
-          await db.get('SELECT COUNT(*)::int AS n FROM campaign_recipients WHERE campaign_id = ?', [c.id])
-        ).n,
-      }))
-    )
+  if (!campaigns.length) return res.json([]);
+  // One grouped count instead of a query per campaign.
+  const ids = campaigns.map((c) => c.id);
+  const ph = ids.map(() => '?').join(',');
+  const counts = await db.all(
+    `SELECT campaign_id, COUNT(*)::int AS n FROM campaign_recipients WHERE campaign_id IN (${ph}) GROUP BY campaign_id`,
+    ids
   );
+  const byId = Object.fromEntries(counts.map((r) => [r.campaign_id, r.n]));
+  res.json(campaigns.map((c) => ({ ...c, recipient_count: byId[c.id] || 0 })));
 });
 
 router.post('/campaigns', async (req, res) => {

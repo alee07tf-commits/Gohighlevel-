@@ -12,52 +12,29 @@ const router = express.Router();
 router.use(requireAuth, requireLocation);
 
 async function computeStats(locationId, days) {
-  const one = async (sql, ...p) => db.get(sql, p);
+  const one = (sql, ...p) => db.get(sql, p);
   const interval = `${Number(days)} days`;
+  const [nc, fs, appts, msgs, opps, pipeline, won] = await Promise.all([
+    one(`SELECT COUNT(*)::int AS n FROM contacts WHERE location_id = ? AND created_at >= now() - ?::interval`, locationId, interval),
+    one(`SELECT COUNT(*)::int AS n FROM form_submissions WHERE location_id = ? AND created_at >= now() - ?::interval`, locationId, interval),
+    one(`SELECT COUNT(*)::int AS n FROM appointments WHERE location_id = ? AND created_at >= now() - ?::interval`, locationId, interval),
+    one(
+      `SELECT COUNT(*)::int AS n FROM messages m JOIN conversations cv ON cv.id = m.conversation_id
+       WHERE cv.location_id = ? AND m.direction = 'outbound' AND m.created_at >= now() - ?::interval`,
+      locationId, interval
+    ),
+    one(`SELECT COUNT(*)::int AS n FROM opportunities WHERE location_id = ? AND created_at >= now() - ?::interval`, locationId, interval),
+    one(`SELECT COALESCE(SUM(value),0)::float AS v FROM opportunities WHERE location_id = ? AND status = 'open'`, locationId),
+    one(`SELECT COALESCE(SUM(value),0)::float AS v FROM opportunities WHERE location_id = ? AND status = 'won' AND updated_at >= now() - ?::interval`, locationId, interval),
+  ]);
   return {
-    new_contacts: (
-      await one(
-        `SELECT COUNT(*)::int AS n FROM contacts WHERE location_id = ? AND created_at >= now() - ?::interval`,
-        locationId, interval
-      )
-    ).n,
-    form_submissions: (
-      await one(
-        `SELECT COUNT(*)::int AS n FROM form_submissions WHERE location_id = ? AND created_at >= now() - ?::interval`,
-        locationId, interval
-      )
-    ).n,
-    appointments: (
-      await one(
-        `SELECT COUNT(*)::int AS n FROM appointments WHERE location_id = ? AND created_at >= now() - ?::interval`,
-        locationId, interval
-      )
-    ).n,
-    messages_sent: (
-      await one(
-        `SELECT COUNT(*)::int AS n FROM messages m JOIN conversations cv ON cv.id = m.conversation_id
-         WHERE cv.location_id = ? AND m.direction = 'outbound' AND m.created_at >= now() - ?::interval`,
-        locationId, interval
-      )
-    ).n,
-    opportunities_created: (
-      await one(
-        `SELECT COUNT(*)::int AS n FROM opportunities WHERE location_id = ? AND created_at >= now() - ?::interval`,
-        locationId, interval
-      )
-    ).n,
-    pipeline_value: (
-      await one(
-        `SELECT COALESCE(SUM(value),0)::float AS v FROM opportunities WHERE location_id = ? AND status = 'open'`,
-        locationId
-      )
-    ).v,
-    won_value: (
-      await one(
-        `SELECT COALESCE(SUM(value),0)::float AS v FROM opportunities WHERE location_id = ? AND status = 'won' AND updated_at >= now() - ?::interval`,
-        locationId, interval
-      )
-    ).v,
+    new_contacts: nc.n,
+    form_submissions: fs.n,
+    appointments: appts.n,
+    messages_sent: msgs.n,
+    opportunities_created: opps.n,
+    pipeline_value: pipeline.v,
+    won_value: won.v,
   };
 }
 

@@ -31,14 +31,45 @@ const ACTION_TYPES = [
   'webhook',
 ];
 
+function parseJSON(raw, fallback) {
+  try {
+    return JSON.parse(raw || fallback);
+  } catch {
+    return JSON.parse(fallback);
+  }
+}
+
 async function withActions(wf) {
-  const actions = await db.all('SELECT * FROM workflow_actions WHERE workflow_id = ? ORDER BY position', [wf.id]);
+  const [actions, runs] = await Promise.all([
+    db.all('SELECT * FROM workflow_actions WHERE workflow_id = ? ORDER BY position', [wf.id]),
+    db.get('SELECT COUNT(*)::int AS n FROM workflow_runs WHERE workflow_id = ?', [wf.id]),
+  ]);
   return {
     ...wf,
-    trigger_config: JSON.parse(wf.trigger_config || '{}'),
-    actions: actions.map((a) => ({ ...a, config: JSON.parse(a.config || '{}') })),
-    run_count: (await db.get('SELECT COUNT(*)::int AS n FROM workflow_runs WHERE workflow_id = ?', [wf.id])).n,
+    trigger_config: parseJSON(wf.trigger_config, '{}'),
+    actions: actions.map((a) => ({ ...a, config: parseJSON(a.config, '{}') })),
+    run_count: runs.n,
   };
+}
+
+// Hydrates many workflows with two grouped queries instead of 2 per workflow.
+async function withActionsBulk(workflows) {
+  if (!workflows.length) return [];
+  const ids = workflows.map((w) => w.id);
+  const ph = ids.map(() => '?').join(',');
+  const [actionRows, runRows] = await Promise.all([
+    db.all(`SELECT * FROM workflow_actions WHERE workflow_id IN (${ph}) ORDER BY workflow_id, position`, ids),
+    db.all(`SELECT workflow_id, COUNT(*)::int AS n FROM workflow_runs WHERE workflow_id IN (${ph}) GROUP BY workflow_id`, ids),
+  ]);
+  const actByWf = {};
+  for (const a of actionRows) (actByWf[a.workflow_id] || (actByWf[a.workflow_id] = [])).push({ ...a, config: parseJSON(a.config, '{}') });
+  const runByWf = Object.fromEntries(runRows.map((r) => [r.workflow_id, r.n]));
+  return workflows.map((wf) => ({
+    ...wf,
+    trigger_config: parseJSON(wf.trigger_config, '{}'),
+    actions: actByWf[wf.id] || [],
+    run_count: runByWf[wf.id] || 0,
+  }));
 }
 
 
@@ -152,7 +183,7 @@ router.get('/meta', (req, res) => res.json({ triggers: TRIGGER_TYPES, actions: A
 
 router.get('/', async (req, res) => {
   const workflows = await db.all('SELECT * FROM workflows WHERE location_id = ? ORDER BY id DESC', [req.location.id]);
-  res.json(await Promise.all(workflows.map(withActions)));
+  res.json(await withActionsBulk(workflows));
 });
 
 router.post('/', async (req, res) => {
