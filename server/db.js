@@ -719,6 +719,33 @@ CREATE TABLE IF NOT EXISTS documents (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_documents_location ON documents(location_id);
+-- Password reset tokens (forgot-password flow).
+CREATE TABLE IF NOT EXISTS password_resets (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Surveys: multi-question forms with per-question conditional logic. Questions
+-- and answers are JSON; responses can capture a contact into the CRM.
+CREATE TABLE IF NOT EXISTS surveys (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  questions TEXT NOT NULL DEFAULT '[]',
+  tag TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS survey_responses (
+  id SERIAL PRIMARY KEY,
+  survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+  answers TEXT NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_survey_responses_survey ON survey_responses(survey_id);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -791,7 +818,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 29;
+const SCHEMA_VERSION = 31;
 
 let readyPromise = null;
 function ensureReady() {

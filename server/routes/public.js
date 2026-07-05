@@ -1196,6 +1196,154 @@ router.post('/saas/:slug/signup', async (req, res) => {
   res.status(201).json({ mode: 'simulated', ok: true, location_id: out.locationId, login_url: '/', temp_password: out.password });
 });
 
+// ---- Public survey fill + submit ----
+// Multi-question survey with client-side conditional logic (show question only
+// when a prior answer matches its `condition`). Captures a contact when the
+// answers include an email/phone.
+router.get('/s/:slug', async (req, res) => {
+  const survey = await db.get('SELECT * FROM surveys WHERE slug = ?', [req.params.slug]);
+  if (!survey) return res.status(404).send('Encuesta no encontrada');
+  const loc = await db.get('SELECT name, brand_color FROM locations WHERE id = ?', [survey.location_id]);
+  const color = (loc && loc.brand_color) || '#4f46e5';
+  let questions = [];
+  try { questions = JSON.parse(survey.questions || '[]'); } catch { questions = []; }
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(survey.name)}</title>
+  <style>
+    body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#f1f5f9;margin:0;color:#0f172a}
+    .wrap{max-width:600px;margin:0 auto;padding:24px}
+    .card{background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.08);padding:26px;margin-top:20px}
+    h1{font-size:1.4rem;margin:0 0 16px} label{display:block;font-weight:600;font-size:14px;margin:16px 0 6px}
+    input,select,textarea{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box}
+    .q{display:none} .q.show{display:block}
+    .opt{display:flex;gap:8px;align-items:center;margin:6px 0;font-weight:400} .opt input{width:auto}
+    .rating{display:flex;gap:8px} .star{font-size:26px;cursor:pointer;color:#cbd5e1} .star.on{color:#f59e0b}
+    .btn{background:${color};color:#fff;border:0;border-radius:10px;padding:13px 20px;font-size:15px;font-weight:600;cursor:pointer;width:100%;margin-top:20px}
+    .ok{background:#dcfce7;border:1px solid #86efac;color:#166534;padding:16px;border-radius:10px;text-align:center;font-weight:600}
+  </style></head><body><div class="wrap"><div class="card">
+    <h1>${esc(survey.name)}</h1>
+    <form id="sv"><div id="qs"></div><button class="btn" type="submit">Enviar</button></form>
+    <div id="done" class="ok" style="display:none">¡Gracias por tu respuesta!</div>
+  </div></div>
+  <script>
+    var Q=${JSON.stringify(questions)};
+    var wrap=document.getElementById('qs');
+    Q.forEach(function(q,i){
+      var d=document.createElement('div');d.className='q';d.dataset.i=i;d.dataset.id=q.id||('q'+i);
+      var inner='<label>'+esc(q.label||('Pregunta '+(i+1)))+(q.required?' *':'')+'</label>';
+      var name='q_'+(q.id||i);
+      if(q.type==='choice'){(q.options||[]).forEach(function(o){inner+='<div class="opt"><input type="radio" name="'+name+'" value="'+esc(o)+'"> '+esc(o)+'</div>';});}
+      else if(q.type==='yesno'){['Sí','No'].forEach(function(o){inner+='<div class="opt"><input type="radio" name="'+name+'" value="'+o+'"> '+o+'</div>';});}
+      else if(q.type==='rating'){inner+='<div class="rating" data-name="'+name+'">'+[1,2,3,4,5].map(function(n){return '<span class="star" data-v="'+n+'">★</span>';}).join('')+'<input type="hidden" name="'+name+'"></div>';}
+      else if(q.type==='email'){inner+='<input type="email" name="'+name+'">';}
+      else if(q.type==='phone'){inner+='<input type="tel" name="'+name+'">';}
+      else if(q.type==='textarea'){inner+='<textarea name="'+name+'" rows="3"></textarea>';}
+      else{inner+='<input type="text" name="'+name+'">';}
+      d.innerHTML=inner;wrap.appendChild(d);
+    });
+    function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+    function val(name){var el=document.querySelector('[name="'+name+'"]');if(!el)return '';var r=document.querySelector('input[name="'+name+'"]:checked');return r?r.value:(el.value||'');}
+    function refresh(){
+      document.querySelectorAll('.q').forEach(function(d){
+        var q=Q[+d.dataset.i];var show=true;
+        if(q.condition&&q.condition.q){show=(val('q_'+q.condition.q)===String(q.condition.equals));}
+        d.classList.toggle('show',show);
+      });
+    }
+    document.querySelectorAll('.rating').forEach(function(r){
+      r.querySelectorAll('.star').forEach(function(s){s.addEventListener('click',function(){
+        var v=+s.dataset.v;r.querySelector('input').value=v;
+        r.querySelectorAll('.star').forEach(function(x){x.classList.toggle('on',+x.dataset.v<=v);});refresh();
+      });});
+    });
+    wrap.addEventListener('input',refresh);wrap.addEventListener('change',refresh);refresh();
+    document.getElementById('sv').addEventListener('submit',async function(e){
+      e.preventDefault();
+      var answers={};
+      Q.forEach(function(q,i){var d=document.querySelector('.q[data-i="'+i+'"]');if(!d.classList.contains('show'))return;
+        var v=val('q_'+(q.id||i));answers[q.label||('q'+i)]=v;
+        if(q.map)answers['__'+q.map]=v;});
+      var r=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:answers})});
+      if(r.ok){document.getElementById('sv').style.display='none';document.getElementById('done').style.display='block';}
+      else alert('No se pudo enviar');
+    });
+  </script></body></html>`);
+});
+
+router.post('/s/:slug', async (req, res) => {
+  const survey = await db.get('SELECT * FROM surveys WHERE slug = ?', [req.params.slug]);
+  if (!survey) return res.status(404).json({ error: 'Encuesta no encontrada' });
+  const answers = (req.body && req.body.answers) || {};
+  // Capture a contact when the answers expose an email/phone (mapped fields).
+  let contactId = null;
+  const email = answers.__email || '';
+  const phone = answers.__phone || '';
+  const name = answers.__name || '';
+  if (email || phone) {
+    try {
+      const out = await require('../services/leads').ingestLead({
+        location_id: survey.location_id, email, phone, name,
+        source: `survey:${survey.slug}`, tag: survey.tag || 'encuesta',
+        activityLabel: `Respondió la encuesta "${survey.name}"`,
+      });
+      contactId = out.contact_id;
+    } catch { /* ignore capture errors */ }
+  }
+  await db.run(
+    'INSERT INTO survey_responses (survey_id, location_id, contact_id, answers) VALUES (?, ?, ?, ?)',
+    [survey.id, survey.location_id, contactId, JSON.stringify(answers)]
+  );
+  res.json({ ok: true });
+});
+
+// ---- Legal pages (RGPD/GDPR baseline) ----
+const LEGAL = {
+  privacidad: {
+    title: 'Política de Privacidad',
+    html: (co, mail) => `
+      <p>En <strong>${co}</strong> nos tomamos en serio la protección de tus datos personales, conforme al Reglamento (UE) 2016/679 (RGPD) y la normativa española (LOPDGDD).</p>
+      <h2>Responsable del tratamiento</h2><p>${co}. Contacto: ${mail}.</p>
+      <h2>Datos que tratamos</h2><p>Datos identificativos y de contacto (nombre, email, teléfono), datos de uso del servicio y los que nos facilites al contratar o rellenar formularios.</p>
+      <h2>Finalidad</h2><p>Prestar y gestionar el servicio, atender solicitudes, enviar comunicaciones relacionadas y cumplir obligaciones legales.</p>
+      <h2>Base jurídica</h2><p>Ejecución del contrato, tu consentimiento y el interés legítimo del responsable.</p>
+      <h2>Conservación</h2><p>Conservamos los datos mientras exista relación contractual y, después, durante los plazos legales aplicables.</p>
+      <h2>Destinatarios</h2><p>Proveedores tecnológicos que nos prestan servicios (alojamiento, email, pagos) bajo contrato de encargado de tratamiento. No cedemos tus datos a terceros salvo obligación legal.</p>
+      <h2>Tus derechos</h2><p>Puedes ejercer los derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a ${mail}. También puedes reclamar ante la Agencia Española de Protección de Datos (aepd.es).</p>`,
+  },
+  terminos: {
+    title: 'Términos y Condiciones',
+    html: (co, mail) => `
+      <p>El uso de los servicios de <strong>${co}</strong> implica la aceptación de estos términos.</p>
+      <h2>Objeto</h2><p>Regulan el acceso y uso de la plataforma y los servicios asociados.</p>
+      <h2>Uso aceptable</h2><p>Te comprometes a usar el servicio conforme a la ley y a no realizar envíos no solicitados (spam) ni actividades fraudulentas.</p>
+      <h2>Cuenta</h2><p>Eres responsable de la confidencialidad de tus credenciales y de la actividad de tu cuenta.</p>
+      <h2>Pagos</h2><p>Los precios y planes se indican en la contratación. Los impagos pueden suspender el servicio.</p>
+      <h2>Responsabilidad</h2><p>El servicio se presta "tal cual". En la medida permitida por la ley, ${co} no responde de daños indirectos.</p>
+      <h2>Contacto</h2><p>${mail}.</p>`,
+  },
+  cookies: {
+    title: 'Política de Cookies',
+    html: (co, mail) => `
+      <p><strong>${co}</strong> utiliza cookies y almacenamiento local para el funcionamiento del servicio.</p>
+      <h2>Cookies técnicas</h2><p>Necesarias para iniciar sesión y mantener tu sesión activa. No requieren consentimiento.</p>
+      <h2>Preferencias</h2><p>Guardamos tu idioma y ajustes de interfaz en tu navegador (localStorage).</p>
+      <h2>Gestión</h2><p>Puedes borrar el almacenamiento desde la configuración de tu navegador. Contacto: ${mail}.</p>`,
+  },
+};
+
+router.get('/legal/:doc', (req, res) => {
+  const page = LEGAL[req.params.doc];
+  if (!page) return res.status(404).send('No encontrado');
+  const co = process.env.COMPANY_NAME || 'Upcro';
+  const mail = process.env.COMPANY_EMAIL || 'privacidad@upcro.app';
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1"><title>${page.title} — ${co}</title>
+    <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:0 auto;padding:32px 20px;color:#0f172a;line-height:1.65}
+    h1{font-size:1.7rem}h2{font-size:1.15rem;margin-top:26px}a{color:#4f46e5}.muted{color:#64748b;font-size:13px}</style></head>
+    <body><h1>${page.title}</h1><p class="muted">Última actualización: ${new Date().getFullYear()}</p>${page.html(esc(co), esc(mail))}
+    <p style="margin-top:30px"><a href="/legal/privacidad">Privacidad</a> · <a href="/legal/terminos">Términos</a> · <a href="/legal/cookies">Cookies</a></p></body></html>`);
+});
+
 // ---- Public document e-signature ----
 function signPage(doc, brand, signed) {
   const color = brand || '#4f46e5';
