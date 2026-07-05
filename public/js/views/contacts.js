@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast, fmtDate, fmtMoney, fullName, initials, icon } from '../ui.js';
+import { t } from '../i18n.js';
 
 const ICONS = { contact: 'contact', tag: 'tag', note: 'note', appointment: 'appointment', form: 'form', automation: 'automation', opportunity: 'opportunity' };
 
@@ -21,18 +22,18 @@ export async function renderContacts(view, rest = []) {
 
     view.innerHTML = `
     <div class="page-header">
-      <h1>Contacts</h1><span class="badge gray">${contacts.length}</span>
+      <h1>${t('Contactos', 'Contacts')}</h1><span class="badge gray">${contacts.length}</span>
       <div class="spacer"></div>
-      <input class="input" id="search" placeholder="Search name, email, phone…" style="width:240px" value="${esc(q)}">
+      <input class="input" id="search" placeholder="${t('Buscar nombre, email, teléfono…', 'Search name, email, phone…')}" style="width:240px" value="${esc(q)}">
       <select class="input" id="tag-filter" style="width:160px">
-        <option value="">All tags</option>
-        ${tags.map((t) => `<option value="${esc(t.tag)}" ${t.tag === tag ? 'selected' : ''}>${esc(t.tag)} (${t.count})</option>`).join('')}
+        <option value="">${t('Todas las etiquetas', 'All tags')}</option>
+        ${tags.map((tg) => `<option value="${esc(tg.tag)}" ${tg.tag === tag ? 'selected' : ''}>${esc(tg.tag)} (${tg.count})</option>`).join('')}
       </select>
-      <button class="btn secondary" id="export-csv" title="Exportar CSV">CSV</button>
-      <button class="btn secondary" id="import-csv" title="Importar CSV">CSV</button>
+      <button class="btn secondary" id="export-csv" title="${t('Exportar CSV', 'Export CSV')}">CSV</button>
+      <button class="btn secondary" id="import-csv" title="${t('Importar CSV', 'Import CSV')}">CSV</button>
       <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
-      <button class="btn secondary" id="find-dupes" title="Buscar duplicados">²</button>
-      <button class="btn" id="add-contact">+ Add Contact</button>
+      <button class="btn secondary" id="find-dupes" title="${t('Buscar duplicados', 'Find duplicates')}">²</button>
+      <button class="btn" id="add-contact">+ ${t('Añadir contacto', 'Add Contact')}</button>
     </div>
     <div class="flex" style="margin-bottom:12px;flex-wrap:wrap">
       ${smartLists
@@ -41,23 +42,23 @@ export async function renderContacts(view, rest = []) {
             <a href="#" class="sl-del" data-id="${l.id}" style="color:inherit;margin-left:4px">×</a></span>`
         )
         .join('')}
-      ${(q || tag) ? `<button class="btn secondary small" id="save-sl">Guardar filtro como lista</button>` : ''}
+      ${(q || tag) ? `<button class="btn secondary small" id="save-sl">${t('Guardar filtro como lista', 'Save filter as list')}</button>` : ''}
     </div>
     <div class="card">
       ${
         contacts.length
-          ? `<table class="table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Tags</th><th>Source</th><th>Created</th></tr></thead>
+          ? `<table class="table"><thead><tr><th>${t('Nombre', 'Name')}</th><th>${t('Email', 'Email')}</th><th>${t('Teléfono', 'Phone')}</th><th>${t('Etiquetas', 'Tags')}</th><th>${t('Origen', 'Source')}</th><th>${t('Creado', 'Created')}</th></tr></thead>
           <tbody>${contacts
             .map(
               (c) => `<tr data-id="${c.id}">
                 <td><div class="flex" style="gap:9px"><span class="avatar soft">${initials(c)}</span><strong>${esc(fullName(c))}</strong></div></td>
                 <td>${esc(c.email)}</td><td>${esc(c.phone)}</td>
-                <td>${c.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</td>
+                <td>${c.tags.map((tg) => `<span class="tag">${esc(tg)}</span>`).join('')}</td>
                 <td><span class="badge gray">${esc(c.source)}</span></td>
                 <td class="muted">${fmtDate(c.created_at)}</td></tr>`
             )
             .join('')}</tbody></table>`
-          : `<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>No contacts yet. Add one or capture leads with a funnel.</div>`
+          : `<div class="empty"><div class="big"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>${t('Aún no hay contactos. Añade uno o capta leads con un embudo.', 'No contacts yet. Add one or capture leads with a funnel.')}</div>`
       }
     </div>`;
 
@@ -89,16 +90,16 @@ export async function renderContacts(view, rest = []) {
       })
     );
     view.querySelector('#save-sl')?.addEventListener('click', async () => {
-      const name = prompt('Nombre de la lista:', tag || q);
+      const name = prompt(t('Nombre de la lista:', 'List name:'), tag || q);
       if (!name) return;
       await api('/contacts/meta/smart-lists', { method: 'POST', body: { name, filters: { q, tag } } });
-      toast('Lista guardada');
+      toast(t('Lista guardada', 'List saved'));
       load();
     });
     view.querySelector('#find-dupes').addEventListener('click', async () => {
       const groups = await api('/contacts/meta/duplicates');
       const modal = openModal(`
-        <h2>Contactos duplicados</h2>
+        <h2>${t('Contactos duplicados', 'Duplicate contacts')}</h2>
         ${
           groups.length
             ? groups
@@ -109,21 +110,21 @@ export async function renderContacts(view, rest = []) {
                       .map(
                         (c, ci) => `<div class="flex" style="margin:4px 0">
                           <span>${esc(fullName(c))} <span class="muted" style="font-size:11px">#${c.id} · ${esc(c.source)}</span></span>
-                          ${ci > 0 ? `<button class="btn secondary small right merge-btn" data-keep="${g.contacts[0].id}" data-merge="${c.id}">Fusionar en #${g.contacts[0].id}</button>` : '<span class="badge green right">se conserva</span>'}
+                          ${ci > 0 ? `<button class="btn secondary small right merge-btn" data-keep="${g.contacts[0].id}" data-merge="${c.id}">${t(`Fusionar en #${g.contacts[0].id}`, `Merge into #${g.contacts[0].id}`)}</button>` : `<span class="badge green right">${t('se conserva', 'kept')}</span>`}
                         </div>`
                       )
                       .join('')}
                   </div>`
                 )
                 .join('')
-            : '<div class="empty">No hay duplicados por email ni teléfono.</div>'
+            : `<div class="empty">${t('No hay duplicados por email ni teléfono.', 'No duplicates by email or phone.')}</div>`
         }`);
       modal.querySelectorAll('.merge-btn').forEach((b) =>
         b.addEventListener('click', async () => {
-          if (!confirm('¿Fusionar? Se moverán mensajes, citas, notas y tags al contacto conservado.')) return;
+          if (!confirm(t('¿Fusionar? Se moverán mensajes, citas, notas y etiquetas al contacto conservado.', 'Merge? Messages, appointments, notes and tags will be moved to the kept contact.'))) return;
           try {
             await api('/contacts/merge', { method: 'POST', body: { keep_id: Number(b.dataset.keep), merge_id: Number(b.dataset.merge) } });
-            toast('Contactos fusionados');
+            toast(t('Contactos fusionados', 'Contacts merged'));
             document.getElementById('modal-root').innerHTML = '';
             load();
           } catch (err) { toast(err.message, true); }
@@ -149,7 +150,7 @@ export async function renderContacts(view, rest = []) {
       const csv = await file.text();
       try {
         const result = await api('/contacts/import/csv', { method: 'POST', body: { csv } });
-        toast(`Importados: ${result.imported} · Omitidos (duplicados): ${result.skipped}`);
+        toast(t(`Importados: ${result.imported} · Omitidos (duplicados): ${result.skipped}`, `Imported: ${result.imported} · Skipped (duplicates): ${result.skipped}`));
         load();
       } catch (err) {
         toast(err.message, true);
@@ -168,17 +169,17 @@ async function contactModal(onSaved, contact = null) {
   ]);
   const cfValues = contact?.custom_fields || {};
   const modal = openModal(`
-    <h2>${contact ? 'Edit' : 'New'} Contact</h2>
+    <h2>${contact ? t('Editar contacto', 'Edit Contact') : t('Nuevo contacto', 'New Contact')}</h2>
     <form id="contact-form">
       <div class="form-row">
-        <label class="field"><span class="label">First name</span><input class="input" name="first_name" value="${esc(contact?.first_name || '')}"></label>
-        <label class="field"><span class="label">Last name</span><input class="input" name="last_name" value="${esc(contact?.last_name || '')}"></label>
+        <label class="field"><span class="label">${t('Nombre', 'First name')}</span><input class="input" name="first_name" value="${esc(contact?.first_name || '')}"></label>
+        <label class="field"><span class="label">${t('Apellido', 'Last name')}</span><input class="input" name="last_name" value="${esc(contact?.last_name || '')}"></label>
       </div>
-      <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" value="${esc(contact?.email || '')}"></label>
-      <label class="field"><span class="label">Phone</span><input class="input" name="phone" value="${esc(contact?.phone || '')}"></label>
-      ${contact ? '' : `<label class="field"><span class="label">Tags (comma separated)</span><input class="input" name="tags_raw" placeholder="lead, vip"></label>`}
-      <label class="field"><span class="label">Responsable (owner)</span><select class="input" name="owner_user_id">
-        <option value="">— sin asignar —</option>
+      <label class="field"><span class="label">${t('Email', 'Email')}</span><input class="input" name="email" type="email" value="${esc(contact?.email || '')}"></label>
+      <label class="field"><span class="label">${t('Teléfono', 'Phone')}</span><input class="input" name="phone" value="${esc(contact?.phone || '')}"></label>
+      ${contact ? '' : `<label class="field"><span class="label">${t('Etiquetas (separadas por comas)', 'Tags (comma separated)')}</span><input class="input" name="tags_raw" placeholder="lead, vip"></label>`}
+      <label class="field"><span class="label">${t('Responsable', 'Owner')}</span><select class="input" name="owner_user_id">
+        <option value="">${t('— sin asignar —', '— unassigned —')}</option>
         ${team.map((u) => `<option value="${u.id}" ${contact?.owner_user_id === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
       </select></label>
       ${customFields
@@ -189,8 +190,8 @@ async function contactModal(onSaved, contact = null) {
         )
         .join('')}
       <div class="modal-actions">
-        <button type="button" class="btn secondary" id="cancel">Cancel</button>
-        <button class="btn">${contact ? 'Save' : 'Create Contact'}</button>
+        <button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
+        <button class="btn">${contact ? t('Guardar', 'Save') : t('Crear contacto', 'Create Contact')}</button>
       </div>
     </form>`);
   modal.querySelector('#cancel').addEventListener('click', closeOverlay);
@@ -207,7 +208,7 @@ async function contactModal(onSaved, contact = null) {
       if (contact) await api(`/contacts/${contact.id}`, { method: 'PUT', body: data });
       else await api('/contacts', { method: 'POST', body: { ...data, tags } });
       closeOverlay();
-      toast(contact ? 'Contact updated' : 'Contact created');
+      toast(contact ? t('Contacto actualizado', 'Contact updated') : t('Contacto creado', 'Contact created'));
       onSaved();
     } catch (err) {
       toast(err.message, true);
@@ -220,31 +221,31 @@ async function renderContactDetail(view, id) {
 
   view.innerHTML = `
   <div class="page-header">
-    <a href="#/contacts" class="btn secondary small">← Contacts</a>
+    <a href="#/contacts" class="btn secondary small">← ${t('Contactos', 'Contacts')}</a>
     <span class="avatar" style="width:40px;height:40px">${initials(c)}</span>
     <h1>${esc(fullName(c))}</h1>
     ${c.score >= 20 ? `<span class="badge amber">${c.score} pts</span>` : c.score > 0 ? `<span class="badge gray">${c.score} pts</span>` : ''}
     ${c.dnd ? '<span class="badge red">DND</span>' : ''}
     <div class="spacer"></div>
-    <button class="btn secondary" id="msg-btn">Message</button>
-    <button class="btn secondary" id="edit-btn">Edit</button>
-    <button class="btn danger" id="del-btn">Delete</button>
+    <button class="btn secondary" id="msg-btn">${t('Mensaje', 'Message')}</button>
+    <button class="btn secondary" id="edit-btn">${t('Editar', 'Edit')}</button>
+    <button class="btn danger" id="del-btn">${t('Eliminar', 'Delete')}</button>
   </div>
   <div class="grid-2">
     <div>
-      <div class="card" style="margin-bottom:16px"><div class="card-title">Details</div><div class="card-body">
-        <p><strong>Email:</strong> ${esc(c.email) || '<span class="muted">—</span>'}</p>
-        <p><strong>Phone:</strong> ${esc(c.phone) || '<span class="muted">—</span>'}</p>
-        <p><strong>Source:</strong> <span class="badge gray">${esc(c.source)}</span></p>
-        ${c.owner_name ? `<p><strong>Responsable:</strong> ${esc(c.owner_name)}</p>` : ''}
+      <div class="card" style="margin-bottom:16px"><div class="card-title">${t('Detalles', 'Details')}</div><div class="card-body">
+        <p><strong>${t('Email', 'Email')}:</strong> ${esc(c.email) || '<span class="muted">—</span>'}</p>
+        <p><strong>${t('Teléfono', 'Phone')}:</strong> ${esc(c.phone) || '<span class="muted">—</span>'}</p>
+        <p><strong>${t('Origen', 'Source')}:</strong> <span class="badge gray">${esc(c.source)}</span></p>
+        ${c.owner_name ? `<p><strong>${t('Responsable', 'Owner')}:</strong> ${esc(c.owner_name)}</p>` : ''}
         ${Object.entries(c.custom_fields || {}).filter(([, v]) => v !== '' && v != null)
           .map(([k, v]) => `<p><strong>${esc(k)}:</strong> ${esc(v)}</p>`).join('')}
-        <p style="margin-top:8px"><strong>Tags:</strong> <span id="tags">${c.tags
-          .map((t) => `<span class="tag">${esc(t)} <a href="#" data-tag="${esc(t)}" class="rm-tag" style="color:inherit">×</a></span>`)
+        <p style="margin-top:8px"><strong>${t('Etiquetas', 'Tags')}:</strong> <span id="tags">${c.tags
+          .map((tg) => `<span class="tag">${esc(tg)} <a href="#" data-tag="${esc(tg)}" class="rm-tag" style="color:inherit">×</a></span>`)
           .join('')}</span>
-          <button class="btn secondary small" id="add-tag">+ tag</button></p>
+          <button class="btn secondary small" id="add-tag">+ ${t('etiqueta', 'tag')}</button></p>
       </div></div>
-      <div class="card" style="margin-bottom:16px"><div class="card-title">Opportunities</div><div class="card-body">
+      <div class="card" style="margin-bottom:16px"><div class="card-title">${t('Oportunidades', 'Opportunities')}</div><div class="card-body">
         ${
           c.opportunities.length
             ? c.opportunities
@@ -254,31 +255,31 @@ async function renderContactDetail(view, id) {
                   <div class="t-time">${esc(o.pipeline_name)} → ${esc(o.stage_name)}</div></div></div>`
                 )
                 .join('')
-            : '<span class="muted">No opportunities</span>'
+            : `<span class="muted">${t('Sin oportunidades', 'No opportunities')}</span>`
         }
       </div></div>
-      <div class="card" style="margin-bottom:16px"><div class="card-title">Tareas</div><div class="card-body">
+      <div class="card" style="margin-bottom:16px"><div class="card-title">${t('Tareas', 'Tasks')}</div><div class="card-body">
         ${(c.tasks || []).length
-          ? c.tasks.map((t) => `<div class="timeline-item"><div class="t-icon">${t.status === 'done' ? '' : ''}</div>
-              <div style="${t.status === 'done' ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(t.title)}
-              ${t.due_at ? `<div class="t-time">vence ${fmtDate(t.due_at)}</div>` : ''}</div></div>`).join('')
-          : '<span class="muted">Sin tareas</span>'}
-        <div style="margin-top:8px"><a href="#/tasks">Gestionar en Tareas →</a></div>
+          ? c.tasks.map((tk) => `<div class="timeline-item"><div class="t-icon">${tk.status === 'done' ? '' : ''}</div>
+              <div style="${tk.status === 'done' ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(tk.title)}
+              ${tk.due_at ? `<div class="t-time">${t(`vence ${fmtDate(tk.due_at)}`, `due ${fmtDate(tk.due_at)}`)}</div>` : ''}</div></div>`).join('')
+          : `<span class="muted">${t('Sin tareas', 'No tasks')}</span>`}
+        <div style="margin-top:8px"><a href="#/tasks">${t('Gestionar en Tareas →', 'Manage in Tasks →')}</a></div>
       </div></div>
-      <div class="card"><div class="card-title">Notes</div><div class="card-body">
+      <div class="card"><div class="card-title">${t('Notas', 'Notes')}</div><div class="card-body">
         <form id="note-form" class="flex" style="margin-bottom:12px">
-          <input class="input" name="body" placeholder="Add a note…" required>
-          <button class="btn">Add</button>
+          <input class="input" name="body" placeholder="${t('Añadir una nota…', 'Add a note…')}" required>
+          <button class="btn">${t('Añadir', 'Add')}</button>
         </form>
         ${c.notes
           .map(
             (n) => `<div class="timeline-item"><div class="t-icon"></div>
-            <div>${esc(n.body)}<div class="t-time">${esc(n.user_name || 'System')} · ${fmtDate(n.created_at)}</div></div></div>`
+            <div>${esc(n.body)}<div class="t-time">${esc(n.user_name || t('Sistema', 'System'))} · ${fmtDate(n.created_at)}</div></div></div>`
           )
           .join('')}
       </div></div>
     </div>
-    <div class="card"><div class="card-title">Activity Timeline</div><div class="card-body">
+    <div class="card"><div class="card-title">${t('Cronología de actividad', 'Activity Timeline')}</div><div class="card-body">
       ${
         c.activities.length
           ? c.activities
@@ -287,7 +288,7 @@ async function renderContactDetail(view, id) {
                 <div>${esc(a.description)}<div class="t-time">${fmtDate(a.created_at)}</div></div></div>`
               )
               .join('')
-          : '<span class="muted">No activity yet</span>'
+          : `<span class="muted">${t('Sin actividad todavía', 'No activity yet')}</span>`
       }
     </div></div>
   </div>`;
@@ -296,9 +297,9 @@ async function renderContactDetail(view, id) {
     contactModal(() => renderContactDetail(view, id), c)
   );
   view.querySelector('#del-btn').addEventListener('click', async () => {
-    if (!confirm(`Delete ${fullName(c)}? This cannot be undone.`)) return;
+    if (!confirm(t(`¿Eliminar a ${fullName(c)}? Esta acción no se puede deshacer.`, `Delete ${fullName(c)}? This cannot be undone.`))) return;
     await api(`/contacts/${id}`, { method: 'DELETE' });
-    toast('Contact deleted');
+    toast(t('Contacto eliminado', 'Contact deleted'));
     location.hash = '#/contacts';
   });
   view.querySelector('#msg-btn').addEventListener('click', async () => {
@@ -306,7 +307,7 @@ async function renderContactDetail(view, id) {
     location.hash = `#/conversations/${conv.id}`;
   });
   view.querySelector('#add-tag').addEventListener('click', async () => {
-    const tag = prompt('Tag name:');
+    const tag = prompt(t('Nombre de la etiqueta:', 'Tag name:'));
     if (!tag) return;
     await api(`/contacts/${id}/tags`, { method: 'POST', body: { tag } });
     renderContactDetail(view, id);
