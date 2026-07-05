@@ -5,6 +5,7 @@
 //           create_opportunity | wait | branch | create_task | send_review_request
 const db = require('../db');
 const messaging = require('./messaging');
+const notifications = require('./notifications');
 
 async function logActivity(locationId, contactId, type, description) {
   await db.run('INSERT INTO activities (location_id, contact_id, type, description) VALUES (?, ?, ?, ?)', [
@@ -168,6 +169,11 @@ async function runAction(action, contact, locationId, log) {
       const u = config.user_id ? await db.get('SELECT id, name FROM users WHERE id = ? AND agency_id = ?', [config.user_id, loc && loc.agency_id]) : null;
       await db.run('UPDATE contacts SET owner_user_id = ?, updated_at = now() WHERE id = ?', [u ? u.id : null, contact.id]);
       log.push(u ? `Assigned owner ${u.name}` : 'Cleared owner');
+      if (u) await notifications.notify(u.id, {
+        type: 'assignment', title: 'Nuevo contacto asignado',
+        body: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || contact.phone || 'Contacto',
+        link: `#/contacts/${contact.id}`, locationId,
+      });
       break;
     }
     case 'set_dnd': {
@@ -186,9 +192,14 @@ async function runAction(action, contact, locationId, log) {
       break;
     }
     case 'notify_user': {
-      const to = config.email;
-      if (!to) { log.push('Skipped notify_user: no email'); break; }
       const msg = messaging.mergeFields(config.message || 'Nueva actividad de {{first_name}} {{last_name}} ({{email}} {{phone}})', contact);
+      // In-app bell notification when a target user is set (email is optional).
+      if (config.user_id) {
+        const u = await db.get('SELECT id FROM users WHERE id = ? AND agency_id = ?', [config.user_id, loc && loc.agency_id]);
+        if (u) await notifications.notify(u.id, { type: 'workflow', title: config.subject || 'Notificación interna', body: msg, link: `#/contacts/${contact.id}`, locationId });
+      }
+      const to = config.email;
+      if (!to) { log.push(config.user_id ? 'Notified in-app' : 'Skipped notify_user: no recipient'); break; }
       try { await messaging.sendEmail(locationId, { email: to, first_name: '', last_name: '' }, config.subject || 'Notificación interna', msg); log.push(`Notified ${to}`); }
       catch (err) { log.push(`Notify failed: ${err.message}`); }
       break;

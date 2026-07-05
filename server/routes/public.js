@@ -261,6 +261,11 @@ router.post('/pages/:pageId/submit', async (req, res) => {
   await automation.logActivity(funnel.location_id, contact.id, 'form', `Submitted form on "${page.name}" (${funnel.name})`);
   if (isNew) await automation.trigger(funnel.location_id, 'contact_created', contact);
   await automation.trigger(funnel.location_id, 'form_submitted', contact, { funnel_id: funnel.id });
+  await require('../services/notifications').notifyLocationTeam(funnel.location_id, {
+    type: 'lead', title: 'Nuevo lead desde una página',
+    body: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || contact.phone || 'Nuevo contacto',
+    link: `#/contacts/${contact.id}`,
+  });
   if (formBlock && formBlock.tag)
     await automation.trigger(funnel.location_id, 'tag_added', contact, { tag: formBlock.tag });
 
@@ -629,6 +634,11 @@ router.post('/form/:slug/submit', async (req, res) => {
   await automation.logActivity(form.location_id, contact.id, 'form', `Submitted form "${form.name}"`);
   if (isNew) await automation.trigger(form.location_id, 'contact_created', contact);
   await automation.trigger(form.location_id, 'form_submitted', contact, { form_id: form.id });
+  await require('../services/notifications').notifyLocationTeam(form.location_id, {
+    type: 'lead', title: `Nuevo lead: ${form.name}`,
+    body: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || contact.phone || 'Nuevo contacto',
+    link: `#/contacts/${contact.id}`,
+  });
   if (form.tag) await automation.trigger(form.location_id, 'tag_added', contact, { tag: form.tag });
 
   // Notify the team by email when configured (best-effort).

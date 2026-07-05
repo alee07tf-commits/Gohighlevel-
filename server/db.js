@@ -676,6 +676,19 @@ CREATE INDEX IF NOT EXISTS idx_review_requests_contact ON review_requests(contac
 CREATE INDEX IF NOT EXISTS idx_plans_agency ON plans(agency_id);
 CREATE INDEX IF NOT EXISTS idx_custom_values_location ON custom_values(location_id);
 CREATE INDEX IF NOT EXISTS idx_contact_tags_tag ON contact_tags(tag);
+-- In-app notification center (bell). One row per user; location scopes the link.
+CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  location_id INTEGER REFERENCES locations(id) ON DELETE CASCADE,
+  type TEXT NOT NULL DEFAULT 'info',
+  title TEXT NOT NULL,
+  body TEXT DEFAULT '',
+  link TEXT DEFAULT '',
+  read INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -748,7 +761,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 26;
+const SCHEMA_VERSION = 27;
 
 let readyPromise = null;
 function ensureReady() {

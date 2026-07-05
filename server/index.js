@@ -45,6 +45,7 @@ app.use('/api/apps', require('./routes/apps'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/system', require('./routes/system'));
+app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/custom-fields', require('./routes/custom-fields'));
