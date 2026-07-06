@@ -76,15 +76,19 @@ router.get('/campaigns', async (req, res) => {
 });
 
 router.post('/campaigns', async (req, res) => {
-  const { name, channel, subject, body, tag_filter, send_at } = req.body || {};
+  const { name, channel, subject, body, tag_filter, send_at, subject_b, body_b, ab_test } = req.body || {};
   if (!name || !body) return res.status(400).json({ error: 'name and body are required' });
   const scheduled = send_at && new Date(send_at).getTime() > Date.now();
+  // A/B only for email and only when a variant B is actually provided.
+  const isEmail = !['sms', 'whatsapp'].includes(channel);
+  const ab = isEmail && ab_test && (subject_b || body_b) ? 1 : 0;
   const id = await db.insert(
-    `INSERT INTO campaigns (location_id, name, channel, subject, body, tag_filter, send_at, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO campaigns (location_id, name, channel, subject, body, tag_filter, send_at, status, subject_b, body_b, ab_test)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.location.id, name, ['sms', 'whatsapp'].includes(channel) ? channel : 'email', subject || '', body,
       tag_filter || '', scheduled ? new Date(send_at).toISOString() : null, scheduled ? 'scheduled' : 'draft',
+      ab ? (subject_b || subject || '') : '', ab ? (body_b || body) : '', ab,
     ]
   );
   if (scheduled) {
@@ -111,23 +115,28 @@ async function deliverCampaign(campaign) {
   const ctx = await messaging.buildSendContext(campaign.location_id);
   const crypto = require('crypto');
   const base = (process.env.PUBLIC_URL || process.env.APP_URL || '').replace(/\/$/, '');
+  const isEmail = campaign.channel === 'email';
+  let i = 0;
   for (const contact of contacts) {
     // Respect DND (global and per-channel) — campaigns never bypass opt-out.
-    const isEmail = campaign.channel === 'email';
     if (contact.dnd || (isEmail && contact.dnd_email) || (!isEmail && contact.dnd_sms)) continue;
 
+    // A/B split (email only): alternate recipients between variant A and B.
+    const variant = campaign.ab_test && isEmail ? (i % 2 === 0 ? 'A' : 'B') : '';
+    i++;
+    const subject = variant === 'B' ? campaign.subject_b : campaign.subject;
     const token = crypto.randomBytes(12).toString('hex');
-    let body = campaign.body;
+    let body = variant === 'B' ? campaign.body_b : campaign.body;
     // Email: append an open-tracking pixel and an unsubscribe link.
     if (isEmail) {
       body += `\n\n<a href="${base}/api/public/unsub/${token}">Cancelar suscripción</a>`;
       body += `\n<img src="${base}/api/public/e/o/${token}" width="1" height="1" alt="" style="display:none">`;
     }
     const message = await messaging.sendByChannel(
-      campaign.channel, campaign.location_id, contact, { subject: campaign.subject, body }, ctx
+      campaign.channel, campaign.location_id, contact, { subject, body }, ctx
     );
     if (message) {
-      await db.run('INSERT INTO campaign_recipients (campaign_id, contact_id, token) VALUES (?, ?, ?)', [campaign.id, contact.id, token]);
+      await db.run('INSERT INTO campaign_recipients (campaign_id, contact_id, token, variant) VALUES (?, ?, ?, ?)', [campaign.id, contact.id, token, variant]);
       sent++;
     }
   }
@@ -145,6 +154,28 @@ router.post('/campaigns/:id/send', async (req, res) => {
   if (campaign.status === 'sent') return res.status(400).json({ error: 'Campaign already sent' });
   const sent = await deliverCampaign(campaign);
   res.json({ ...(await db.get('SELECT * FROM campaigns WHERE id = ?', [campaign.id])), recipient_count: sent });
+});
+
+// A/B (and general) stats: sent / opened / clicked per variant, with a winner.
+router.get('/campaigns/:id/stats', async (req, res) => {
+  const campaign = await db.get('SELECT * FROM campaigns WHERE id = ? AND location_id = ?', [req.params.id, req.location.id]);
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  const rows = await db.all(
+    `SELECT COALESCE(NULLIF(variant, ''), '-') AS variant,
+       COUNT(*)::int AS sent,
+       COUNT(opened_at)::int AS opened,
+       COUNT(clicked_at)::int AS clicked
+     FROM campaign_recipients WHERE campaign_id = ? GROUP BY variant`,
+    [campaign.id]
+  );
+  const byV = Object.fromEntries(rows.map((r) => [r.variant, r]));
+  const rate = (v) => (v && v.sent ? Math.round((v.opened / v.sent) * 100) : 0);
+  let winner = null;
+  if (campaign.ab_test) {
+    const a = rate(byV.A), b = rate(byV.B);
+    winner = a === b ? 'tie' : a > b ? 'A' : 'B';
+  }
+  res.json({ ab_test: !!campaign.ab_test, variants: rows, open_rate: { A: rate(byV.A), B: rate(byV.B) }, winner });
 });
 
 router.delete('/campaigns/:id', async (req, res) => {

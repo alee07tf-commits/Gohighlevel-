@@ -16,6 +16,16 @@ async function logActivity(locationId, contactId, type, description) {
   ]);
 }
 
+// Returns the current rotation index for a pool key and advances it by one, so
+// successive calls hand out 0,1,2,… for fair round-robin assignment.
+async function nextRoundRobin(key) {
+  const row = await db.get('SELECT idx FROM round_robin_state WHERE key = ?', [key]);
+  const idx = row ? row.idx : 0;
+  if (row) await db.run('UPDATE round_robin_state SET idx = idx + 1 WHERE key = ?', [key]);
+  else await db.run('INSERT INTO round_robin_state (key, idx) VALUES (?, 1)', [key]);
+  return idx;
+}
+
 // Branch conditions evaluated against the live contact record.
 // config: { field: 'tag'|'score'|'email'|'phone'|'source'|custom key, op, value }
 async function evaluateCondition(config, contact) {
@@ -166,7 +176,15 @@ async function runAction(action, contact, locationId, log) {
     }
     case 'assign_owner': {
       const loc = await db.get('SELECT agency_id FROM locations WHERE id = ?', [locationId]);
-      const u = config.user_id ? await db.get('SELECT id, name FROM users WHERE id = ? AND agency_id = ?', [config.user_id, loc && loc.agency_id]) : null;
+      // Round-robin: rotate the owner across a pool of users for fair distribution.
+      let targetUserId = config.user_id;
+      if (config.round_robin && Array.isArray(config.user_ids) && config.user_ids.length) {
+        const pool = config.user_ids.map(Number).filter(Boolean);
+        const key = `rr:${locationId}:${pool.slice().sort((a, b) => a - b).join('-')}`;
+        const idx = await nextRoundRobin(key);
+        targetUserId = pool[idx % pool.length];
+      }
+      const u = targetUserId ? await db.get('SELECT id, name FROM users WHERE id = ? AND agency_id = ?', [targetUserId, loc && loc.agency_id]) : null;
       await db.run('UPDATE contacts SET owner_user_id = ?, updated_at = now() WHERE id = ?', [u ? u.id : null, contact.id]);
       log.push(u ? `Assigned owner ${u.name}` : 'Cleared owner');
       if (u) await notifications.notify(u.id, {
@@ -316,4 +334,4 @@ async function enroll(locationId, workflowId, contact) {
   return true;
 }
 
-module.exports = { trigger, resumeWorkflow, logActivity, enroll };
+module.exports = { trigger, resumeWorkflow, logActivity, enroll, nextRoundRobin };

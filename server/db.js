@@ -779,6 +779,19 @@ CREATE INDEX IF NOT EXISTS idx_community_comments_post ON community_comments(pos
 -- Granular per-module permissions for member users (JSON array of allowed module
 -- keys; empty string = full access, keeping existing members unrestricted).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT DEFAULT '';
+-- A/B testing for email campaigns: variant B + a flag; recipients record which
+-- variant they got so open/click rates can be compared.
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS subject_b TEXT DEFAULT '';
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS body_b TEXT DEFAULT '';
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ab_test INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE campaign_recipients ADD COLUMN IF NOT EXISTS variant TEXT DEFAULT '';
+-- Round-robin rotation pointer (keyed per team pool) for fair assignment.
+CREATE TABLE IF NOT EXISTS round_robin_state (
+  key TEXT PRIMARY KEY,
+  idx INTEGER NOT NULL DEFAULT 0
+);
+-- Order bumps / upsells offered on the public payment page (JSON on the invoice).
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS bumps TEXT DEFAULT '';
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -851,7 +864,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 35;
+const SCHEMA_VERSION = 36;
 
 let readyPromise = null;
 function ensureReady() {

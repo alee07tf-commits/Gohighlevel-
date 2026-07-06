@@ -193,6 +193,9 @@ export async function renderPayments(view) {
         <label class="field"><span class="label">${t('Impuesto (%)', 'Tax (%)')}</span><input class="input" id="inv-tax" type="number" step="0.01" min="0" value="0"></label>
         <label class="field"><span class="label">${t('Cupón (opcional)', 'Coupon (optional)')}</span><input class="input" id="inv-coupon" placeholder="VERANO20"></label>
       </div>
+      <label class="field"><span class="label">${t('Order bumps / upsells (opcional) — una por línea: Nombre | Precio', 'Order bumps / upsells (optional) — one per line: Name | Price')}</span>
+        <textarea class="input" id="inv-bumps" rows="2" placeholder="${t('Soporte premium | 30', 'Premium support | 30')}"></textarea>
+        <span class="muted" style="font-size:11px">${t('El cliente podrá añadirlos en la página de pago.', 'The client can add them on the payment page.')}</span></label>
       <div class="modal-actions">
         <button class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
         <button class="btn" id="save">${t('Crear factura', 'Create invoice')}</button>
@@ -257,6 +260,7 @@ export async function renderPayments(view) {
             discount: Number(modal.querySelector('#inv-discount').value) || 0,
             tax_rate: Number(modal.querySelector('#inv-tax').value) || 0,
             coupon_code: modal.querySelector('#inv-coupon').value.trim() || undefined,
+            bumps: modal.querySelector('#inv-bumps').value.split('\n').map((l) => l.split('|')).filter((p) => p[0] && p[0].trim() && p[1]).map((p) => ({ name: p[0].trim(), price: Number(p[1]) || 0 })).filter((b) => b.price > 0),
             items: items.filter((it) => it.name && Number(it.price) > 0),
           },
         });
