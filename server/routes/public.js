@@ -885,6 +885,23 @@ router.get('/pay/:token', async (req, res) => {
   const brand = location.brand_color || '#4f46e5';
   const paid = inv.status === 'paid';
   const justPaid = req.query.paid === '1';
+  let bumps = [];
+  try { bumps = JSON.parse(inv.bumps || '[]'); } catch { bumps = []; }
+  // Order bumps / upsells: optional add-ons the buyer can tick before paying.
+  const bumpsHtml = (!paid && !justPaid && inv.status !== 'void' && inv.kind !== 'quote' && bumps.length)
+    ? `<div style="border:1px dashed ${esc(brand)};border-radius:10px;padding:12px;margin-bottom:14px">
+        <strong style="font-size:.95rem">Añade a tu pedido</strong>
+        ${bumps.map((b, i) => `<label style="display:flex;gap:8px;align-items:center;margin-top:8px;cursor:pointer">
+          <input type="checkbox" name="bump" value="${i}" class="bump-cb" data-price="${Number(b.price) || 0}">
+          <span style="flex:1">${esc(b.name)}${b.description ? ` <span class="muted">— ${esc(b.description)}</span>` : ''}</span>
+          <strong>+${(Number(b.price) || 0).toFixed(2)} ${esc(inv.currency)}</strong></label>`).join('')}
+      </div>`
+    : '';
+  const bumpScript = bumpsHtml ? `<script>
+    (function(){var base=${Number(inv.total)};function upd(){var t=base;document.querySelectorAll('.bump-cb:checked').forEach(function(c){t+=parseFloat(c.dataset.price)||0;});
+    document.querySelectorAll('[data-total]').forEach(function(e){e.textContent=t.toFixed(2)+' ${esc(inv.currency)}';});}
+    document.querySelectorAll('.bump-cb').forEach(function(c){c.addEventListener('change',upd);});})();
+  </script>` : '';
   res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Factura ${esc(inv.number)} — ${esc(location.name)}</title>
 <style>
@@ -923,12 +940,12 @@ ${paid || justPaid
         ? `<form method="post" action="/api/public/pay/${esc(inv.token)}/accept-quote"><button class="btn">✓ Aceptar presupuesto (${inv.total.toFixed(2)} ${esc(inv.currency)})</button></form>
            <p class="muted" style="text-align:center;margin-top:10px">Al aceptarlo se convierte en factura y podrás pagarla.</p>`
         : (await providers.paymentsProvider({ locationId: inv.location_id })) === 'stripe'
-        ? `<form method="post" action="/api/public/pay/${esc(inv.token)}/checkout"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} 💳</button></form>
+        ? `<form method="post" action="/api/public/pay/${esc(inv.token)}/checkout">${bumpsHtml}<button class="btn">Pagar <span data-total>${inv.total.toFixed(2)} ${esc(inv.currency)}</span> 💳</button></form>
            <p class="muted" style="text-align:center;margin-top:10px">Pago seguro procesado por Stripe</p>`
-        : `<form method="post" action="/api/public/pay/${esc(inv.token)}/simulate-paid"><button class="btn">Pagar ${inv.total.toFixed(2)} ${esc(inv.currency)} (modo prueba)</button></form>
+        : `<form method="post" action="/api/public/pay/${esc(inv.token)}/simulate-paid">${bumpsHtml}<button class="btn">Pagar <span data-total>${inv.total.toFixed(2)} ${esc(inv.currency)}</span> (modo prueba)</button></form>
            <p class="muted" style="text-align:center;margin-top:10px">Stripe no está conectado todavía — este botón simula el pago para pruebas.</p>`}
 </div>
-<div class="foot">Powered by Upcro</div></div></body></html>`);
+<div class="foot">Powered by Upcro</div></div>${bumpScript}</body></html>`);
 });
 
 // Quote acceptance: converts the estimate into a payable invoice and
@@ -946,10 +963,30 @@ router.post('/pay/:token/accept-quote', async (req, res) => {
   res.redirect(`/pay/${inv.token}`);
 });
 
-router.post('/pay/:token/checkout', async (req, res) => {
-  const inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
+// Adds the buyer's selected order bumps to the invoice (total + line items)
+// before it is charged, so the settled amount reflects the upsells. Idempotent
+// per request; returns the (possibly unchanged) invoice.
+async function applyBumps(inv, body) {
+  let bumps = [];
+  try { bumps = JSON.parse(inv.bumps || '[]'); } catch { bumps = []; }
+  if (!bumps.length) return inv;
+  let picked = body ? body.bump : undefined;
+  if (picked === undefined) return inv;
+  const idxs = (Array.isArray(picked) ? picked : [picked]).map(Number).filter((n) => bumps[n]);
+  if (!idxs.length) return inv;
+  const add = idxs.reduce((s, i) => s + (Number(bumps[i].price) || 0), 0);
+  const items = JSON.parse(inv.items || '[]');
+  idxs.forEach((i) => items.push({ name: bumps[i].name, qty: 1, price: Number(bumps[i].price) || 0 }));
+  const newTotal = Number((Number(inv.total) + add).toFixed(2));
+  await db.run('UPDATE invoices SET total = ?, items = ?, bumps = ? WHERE id = ?', [newTotal, JSON.stringify(items), '', inv.id]);
+  return db.get('SELECT * FROM invoices WHERE id = ?', [inv.id]);
+}
+
+router.post('/pay/:token/checkout', express.urlencoded({ extended: true }), async (req, res) => {
+  let inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
   if (!inv) return res.status(404).send('Invoice not found');
   if (inv.status === 'paid') return res.redirect(`/pay/${inv.token}`);
+  inv = await applyBumps(inv, req.body);
   const providers = require('../services/providers');
   const base = `${req.protocol}://${req.get('host')}`;
   try {
@@ -964,12 +1001,13 @@ router.post('/pay/:token/checkout', async (req, res) => {
   }
 });
 
-router.post('/pay/:token/simulate-paid', async (req, res) => {
-  const inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
+router.post('/pay/:token/simulate-paid', express.urlencoded({ extended: true }), async (req, res) => {
+  let inv = await db.get('SELECT * FROM invoices WHERE token = ?', [req.params.token]);
   if (!inv) return res.status(404).send('Invoice not found');
   const providers = require('../services/providers');
   if ((await providers.paymentsProvider({ locationId: inv.location_id })) === 'stripe')
     return res.status(400).send('Simulated payments are disabled when Stripe is connected');
+  inv = await applyBumps(inv, req.body);
   await require('./payments').settleInvoice(inv.id, 'simulated');
   res.redirect(`/pay/${inv.token}?paid=1`);
 });

@@ -192,7 +192,9 @@ export async function renderAutomations(view) {
           return `<div class="flex"><input class="input" data-i="${i}" data-k="field" placeholder="${t('campo (email, source, o clave personalizada)', 'field (email, source, or custom key)')}" value="${esc(a.config.field || '')}">
             <input class="input" data-i="${i}" data-k="value" placeholder="${t('nuevo valor — {{first_name}} vale', 'new value — {{first_name}} works')}" value="${esc(a.config.value ?? '')}"></div>`;
         case 'assign_owner':
-          return `<select class="input" data-i="${i}" data-k="user_id"><option value="">${t('— sin asignar —', '— unassigned —')}</option>${team.map((u) => `<option value="${u.id}" ${Number(a.config.user_id) === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
+          return `<select class="input" data-i="${i}" data-k="user_id"><option value="">${t('— sin asignar —', '— unassigned —')}</option>
+            <option value="__rr__" ${a.config.round_robin ? 'selected' : ''}>🔁 ${t('Repartir entre el equipo (round-robin)', 'Round-robin across the team')}</option>
+            ${team.map((u) => `<option value="${u.id}" ${!a.config.round_robin && Number(a.config.user_id) === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
         case 'set_dnd':
           return `<div class="flex"><select class="input" data-i="${i}" data-k="scope">${[['all', t('Todo', 'All')], ['email', 'Email'], ['sms', 'SMS']].map(([v, l]) => `<option value="${v}" ${a.config.scope === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
             <select class="input" data-i="${i}" data-k="value"><option value="1" ${a.config.value ? 'selected' : ''}>${t('Activar', 'Enable')}</option><option value="" ${!a.config.value ? 'selected' : ''}>${t('Quitar', 'Disable')}</option></select></div>`;
@@ -302,7 +304,13 @@ export async function renderAutomations(view) {
         trigger_config: triggerSel.value === 'tag_added' && modal.querySelector('#wf-trigger-tag').value
           ? { tag: modal.querySelector('#wf-trigger-tag').value.trim() }
           : {},
-        actions: actions.map((a) => ({ type: a.type, config: a.config })),
+        actions: actions.map((a) => {
+          // assign_owner with the round-robin sentinel → rotate across the team.
+          if (a.type === 'assign_owner' && a.config.user_id === '__rr__') {
+            return { type: a.type, config: { round_robin: true, user_ids: team.map((u) => u.id) } };
+          }
+          return { type: a.type, config: a.config };
+        }),
       };
       try {
         if (wf) await api(`/workflows/${wf.id}`, { method: 'PUT', body });

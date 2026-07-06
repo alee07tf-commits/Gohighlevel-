@@ -153,6 +153,11 @@ export async function renderMarketing(view) {
         <label class="field"><span class="label">${t('Mensaje', 'Message')}
           <button type="button" class="btn secondary small" id="ai-gen" style="margin-left:8px">${t('Generar con IA', 'Generate with AI')}</button></span>
           <textarea class="input" name="body" rows="7" required placeholder="${t('Hola {{first_name}}, …', 'Hi {{first_name}}, …')}"></textarea></label>
+        <label class="flex" id="ab-toggle" style="gap:6px;margin:4px 0"><input type="checkbox" name="ab_test" id="ab-cb"> <strong style="font-size:13px">${t('Prueba A/B (email)', 'A/B test (email)')}</strong> <span class="muted" style="font-size:11px">${t('— envía 2 versiones y compara aperturas', '— send 2 versions and compare opens')}</span></label>
+        <div id="ab-fields" style="display:none;border-left:3px solid var(--primary);padding-left:10px">
+          <label class="field"><span class="label">${t('Asunto (versión B)', 'Subject (variant B)')}</span><input class="input" name="subject_b"></label>
+          <label class="field"><span class="label">${t('Mensaje (versión B)', 'Message (variant B)')}</span><textarea class="input" name="body_b" rows="5" placeholder="${t('Versión alternativa…', 'Alternative version…')}"></textarea></label>
+        </div>
         <label class="field"><span class="label">${t('Programar envío (opcional)', 'Schedule send (optional)')}</span>
           <input class="input" name="send_at" type="datetime-local">
           <span class="muted" style="font-size:11px">${t('Déjalo vacío para guardar como borrador y enviar manualmente.', 'Leave empty to save as a draft and send manually.')}</span></label>
@@ -163,7 +168,13 @@ export async function renderMarketing(view) {
       </form>`);
     modal.querySelector('#cancel').addEventListener('click', closeOverlay);
     modal.querySelector('#channel-sel').addEventListener('change', (e) => {
-      modal.querySelector('#subject-field').style.display = e.target.value === 'email' ? 'block' : 'none';
+      const isEmail = e.target.value === 'email';
+      modal.querySelector('#subject-field').style.display = isEmail ? 'block' : 'none';
+      modal.querySelector('#ab-toggle').style.display = isEmail ? 'flex' : 'none';
+      if (!isEmail) { modal.querySelector('#ab-cb').checked = false; modal.querySelector('#ab-fields').style.display = 'none'; }
+    });
+    modal.querySelector('#ab-cb').addEventListener('change', (e) => {
+      modal.querySelector('#ab-fields').style.display = e.target.checked ? 'block' : 'none';
     });
     modal.querySelector('#ai-gen').addEventListener('click', async () => {
       const desc = prompt(t('Describe la campaña (ej: "promo 20% blanqueamiento dental este mes, urgencia, cita gratis"):', 'Describe the campaign (e.g. "20% off teeth whitening this month, urgency, free appointment"):'));

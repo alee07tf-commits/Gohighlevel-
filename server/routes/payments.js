@@ -80,8 +80,8 @@ router.post('/', async (req, res) => {
   const tax = Math.max(0, Number(tax_rate) || 0);
   const total = Math.max(0, (subtotal - disc)) * (1 + tax / 100);
   const id = await db.insert(
-    `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, due_date, token, kind, recurring, discount, tax_rate)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO invoices (location_id, contact_id, number, title, items, currency, total, due_date, token, kind, recurring, discount, tax_rate, bumps)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       req.location.id,
       contact_id || null,
@@ -95,6 +95,9 @@ router.post('/', async (req, res) => {
       kind === 'quote' ? 'quote' : 'invoice',
       recurring === 'monthly' ? 'monthly' : '',
       disc, tax,
+      Array.isArray(req.body?.bumps) && req.body.bumps.length
+        ? JSON.stringify(req.body.bumps.map((b) => ({ name: String(b.name || '').slice(0, 120), price: Number(b.price) || 0, description: String(b.description || '').slice(0, 160) })).filter((b) => b.name && b.price > 0))
+        : '',
     ]
   );
   if (redeemCoupon) await require('../services/coupons').redeem(redeemCoupon);
