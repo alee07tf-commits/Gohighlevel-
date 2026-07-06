@@ -1,6 +1,7 @@
-import { api } from '../api.js';
+import { api, state } from '../api.js';
 import { esc, openModal, closeOverlay, formData, toast, fmtDate } from '../ui.js';
 import { t } from '../i18n.js';
+import { openEmailBuilder } from '../email-builder.js';
 
 export async function renderMarketing(view) {
   const [templates, campaigns, tags, links] = await Promise.all([
@@ -94,29 +95,12 @@ export async function renderMarketing(view) {
   </div>`;
 
   function templateModal(tpl = null) {
-    const modal = openModal(`
-      <h2>${tpl ? t('Editar plantilla de Email', 'Edit Email Template') : t('Nueva plantilla de Email', 'New Email Template')}</h2>
-      <form id="tpl-form">
-        <label class="field"><span class="label">${t('Nombre', 'Name')}</span><input class="input" name="name" required value="${esc(tpl?.name || '')}"></label>
-        <label class="field"><span class="label">${t('Asunto', 'Subject')}</span><input class="input" name="subject" value="${esc(tpl?.subject || '')}"></label>
-        <label class="field"><span class="label">${t('Cuerpo', 'Body')}</span><textarea class="input" name="body" rows="8">${esc(tpl?.body || '')}</textarea></label>
-        <div class="modal-actions">
-          <button type="button" class="btn secondary" id="cancel">${t('Cancelar', 'Cancel')}</button>
-          <button class="btn">${t('Guardar', 'Save')}</button>
-        </div>
-      </form>`);
-    modal.querySelector('#cancel').addEventListener('click', closeOverlay);
-    modal.querySelector('#tpl-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      try {
-        if (tpl) await api(`/marketing/templates/${tpl.id}`, { method: 'PUT', body: formData(e.target) });
-        else await api('/marketing/templates', { method: 'POST', body: formData(e.target) });
-        closeOverlay();
-        renderMarketing(view);
-      } catch (err) {
-        toast(err.message, true);
-      }
-    });
+    const brand = (state.agency && state.agency.brand_color) || '#4f46e5';
+    openEmailBuilder(tpl, async (payload) => {
+      if (tpl) await api(`/marketing/templates/${tpl.id}`, { method: 'PUT', body: payload });
+      else await api('/marketing/templates', { method: 'POST', body: payload });
+      renderMarketing(view);
+    }, brand);
   }
 
   view.querySelector('#tl-add').addEventListener('click', async () => {

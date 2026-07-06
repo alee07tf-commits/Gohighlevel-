@@ -12,13 +12,14 @@ router.get('/templates', async (req, res) => {
 });
 
 router.post('/templates', async (req, res) => {
-  const { name, subject, body } = req.body || {};
+  const { name, subject, body, design } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });
-  const id = await db.insert('INSERT INTO email_templates (location_id, name, subject, body) VALUES (?, ?, ?, ?)', [
+  const id = await db.insert('INSERT INTO email_templates (location_id, name, subject, body, design) VALUES (?, ?, ?, ?, ?)', [
     req.location.id,
     name,
     subject || '',
     body || '',
+    typeof design === 'string' ? design : (design ? JSON.stringify(design) : ''),
   ]);
   res.status(201).json(await db.get('SELECT * FROM email_templates WHERE id = ?', [id]));
 });
@@ -30,10 +31,14 @@ router.put('/templates/:id', async (req, res) => {
   ]);
   if (!tpl) return res.status(404).json({ error: 'Template not found' });
   const merged = { ...tpl, ...req.body };
-  await db.run('UPDATE email_templates SET name=?, subject=?, body=? WHERE id=?', [
+  const design = req.body?.design !== undefined
+    ? (typeof req.body.design === 'string' ? req.body.design : JSON.stringify(req.body.design))
+    : tpl.design;
+  await db.run('UPDATE email_templates SET name=?, subject=?, body=?, design=? WHERE id=?', [
     merged.name,
     merged.subject,
     merged.body,
+    design,
     tpl.id,
   ]);
   res.json(await db.get('SELECT * FROM email_templates WHERE id = ?', [tpl.id]));
