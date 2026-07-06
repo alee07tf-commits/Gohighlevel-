@@ -758,6 +758,24 @@ CREATE TABLE IF NOT EXISTS course_enrollments (
   enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, course_id)
 );
+-- Community: an agency-level feed where the team and clients post and comment.
+CREATE TABLE IF NOT EXISTS community_posts (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_community_posts_agency ON community_posts(agency_id);
+CREATE TABLE IF NOT EXISTS community_comments (
+  id SERIAL PRIMARY KEY,
+  post_id INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  body TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_community_comments_post ON community_comments(post_id);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -830,7 +848,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 33;
+const SCHEMA_VERSION = 34;
 
 let readyPromise = null;
 function ensureReady() {

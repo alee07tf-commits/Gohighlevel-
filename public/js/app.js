@@ -24,6 +24,7 @@ import { renderDevelopers } from './views/developers.js';
 import { renderMarketplace } from './views/marketplace.js';
 import { renderDocuments } from './views/documents.js';
 import { renderSurveys } from './views/surveys.js';
+import { renderCommunity } from './views/community.js';
 
 const IC = {
   dashboard: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -48,6 +49,7 @@ const IC = {
   marketplace: '<svg viewBox="0 0 24 24"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M3 9h18"/><path d="M9 20v-6h6v6"/></svg>',
   documents: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15c1 1 2 1 3 0s2-1 3 0"/></svg>',
   surveys: '<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  community: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
 };
 
 function navSections() {
@@ -55,7 +57,7 @@ function navSections() {
   return [
     { title: t('Workspace', 'Workspace'), items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
     { title: t('Crecimiento', 'Growth'), items: ['prospecting', 'marketing', 'funnels', 'forms', 'surveys', 'automations', 'payments', 'documents', 'reputation', 'analytics'] },
-    { title: t('Formación', 'Training'), items: ['training'] },
+    { title: t('Formación', 'Training'), items: ['training', 'community'] },
     // The agency layer is admin-only: "Clientes" manages the agencies below you
     // in the tenant tree; the agency console is SaaS/cross-account/white-label.
     { title: t('Cuenta', 'Account'), items: ['marketplace', ...(isAdmin ? ['clients', 'agency', 'developers'] : []), 'settings'] },
@@ -82,6 +84,7 @@ const NAV = [
   { path: 'clients', label: () => t('Clientes', 'Clients'), view: renderClients },
   { path: 'agency', label: () => t('Agencia', 'Agency'), view: renderAgency },
   { path: 'training', label: () => t('Formación', 'Training'), view: renderTraining },
+  { path: 'community', label: () => t('Comunidad', 'Community'), view: renderCommunity },
   { path: 'analytics', label: () => t('Informes', 'Analytics'), view: renderAnalytics },
   { path: 'developers', label: () => t('API y Webhooks', 'API & Webhooks'), view: renderDevelopers },
   { path: 'marketplace', label: () => t('Marketplace', 'Marketplace'), view: renderMarketplace },
