@@ -748,6 +748,16 @@ CREATE TABLE IF NOT EXISTS survey_responses (
 CREATE INDEX IF NOT EXISTS idx_survey_responses_survey ON survey_responses(survey_id);
 -- Visual (block-based) email designs; the body column keeps rendered HTML for sending.
 ALTER TABLE email_templates ADD COLUMN IF NOT EXISTS design TEXT DEFAULT '';
+-- Courses: quizzes, drip scheduling and completion certificates.
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS quiz TEXT DEFAULT '';
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS drip_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS certificate INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS course_enrollments (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, course_id)
+);
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -820,7 +830,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 32;
+const SCHEMA_VERSION = 33;
 
 let readyPromise = null;
 function ensureReady() {
