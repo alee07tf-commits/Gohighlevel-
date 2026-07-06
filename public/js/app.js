@@ -52,16 +52,32 @@ const IC = {
   community: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
 };
 
+// Parsed set of module keys a member is allowed to access (empty = full access).
+function allowedModules() {
+  if (state.user?.role !== 'member') return null; // admins: unrestricted
+  let arr = [];
+  try { arr = state.user.permissions ? JSON.parse(state.user.permissions) : []; } catch { arr = []; }
+  return Array.isArray(arr) && arr.length ? new Set(arr) : null;
+}
+// dashboard + settings are always available so a member always has a landing.
+const ALWAYS_ALLOWED = new Set(['dashboard', 'settings']);
+function canAccess(navKey) {
+  const allowed = allowedModules();
+  if (!allowed) return true;
+  return ALWAYS_ALLOWED.has(navKey) || allowed.has(navKey);
+}
+
 function navSections() {
   const isAdmin = state.user?.role === 'admin';
+  const filter = (items) => items.filter(canAccess);
   return [
-    { title: t('Workspace', 'Workspace'), items: ['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks'] },
-    { title: t('Crecimiento', 'Growth'), items: ['prospecting', 'marketing', 'funnels', 'forms', 'surveys', 'automations', 'payments', 'documents', 'reputation', 'analytics'] },
-    { title: t('Formación', 'Training'), items: ['training', 'community'] },
+    { title: t('Workspace', 'Workspace'), items: filter(['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks']) },
+    { title: t('Crecimiento', 'Growth'), items: filter(['prospecting', 'marketing', 'funnels', 'forms', 'surveys', 'automations', 'payments', 'documents', 'reputation', 'analytics']) },
+    { title: t('Formación', 'Training'), items: filter(['training', 'community']) },
     // The agency layer is admin-only: "Clientes" manages the agencies below you
     // in the tenant tree; the agency console is SaaS/cross-account/white-label.
-    { title: t('Cuenta', 'Account'), items: ['marketplace', ...(isAdmin ? ['clients', 'agency', 'developers'] : []), 'settings'] },
-  ];
+    { title: t('Cuenta', 'Account'), items: filter(['marketplace', ...(isAdmin ? ['clients', 'agency', 'developers'] : []), 'settings']) },
+  ].filter((s) => s.items.length);
 }
 
 // Labels are functions so they re-evaluate in the active language on each render.
@@ -294,7 +310,9 @@ async function route() {
     }
   }
 
-  const nav = NAV.find((n) => n.path === path) || NAV[0];
+  let nav = NAV.find((n) => n.path === path) || NAV[0];
+  // Permission guard: a member reaching a disallowed module lands on the dashboard.
+  if (!canAccess(nav.path)) { location.hash = '#/dashboard'; return; }
   const view = renderShell(nav.path);
   try {
     await nav.view(view, rest);

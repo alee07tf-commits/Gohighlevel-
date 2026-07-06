@@ -776,6 +776,9 @@ CREATE TABLE IF NOT EXISTS community_comments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_community_comments_post ON community_comments(post_id);
+-- Granular per-module permissions for member users (JSON array of allowed module
+-- keys; empty string = full access, keeping existing members unrestricted).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT DEFAULT '';
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -848,7 +851,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 34;
+const SCHEMA_VERSION = 35;
 
 let readyPromise = null;
 function ensureReady() {
