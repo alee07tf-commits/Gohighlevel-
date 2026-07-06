@@ -41,10 +41,14 @@ Idioma del producto: **español primero** (con EN vía i18n). El usuario habla e
 - **Launch-readiness**: `middleware/security.js` (cabeceras + rate limiter sin deps), aplicado global y en login/register/forgot/reset. Recuperar contraseña: tabla `password_resets`, `/api/auth/forgot` + `/reset`, vistas `renderForgot`/`renderReset` (#/forgot, #/reset/:token). Legal RGPD: `/legal/privacidad|terminos|cookies` en public.js + banner de cookies en `index.html` (env `COMPANY_NAME`/`COMPANY_EMAIL`).
 - **Encuestas (Surveys)**: tablas `surveys` + `survey_responses`, `routes/surveys.js`, página pública `/s/:slug` con lógica condicional en `public.js`, vista `surveys.js` (nav Crecimiento). Mapeo de preguntas a nombre/email/teléfono → captura lead.
 
-SCHEMA_VERSION = **31**. Tests = **207**. Prefijos públicos en index.js: …`/sign`, `/legal`, `/s`.
+SCHEMA_VERSION = **35**. Tests = **224**. Prefijos públicos en index.js: …`/sign`, `/legal`, `/s`.
 
-### Pendiente (roadmap, ver §6) — el usuario eligió: builder visual AL FINAL, y primero lanzar (ya hecho)
-Quizzes/drip/certificados en cursos · Comunidades · Permisos granulares (enforcement) · y el grande final: **builder visual drag-and-drop** + email builder visual.
+Añadido después: **email builder visual** (drag-and-drop, `public/js/email-builder.js`, columna `email_templates.design`) · **automations builder visual** (flujo drag-and-drop de pasos en `automations.js`) · **cursos con quiz/drip/certificados** (`lessons.quiz/drip_days`, `courses.certificate`, `course_enrollments`, endpoints quiz + `/courses/:id/certificate`) · **Comunidad** (`community_posts`/`community_comments`, `routes/community.js`, `views/community.js`) · **permisos granulares por módulo** (`users.permissions`, enforcement en `requireAuth` vía `MODULE_BY_BASE`, UI en Ajustes).
+
+### Pendiente real (todo lo "sin claves" ya está hecho)
+- **Necesita claves/servicios externos:** sync Google/Outlook Calendar bidireccional, reseñas Google Business Profile, Social Planner, reporting Google/FB Ads, Google Sheets, call tracking / Voice AI, WhatsApp Business API directa, dominios custom.
+- **Producto puro que aún NO está:** A/B testing de emails, round-robin de asignación, order bumps/upsells en checkout, **builder web drag-and-drop libre** (el usuario lo aparcó), app móvil nativa (la PWA cubre ~80%).
+- El builder web drag-and-drop libre está DESCARTADO por el usuario de momento.
 
 ---
 
