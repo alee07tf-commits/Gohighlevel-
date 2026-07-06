@@ -746,6 +746,8 @@ CREATE TABLE IF NOT EXISTS survey_responses (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_survey_responses_survey ON survey_responses(survey_id);
+-- Visual (block-based) email designs; the body column keeps rendered HTML for sending.
+ALTER TABLE email_templates ADD COLUMN IF NOT EXISTS design TEXT DEFAULT '';
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -818,7 +820,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 31;
+const SCHEMA_VERSION = 32;
 
 let readyPromise = null;
 function ensureReady() {
