@@ -208,16 +208,43 @@ export async function renderAutomations(view) {
     }
     function renderActions() {
       listEl.innerHTML = actions.length
-        ? actions
+        ? `<div class="wf-flow"><div class="wf-trigger">▶ ${t('Al dispararse el flujo', 'When the workflow fires')}</div>` +
+          actions
             .map(
-              (a, i) => `<div class="block-item">
-                <div class="b-head"><span>${i + 1}. ${ACTION_LABELS[a.type]}</span>
-                  <button type="button" class="btn ghost small rm-action" data-i="${i}">✕</button></div>
+              (a, i) => `<div class="wf-conn"></div>
+              <div class="wf-step" draggable="true" data-i="${i}">
+                <div class="b-head"><span class="wf-grip" title="${t('Arrastra para reordenar', 'Drag to reorder')}">⋮⋮ ${i + 1}. ${ACTION_LABELS[a.type]}</span>
+                  <span style="display:flex;gap:2px">
+                    <button type="button" class="btn ghost small mv-up" data-i="${i}" title="↑">↑</button>
+                    <button type="button" class="btn ghost small mv-down" data-i="${i}" title="↓">↓</button>
+                    <button type="button" class="btn ghost small rm-action" data-i="${i}">✕</button></span></div>
                 ${actionFields(a, i)}
               </div>`
             )
-            .join('')
+            .join('') + '</div>'
         : `<p class="muted">${t('Aún no hay acciones — añade al menos una abajo.', 'No actions yet — add at least one below.')}</p>`;
+      // Drag-and-drop reorder of steps.
+      let dragFrom = null;
+      listEl.querySelectorAll('.wf-step').forEach((el) => {
+        el.addEventListener('dragstart', (e) => {
+          // Only start a reorder from the header/grip, not while editing a field.
+          if (e.target.closest('input, textarea, select')) { e.preventDefault(); return; }
+          dragFrom = Number(el.dataset.i); el.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move';
+        });
+        el.addEventListener('dragend', () => el.classList.remove('dragging'));
+        el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('wf-over'); });
+        el.addEventListener('dragleave', () => el.classList.remove('wf-over'));
+        el.addEventListener('drop', (e) => {
+          e.preventDefault();
+          const to = Number(el.dataset.i);
+          if (dragFrom === null || dragFrom === to) return;
+          const [m] = actions.splice(dragFrom, 1); actions.splice(to, 0, m);
+          dragFrom = null; renderActions();
+        });
+      });
+      const move = (i, d) => { const j = i + d; if (j < 0 || j >= actions.length) return; [actions[i], actions[j]] = [actions[j], actions[i]]; renderActions(); };
+      listEl.querySelectorAll('.mv-up').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.i), -1)));
+      listEl.querySelectorAll('.mv-down').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.i), 1)));
       listEl.querySelectorAll('.rm-action').forEach((b) =>
         b.addEventListener('click', () => {
           actions.splice(Number(b.dataset.i), 1);

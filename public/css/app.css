@@ -462,3 +462,13 @@ code.inline { background: #f0f1f6; padding: 2px 7px; border-radius: 6px; font-si
 .eb-block:hover .eb-block-tools, .eb-block.sel .eb-block-tools { display: flex; }
 .eb-block-tools button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-size: 13px; }
 @media (max-width: 720px){ .eb-palette { width: 160px; } }
+
+/* Visual workflow flow (drag-and-drop steps). */
+.wf-flow { display: flex; flex-direction: column; align-items: stretch; }
+.wf-trigger { align-self: center; background: var(--primary, #4f46e5); color: #fff; font-weight: 600; font-size: 13px; padding: 8px 16px; border-radius: 20px; }
+.wf-conn { width: 2px; height: 16px; background: var(--border, #cbd5e1); align-self: center; }
+.wf-step { border: 1px solid var(--border); border-radius: 10px; background: #fff; padding: 10px 12px; }
+.wf-step.dragging { opacity: .4; }
+.wf-step.wf-over { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft, #eef2ff); }
+.wf-grip { cursor: grab; user-select: none; font-weight: 600; }
+.wf-step:active .wf-grip { cursor: grabbing; }
