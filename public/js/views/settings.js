@@ -207,7 +207,8 @@ export async function renderSettings(view) {
               <div style="flex:1"><strong>${esc(u.name)}</strong>
                 <div class="muted" style="font-size:12px">${esc(u.email)}</div></div>
               <span class="badge ${u.role === 'admin' ? 'indigo' : 'gray'}">${u.role === 'admin' ? t('admin', 'admin') : t('miembro', 'member')}</span>
-              ${u.role !== 'admin' ? `<button class="btn secondary small assign-user" data-id="${u.id}" data-name="${esc(u.name)}">${t('Sub-cuentas', 'Sub-accounts')}</button>` : ''}
+              ${u.role !== 'admin' ? `<button class="btn secondary small assign-user" data-id="${u.id}" data-name="${esc(u.name)}">${t('Sub-cuentas', 'Sub-accounts')}</button>
+                <button class="btn secondary small perm-user" data-id="${u.id}" data-name="${esc(u.name)}">${t('Permisos', 'Permissions')}</button>` : ''}
               ${u.id !== state.user.id ? `<button class="btn ghost small del-user" data-id="${u.id}">✕</button>` : ''}
             </div>`
           )
@@ -498,6 +499,35 @@ export async function renderSettings(view) {
         await api(`/locations/team/users/${b.dataset.id}/locations`, { method: 'PUT', body: { location_ids: ids } });
         document.getElementById('modal-root').innerHTML = '';
         toast(t('Acceso actualizado', 'Access updated'));
+      });
+    })
+  );
+  const MODULE_LABELS = {
+    contacts: t('Contactos', 'Contacts'), conversations: t('Conversaciones', 'Conversations'), pipelines: t('Oportunidades', 'Opportunities'),
+    calendar: t('Calendario', 'Calendar'), tasks: t('Tareas', 'Tasks'), prospecting: t('Prospección', 'Prospecting'),
+    marketing: 'Marketing', funnels: t('Sitios y Embudos', 'Sites & Funnels'), forms: t('Formularios', 'Forms'), surveys: t('Encuestas', 'Surveys'),
+    automations: t('Automatizaciones', 'Automations'), payments: t('Pagos', 'Payments'), documents: t('Documentos', 'Documents'),
+    reputation: t('Reputación', 'Reputation'), analytics: t('Informes', 'Analytics'), training: t('Formación', 'Training'),
+    community: t('Comunidad', 'Community'), marketplace: 'Marketplace',
+  };
+  view.querySelectorAll('.perm-user').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const { modules, allowed } = await api(`/locations/team/users/${b.dataset.id}/permissions`);
+      const modal = openModal(`
+        <h2>${t(`Permisos de ${esc(b.dataset.name)}`, `Permissions for ${esc(b.dataset.name)}`)}</h2>
+        <p class="muted" style="margin-bottom:10px">${t('Sin marcar ninguno, el miembro accede a TODOS los módulos. Marcando algunos, solo verá esos (Panel y Ajustes siempre disponibles).', 'With none checked, the member accesses ALL modules. Checking some limits them to those (Dashboard and Settings are always available).')}</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;max-height:50vh;overflow:auto">
+          ${modules.map((m) => `<label class="flex" style="margin:4px 0"><input type="checkbox" class="pm-cb" value="${m}" ${allowed.includes(m) ? 'checked' : ''}> ${esc(MODULE_LABELS[m] || m)}</label>`).join('')}
+        </div>
+        <div class="modal-actions">
+          <button class="btn secondary" onclick="document.getElementById('modal-root').innerHTML=''">${t('Cancelar', 'Cancel')}</button>
+          <button class="btn" id="pm-save">${t('Guardar permisos', 'Save permissions')}</button>
+        </div>`);
+      modal.querySelector('#pm-save').addEventListener('click', async () => {
+        const picked = [...modal.querySelectorAll('.pm-cb:checked')].map((cb) => cb.value);
+        await api(`/locations/team/users/${b.dataset.id}/permissions`, { method: 'PUT', body: { allowed: picked } });
+        document.getElementById('modal-root').innerHTML = '';
+        toast(t('Permisos actualizados', 'Permissions updated'));
       });
     })
   );

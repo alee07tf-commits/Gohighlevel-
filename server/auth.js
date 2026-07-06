@@ -5,6 +5,20 @@ const db = require('./db');
 const JWT_SECRET = process.env.JWT_SECRET || 'upcro-dev-secret-change-me';
 const API_KEY_PREFIX = 'lf_';
 
+// Maps an API mount path to the nav module key used in per-user permissions.
+// Endpoints not listed here are always allowed (infra: auth, locations,
+// notifications, custom fields/values, settings, billing, etc.).
+const MODULE_BY_BASE = {
+  '/api/contacts': 'contacts', '/api/conversations': 'conversations', '/api/pipelines': 'pipelines',
+  '/api/calendars': 'calendar', '/api/marketing': 'marketing', '/api/workflows': 'automations',
+  '/api/funnels': 'funnels', '/api/forms': 'forms', '/api/surveys': 'surveys', '/api/payments': 'payments',
+  '/api/documents': 'documents', '/api/prospecting': 'prospecting', '/api/reputation': 'reputation',
+  '/api/tasks': 'tasks', '/api/training': 'training', '/api/community': 'community', '/api/analytics': 'analytics',
+  '/api/apps': 'marketplace',
+};
+// The set of gated module keys, exposed so the team UI can offer them.
+const PERMISSION_MODULES = [...new Set(Object.values(MODULE_BY_BASE))];
+
 // Public API keys: a random secret shown once, stored only as a SHA-256 hash.
 function generateApiKey() {
   const key = API_KEY_PREFIX + crypto.randomBytes(24).toString('hex');
@@ -75,8 +89,20 @@ async function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const user = await db.get('SELECT id, agency_id, name, email, role FROM users WHERE id = ?', [payload.id]);
+    const user = await db.get('SELECT id, agency_id, name, email, role, permissions FROM users WHERE id = ?', [payload.id]);
     if (!user) return res.status(401).json({ error: 'User not found' });
+
+    // Granular per-module permissions (members only; empty = full access).
+    if (user.role === 'member' && user.permissions) {
+      let allowed = [];
+      try { allowed = JSON.parse(user.permissions); } catch { allowed = []; }
+      if (Array.isArray(allowed) && allowed.length) {
+        const mod = MODULE_BY_BASE[req.baseUrl];
+        if (mod && !allowed.includes(mod)) {
+          return res.status(403).json({ error: 'No tienes acceso a este módulo' });
+        }
+      }
+    }
 
     // Home agency = the tenant the user belongs to. Effective agency = the one
     // this request operates on (may be a descendant when drilling into a client).
@@ -123,4 +149,4 @@ async function requireLocation(req, res, next) {
   next();
 }
 
-module.exports = { signToken, requireAuth, requireLocation, ancestorIds, isInSubtree, generateApiKey, hashKey, JWT_SECRET };
+module.exports = { signToken, requireAuth, requireLocation, ancestorIds, isInSubtree, generateApiKey, hashKey, JWT_SECRET, PERMISSION_MODULES };

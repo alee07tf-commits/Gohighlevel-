@@ -108,4 +108,27 @@ router.put('/team/users/:id/locations', async (req, res) => {
   res.json({ ok: true, location_ids: ids });
 });
 
+// ---- Granular module permissions for a member (empty list = full access) ----
+const { PERMISSION_MODULES } = require('../auth');
+
+router.get('/team/users/:id/permissions', async (req, res) => {
+  const target = await db.get('SELECT permissions FROM users WHERE id = ? AND agency_id = ?', [req.params.id, req.user.agency_id]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  let allowed = [];
+  try { allowed = target.permissions ? JSON.parse(target.permissions) : []; } catch { allowed = []; }
+  res.json({ modules: PERMISSION_MODULES, allowed });
+});
+
+router.put('/team/users/:id/permissions', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
+  const target = await db.get('SELECT * FROM users WHERE id = ? AND agency_id = ?', [req.params.id, req.user.agency_id]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  // Keep only known module keys; an empty array clears restrictions (full access).
+  const allowed = Array.isArray(req.body?.allowed)
+    ? [...new Set(req.body.allowed.filter((m) => PERMISSION_MODULES.includes(m)))]
+    : [];
+  await db.run('UPDATE users SET permissions = ? WHERE id = ?', [allowed.length ? JSON.stringify(allowed) : '', target.id]);
+  res.json({ ok: true, allowed });
+});
+
 module.exports = router;

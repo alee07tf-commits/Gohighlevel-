@@ -62,6 +62,7 @@ app.use('/api/billing', require('./routes/billing'));
 app.use('/api/agency', require('./routes/agency'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/training', require('./routes/training'));
+app.use('/api/community', require('./routes/community'));
 app.use('/api/reputation', require('./routes/reputation'));
 app.use('/api/snapshots', require('./routes/snapshots'));
 app.use('/api/prospecting', require('./routes/prospecting'));

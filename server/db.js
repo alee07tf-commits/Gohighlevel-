@@ -748,6 +748,37 @@ CREATE TABLE IF NOT EXISTS survey_responses (
 CREATE INDEX IF NOT EXISTS idx_survey_responses_survey ON survey_responses(survey_id);
 -- Visual (block-based) email designs; the body column keeps rendered HTML for sending.
 ALTER TABLE email_templates ADD COLUMN IF NOT EXISTS design TEXT DEFAULT '';
+-- Courses: quizzes, drip scheduling and completion certificates.
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS quiz TEXT DEFAULT '';
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS drip_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS certificate INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS course_enrollments (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, course_id)
+);
+-- Community: an agency-level feed where the team and clients post and comment.
+CREATE TABLE IF NOT EXISTS community_posts (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_community_posts_agency ON community_posts(agency_id);
+CREATE TABLE IF NOT EXISTS community_comments (
+  id SERIAL PRIMARY KEY,
+  post_id INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  body TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_community_comments_post ON community_comments(post_id);
+-- Granular per-module permissions for member users (JSON array of allowed module
+-- keys; empty string = full access, keeping existing members unrestricted).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT DEFAULT '';
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -820,7 +851,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 32;
+const SCHEMA_VERSION = 35;
 
 let readyPromise = null;
 function ensureReady() {
