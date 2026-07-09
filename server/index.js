@@ -65,7 +65,6 @@ app.use('/api/training', require('./routes/training'));
 app.use('/api/community', require('./routes/community'));
 app.use('/api/reputation', require('./routes/reputation'));
 app.use('/api/snapshots', require('./routes/snapshots'));
-app.use('/api/prospecting', require('./routes/prospecting'));
 app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/public', require('./routes/public'));

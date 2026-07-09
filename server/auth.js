@@ -12,7 +12,7 @@ const MODULE_BY_BASE = {
   '/api/contacts': 'contacts', '/api/conversations': 'conversations', '/api/pipelines': 'pipelines',
   '/api/calendars': 'calendar', '/api/marketing': 'marketing', '/api/workflows': 'automations',
   '/api/funnels': 'funnels', '/api/forms': 'forms', '/api/surveys': 'surveys', '/api/payments': 'payments',
-  '/api/documents': 'documents', '/api/prospecting': 'prospecting', '/api/reputation': 'reputation',
+  '/api/documents': 'documents', '/api/reputation': 'reputation',
   '/api/tasks': 'tasks', '/api/training': 'training', '/api/community': 'community', '/api/analytics': 'analytics',
   '/api/apps': 'marketplace',
 };

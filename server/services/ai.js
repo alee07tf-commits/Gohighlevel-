@@ -97,7 +97,9 @@ async function reportNarrative(locationName, stats, periodDays, ctx) {
 // Returns { name, theme, blocks } using the SAME block schema the visual
 // editor understands, so everything the AI produces stays fully editable.
 const BLOCK_SCHEMA = `Bloques permitidos (array "blocks", en este orden logico aunque puedes variar):
-- {"type":"hero","headline":str,"subheadline":str,"cta":str}
+- {"type":"hero","headline":str,"subheadline":str,"cta":str,"badge":str opcional,"image_keywords":str opcional (2-3 palabras EN INGLES para foto de fondo, ej "dental clinic smile")}
+- {"type":"split","headline":str,"body":str,"cta":str opcional,"side":"left"|"right","image_keywords":str (2-3 palabras EN INGLES)} — seccion texto+imagen a dos columnas, alterna side entre splits
+- {"type":"image","image_keywords":str (EN INGLES),"caption":str opcional} — foto a ancho completo
 - {"type":"text","headline":str,"body":str}
 - {"type":"features","headline":str,"items":[{"title":str,"body":str}] (3 items)}
 - {"type":"testimonials","headline":str,"items":[{"name":str,"text":str}] (2-3 items)}
@@ -105,16 +107,20 @@ const BLOCK_SCHEMA = `Bloques permitidos (array "blocks", en este orden logico a
 - {"type":"faq","headline":str,"items":[{"q":str,"a":str}] (3-4 items)}
 - {"type":"cta","headline":str,"body":str,"button":str}
 - {"type":"form","headline":str,"button":str,"fields":["first_name","email","phone"],"success_message":str,"tag":str}
+En cualquier bloque puedes usar "image" con una URL https directa si el usuario te la da (tiene prioridad sobre image_keywords).
 Temas permitidos ("theme"): "clean" | "bold" | "warm" | "elegant".`;
 
 function fallbackFunnelDesign({ business, offer, goal }) {
   const biz = business || 'tu negocio';
   const off = offer || 'nuestra oferta especial';
+  // Keyword for the hero/split photos: strip stopwords from the business text.
+  const kw = String(biz).toLowerCase().split(/\s+/).filter((w) => w.length > 3 && !['para', 'como', 'este', 'esta'].includes(w)).slice(0, 2).join(' ') || 'business team';
   return {
     name: off.slice(0, 60),
     theme: 'clean',
     blocks: [
-      { type: 'hero', headline: off, subheadline: `${biz} — resultados reales, sin complicaciones. Plazas limitadas este mes.`, cta: 'Quiero mi plaza' },
+      { type: 'hero', headline: off, subheadline: `${biz} — resultados reales, sin complicaciones. Plazas limitadas este mes.`, cta: 'Quiero mi plaza', badge: 'Oferta por tiempo limitado', image_keywords: kw },
+      { type: 'split', headline: 'Hecho para ti, sin letra pequeña', body: `En ${biz} nos ocupamos de todo el proceso de principio a fin. Tú solo tienes que dar el primer paso: nosotros nos encargamos del resto y te acompañamos en cada momento.`, side: 'left', image_keywords: kw, cta: 'Quiero saber más' },
       { type: 'features', headline: 'Por qué elegirnos', items: [
         { title: 'Atencion cercana', body: 'Te acompañamos en cada paso, sin letra pequeña.' },
         { title: 'Resultados visibles', body: 'Nuestros clientes notan la diferencia desde la primera visita.' },
@@ -136,9 +142,14 @@ function fallbackFunnelDesign({ business, offer, goal }) {
 
 async function generateFunnelDesign({ business, offer, audience, goal, tone, prompt: brief, locationName, ctx }) {
   if (!(await ready(ctx))) return { ...fallbackFunnelDesign({ business: business || brief, offer: offer || brief, goal }), generated_by: 'template' };
-  const system = `Eres un diseñador de landing pages de conversion (CRO) senior para negocios locales. Escribes copy persuasivo en español (o el idioma del usuario), especifico y creible, nunca generico. Respondes SOLO con JSON valido, sin markdown ni comentarios.
+  const system = `Eres un diseñador de landing pages de conversion (CRO) senior para negocios locales. Escribes copy persuasivo en español (o el idioma del usuario), especifico y creible, nunca generico: cifras concretas, beneficios tangibles, urgencia honesta. Respondes SOLO con JSON valido, sin markdown ni comentarios.
 ${BLOCK_SCHEMA}
-Reglas: incluye SIEMPRE exactamente un bloque "form" (al final o tras el hero), un "hero" al principio, y 4-7 bloques en total. El "tag" del form debe ser una palabra corta relacionada con la oferta. Elige el "theme" que mejor pegue con el negocio.`;
+Reglas de diseño (siguelas siempre):
+- Un "hero" al principio SIEMPRE con "image_keywords" (foto de fondo) y "badge".
+- 6-9 bloques en total. Incluye al menos 1-2 bloques "split" (alternando side left/right) para que la pagina respire con imagenes.
+- Incluye SIEMPRE exactamente un bloque "form" (al final o tras el hero). Su "tag" debe ser una palabra corta relacionada con la oferta.
+- image_keywords: SIEMPRE en ingles, 2-3 palabras concretas del sector (ej: "dentist smile clinic", "gym training woman").
+- Elige el "theme" que mejor pegue con el negocio (premium → elegant, energico → bold, hogareño → warm, tecnologico/sanitario → clean).`;
   const prompt = `Diseña una landing page completa.
 ${brief ? `Descripcion del usuario (PRIORITARIA, sigue esto sobre todo lo demas): ${brief}\n` : ''}Negocio: ${business || locationName || 'negocio local'}
 Oferta/servicio a promocionar: ${offer || 'servicio principal'}
@@ -158,6 +169,104 @@ Devuelve JSON: {"name": "nombre corto del funnel", "theme": "...", "blocks": [..
     return { ...parsed, generated_by: 'claude' };
   } catch {
     return { ...fallbackFunnelDesign({ business: business || brief, offer: offer || brief, goal }), generated_by: 'template-after-parse-error' };
+  }
+}
+
+// ---- Claude design chat: iterative page editing from natural language ----
+// The user talks to the designer ("hazlo más oscuro", "añade una sección de
+// precios", "pon una foto del equipo") and gets the updated page back.
+// With a real key Claude rewrites the JSON; without one, a small rule engine
+// covers the common asks so the chat still works in demo mode.
+
+function fallbackDesignEdit({ blocks, theme, prompt }) {
+  const p = String(prompt || '').toLowerCase();
+  const out = blocks.map((b) => ({ ...b }));
+  let newTheme = theme;
+  const did = [];
+
+  if (/(oscur|dark|negro)/.test(p)) { newTheme = 'bold'; did.push('tema oscuro'); }
+  else if (/(elegant|premium|lujo)/.test(p)) { newTheme = 'elegant'; did.push('tema elegante'); }
+  else if (/(c[aá]lid|warm|acogedor)/.test(p)) { newTheme = 'warm'; did.push('tema cálido'); }
+  else if (/(clar|limpio|clean|blanco)/.test(p)) { newTheme = 'clean'; did.push('tema claro'); }
+
+  const kwMatch = p.match(/(?:foto|imagen|photo)[^a-z0-9]*(?:de|del|de la|of)?\s+([a-záéíóúñ ]{3,40})/);
+  const kw = kwMatch ? kwMatch[1].trim().split(/\s+/).slice(0, 3).join(' ') : '';
+  const has = (type) => out.some((b) => b.type === type);
+
+  const quita = p.match(/(?:quita|elimina|borra|remove)\s+(?:la |el |los |las |seccion(?:es)? de )?([a-záéíóúñ]+)/);
+  if (quita) {
+    const map = { faq: 'faq', preguntas: 'faq', precios: 'pricing', precio: 'pricing', testimonios: 'testimonials', imagen: 'image', foto: 'image', hero: 'hero' };
+    const type = map[quita[1]];
+    if (type && has(type)) {
+      const idx = out.findIndex((b) => b.type === type);
+      out.splice(idx, 1); did.push(`quitada la sección ${quita[1]}`);
+    }
+  }
+  const before = () => Math.max(0, out.findIndex((b) => b.type === 'form'));
+  if (/(añade|agrega|pon|mete|add).*(faq|preguntas)/.test(p) && !has('faq')) {
+    out.splice(before(), 0, { type: 'faq', headline: 'Preguntas frecuentes', items: [
+      { q: '¿Cómo empiezo?', a: 'Déjanos tus datos en el formulario y te contactamos en menos de 24h.' },
+      { q: '¿Tiene compromiso?', a: 'No, puedes cancelar cuando quieras.' },
+      { q: '¿Cuánto tarda?', a: 'La mayoría de clientes ve resultados en las primeras semanas.' },
+    ] });
+    did.push('añadida sección de FAQ');
+  }
+  if (/(añade|agrega|pon|mete|add).*(precio|pricing|planes)/.test(p) && !has('pricing')) {
+    out.splice(before(), 0, { type: 'pricing', headline: 'Planes y precios', button: 'Empezar', items: [
+      { name: 'Básico', price: '49€/mes', features: ['Lo esencial para empezar', 'Soporte por email'] },
+      { name: 'Pro', price: '99€/mes', features: ['Todo lo del Básico', 'Soporte prioritario', 'Resultados más rápidos'] },
+    ] });
+    did.push('añadida sección de precios');
+  }
+  if (/(añade|agrega|pon|mete|add).*(testimoni)/.test(p) && !has('testimonials')) {
+    out.splice(before(), 0, { type: 'testimonials', headline: 'Lo que dicen nuestros clientes', items: [
+      { name: 'María G.', text: 'Trato excelente y resultados mejores de lo que esperaba.' },
+      { name: 'Carlos L.', text: 'Profesionales de verdad, cumplieron los plazos.' },
+    ] });
+    did.push('añadidos testimonios');
+  }
+  if (/(añade|agrega|pon|mete|add).*(foto|imagen|photo)/.test(p) && kw) {
+    const hero = out.find((b) => b.type === 'hero');
+    if (/(hero|portada|fondo)/.test(p) && hero) { hero.image_keywords = kw; did.push(`foto de "${kw}" en el hero`); }
+    else { out.splice(before(), 0, { type: 'image', image_keywords: kw, caption: '' }); did.push(`añadida imagen de "${kw}"`); }
+  }
+
+  return {
+    blocks: out,
+    theme: newTheme,
+    reply: did.length
+      ? `Hecho: ${did.join(', ')}. (Modo demo — conecta la IA para ediciones libres de texto y diseño.)`
+      : 'En modo demo puedo cambiar el tema (oscuro/elegante/cálido/claro) y añadir/quitar secciones (FAQ, precios, testimonios, fotos). Conecta ANTHROPIC_API_KEY para edición libre total.',
+    generated_by: 'rules',
+    changed: did.length > 0,
+  };
+}
+
+async function editFunnelDesign({ blocks, theme, prompt, history = [], locationName, ctx }) {
+  if (!(await ready(ctx))) return fallbackDesignEdit({ blocks, theme, prompt });
+  const system = `Eres Claude design: un diseñador de landing pages senior que edita una pagina existente conversando con el usuario. Mantienes todo lo que el usuario no pide cambiar (respeta ids, tags y el bloque form salvo orden). Escribes copy persuasivo y especifico en el idioma del usuario. Respondes SOLO JSON valido: {"reply": "resumen corto y cercano de lo que has cambiado (1-2 frases, como un diseñador)", "theme": "...", "blocks": [...]}.
+${BLOCK_SCHEMA}
+Reglas: conserva SIEMPRE exactamente un bloque "form". Si el usuario pide imagenes, usa "image_keywords" en ingles (o "image" si te da una URL). Si pide algo imposible, explica la alternativa en "reply" y haz lo mas parecido.`;
+  const convo = history.slice(-6).map((m) => `${m.role === 'user' ? 'USUARIO' : 'TU'}: ${m.text}`).join('\n');
+  const userPrompt = `Negocio: ${locationName || 'negocio local'}
+Pagina actual (JSON): {"theme":"${theme}","blocks":${JSON.stringify(blocks)}}
+${convo ? `Conversacion previa:\n${convo}\n` : ''}Peticion del usuario: ${prompt}
+Devuelve el JSON completo actualizado.`;
+  const text = await complete(system, userPrompt, 4000, ctx);
+  try {
+    const start = text.indexOf('{');
+    const parsed = JSON.parse(text.slice(start, text.lastIndexOf('}') + 1));
+    if (!Array.isArray(parsed.blocks) || !parsed.blocks.length) throw new Error('no blocks');
+    if (!parsed.blocks.some((b) => b.type === 'form')) parsed.blocks.push(blocks.find((b) => b.type === 'form') || fallbackFunnelDesign({}).blocks.at(-1));
+    return {
+      blocks: parsed.blocks,
+      theme: ['clean', 'bold', 'warm', 'elegant'].includes(parsed.theme) ? parsed.theme : theme,
+      reply: parsed.reply || 'Cambios aplicados.',
+      generated_by: 'claude',
+      changed: true,
+    };
+  } catch {
+    return fallbackDesignEdit({ blocks, theme, prompt });
   }
 }
 
@@ -218,4 +327,4 @@ async function suggestReviewReply({ business, rating, comment, contactName, ctx 
   }
 }
 
-module.exports = { enabled, ready, resolveAi, complete, generateCopy, reportNarrative, generateFunnelDesign, generateWorkflow, suggestReviewReply };
+module.exports = { enabled, ready, resolveAi, complete, generateCopy, reportNarrative, generateFunnelDesign, editFunnelDesign, generateWorkflow, suggestReviewReply };

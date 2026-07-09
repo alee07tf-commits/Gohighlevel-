@@ -69,6 +69,18 @@ router.delete('/:id', getFunnel, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Authenticated live preview: renders the page (published or draft) with the
+// real public renderer so the builder shows exactly what visitors will see.
+router.get('/:id/pages/:pageId/preview', getFunnel, async (req, res) => {
+  const page = await db.get('SELECT * FROM funnel_pages WHERE id = ? AND funnel_id = ?', [
+    req.params.pageId,
+    req.funnel.id,
+  ]);
+  if (!page) return res.status(404).send('Page not found');
+  const { funnelPageHtml } = require('./public');
+  res.send(await funnelPageHtml(req.funnel, page));
+});
+
 router.post('/:id/pages', getFunnel, async (req, res) => {
   const { name } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });

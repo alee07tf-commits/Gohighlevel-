@@ -5,7 +5,7 @@
 const db = require('../db');
 const secretbox = require('./secretbox');
 
-const PROVIDERS = ['email', 'twilio', 'stripe', 'ai', 'places'];
+const PROVIDERS = ['email', 'twilio', 'stripe', 'ai'];
 
 // The primary field whose presence means "this scope configured the provider".
 const PRIMARY = {
@@ -13,7 +13,6 @@ const PRIMARY = {
   twilio: 'account_sid',
   stripe: 'secret_key',
   ai: 'api_key',
-  places: 'google_places_api_key',
 };
 
 // Deployment env vars kept as the final fallback (backward compatible).
@@ -39,8 +38,6 @@ function envConfig(provider) {
       return { secret_key: e.STRIPE_SECRET_KEY || '' };
     case 'ai':
       return { api_key: e.ANTHROPIC_API_KEY || '', model: e.ANTHROPIC_MODEL || '' };
-    case 'places':
-      return { google_places_api_key: e.GOOGLE_PLACES_API_KEY || '', serper_api_key: e.SERPER_API_KEY || '' };
     default:
       return {};
   }

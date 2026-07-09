@@ -472,3 +472,11 @@ code.inline { background: #f0f1f6; padding: 2px 7px; border-radius: 6px; font-si
 .wf-step.wf-over { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft, #eef2ff); }
 .wf-grip { cursor: grab; user-select: none; font-weight: 600; }
 .wf-step:active .wf-grip { cursor: grabbing; }
+
+/* Claude design chat (funnel builder). */
+.cd-msgs { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.cd-msg { max-width: 92%; padding: 9px 12px; border-radius: 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.cd-msg.ai { background: var(--primary-soft, #eef2ff); color: var(--text, #111827); border-bottom-left-radius: 4px; align-self: flex-start; }
+.cd-msg.user { background: var(--primary, #4f46e5); color: #fff; border-bottom-right-radius: 4px; align-self: flex-end; }
+.cd-msg.cd-thinking { opacity: .7; font-style: italic; animation: cdPulse 1.2s ease-in-out infinite; }
+@keyframes cdPulse { 50% { opacity: .35; } }

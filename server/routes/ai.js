@@ -91,6 +91,40 @@ router.post('/funnel', async (req, res) => {
   }
 });
 
+// Claude design chat: iteratively edit a page from natural-language prompts.
+// Body: { funnel_id, page_id, prompt, history?: [{role,text}] }.
+// Saves the updated blocks/theme and returns them with the designer's reply.
+router.post('/design', async (req, res) => {
+  const { funnel_id, page_id, prompt, history } = req.body || {};
+  if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: 'Escribe qué quieres cambiar' });
+  const page = await db.get(
+    `SELECT fp.* FROM funnel_pages fp JOIN funnels f ON f.id = fp.funnel_id
+     WHERE fp.id = ? AND f.id = ? AND f.location_id = ?`,
+    [page_id, funnel_id, req.location.id]
+  );
+  if (!page) return res.status(404).json({ error: 'Página no encontrada' });
+  let blocks = [];
+  try { blocks = JSON.parse(page.content || '[]'); } catch { blocks = []; }
+  try {
+    const result = await ai.editFunnelDesign({
+      blocks,
+      theme: page.theme || 'clean',
+      prompt: String(prompt).slice(0, 2000),
+      history: Array.isArray(history) ? history : [],
+      locationName: req.location.name,
+      ctx: { locationId: req.location.id, agencyId: req.user.agency_id },
+    });
+    if (result.changed !== false) {
+      await db.run('UPDATE funnel_pages SET content = ?, theme = ? WHERE id = ?', [
+        JSON.stringify(result.blocks), result.theme, page.id,
+      ]);
+    }
+    res.json({ ok: true, reply: result.reply, blocks: result.blocks, theme: result.theme, generated_by: result.generated_by, changed: result.changed !== false });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 // Workflow AI: create an automation from a plain-language goal.
 router.post('/workflow', async (req, res) => {
   const { goal } = req.body || {};

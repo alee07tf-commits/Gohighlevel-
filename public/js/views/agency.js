@@ -5,7 +5,7 @@ import { t } from '../i18n.js';
 // Central "servicios de la plataforma": configured ONCE by the agency and
 // cascaded to every sub-account (env → agency → sub-account). These are the
 // managed services a client uses with zero setup (SMS, WhatsApp, Email, AI),
-// plus agency-wide payments/prospecting defaults. `primary` is the field whose
+// plus agency-wide payments defaults. `primary` is the field whose
 // presence means "configured".
 const CENTRAL = [
   { key: 'twilio', label: t('SMS y WhatsApp (Twilio)', 'SMS & WhatsApp (Twilio)'), managed: true, primary: 'account_sid', fields: [
@@ -21,9 +21,6 @@ const CENTRAL = [
     { k: 'api_key', label: 'Anthropic API key', secret: true },
     { k: 'model', label: t('Modelo (opcional)', 'Model (optional)'), placeholder: 'claude-sonnet-5' } ] },
   { key: 'stripe', label: t('Pagos (Stripe)', 'Payments (Stripe)'), primary: 'secret_key', fields: [{ k: 'secret_key', label: 'Secret key (sk_…)', secret: true }] },
-  { key: 'places', label: t('Prospección (Google)', 'Prospecting (Google)'), primary: 'google_places_api_key', fields: [
-    { k: 'google_places_api_key', label: 'Google Places API key', secret: true },
-    { k: 'serper_api_key', label: t('Serper API key (alternativa)', 'Serper API key (alternative)'), secret: true } ] },
 ];
 
 function centralFieldValue(cfg, k) {

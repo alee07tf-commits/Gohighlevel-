@@ -24,18 +24,35 @@ function esc(text) {
 
 const PAGE_CSS = `
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',system-ui,sans-serif;color:#1a202c;background:#f7fafc;line-height:1.6}
-  .hero{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;text-align:center;padding:90px 24px}
-  .hero h1{font-size:2.6rem;margin-bottom:14px}
-  .hero p{font-size:1.2rem;opacity:.9;max-width:640px;margin:0 auto 26px}
-  .btn{display:inline-block;background:#f59e0b;color:#fff;padding:14px 36px;border-radius:8px;font-weight:700;
-       text-decoration:none;border:none;font-size:1rem;cursor:pointer}
-  .section{max-width:760px;margin:0 auto;padding:56px 24px}
-  .section h2{font-size:1.8rem;margin-bottom:12px;text-align:center}
-  .section p{text-align:center;color:#4a5568}
-  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-top:28px}
-  .feature{background:#fff;border-radius:10px;padding:22px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-  .feature h3{margin-bottom:6px;font-size:1.05rem}
+  body{font-family:'Segoe UI',system-ui,sans-serif;color:#1a202c;background:#f7fafc;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .hero{position:relative;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;text-align:center;padding:110px 24px;overflow:hidden}
+  .hero.has-img{background-size:cover;background-position:center;min-height:520px;display:flex;flex-direction:column;justify-content:center}
+  .hero.has-img::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,12,24,.55),rgba(10,12,24,.72))}
+  .hero>*{position:relative;z-index:1}
+  .hero .badge{display:inline-block;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(4px);
+       color:#fff;padding:7px 16px;border-radius:999px;font-size:.85rem;font-weight:600;letter-spacing:.4px;margin-bottom:18px}
+  .hero h1{font-size:clamp(2.1rem,5vw,3.4rem);line-height:1.12;margin-bottom:18px;letter-spacing:-.5px;max-width:820px;margin-left:auto;margin-right:auto}
+  .hero p{font-size:clamp(1.05rem,2vw,1.3rem);opacity:.92;max-width:680px;margin:0 auto 30px}
+  .btn{display:inline-block;background:#f59e0b;color:#fff;padding:16px 40px;border-radius:12px;font-weight:700;
+       text-decoration:none;border:none;font-size:1.05rem;cursor:pointer;box-shadow:0 10px 26px rgba(0,0,0,.22);transition:transform .15s ease,box-shadow .15s ease}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 14px 32px rgba(0,0,0,.28)}
+  .section{max-width:780px;margin:0 auto;padding:72px 24px}
+  .section h2{font-size:clamp(1.6rem,3vw,2.2rem);margin-bottom:14px;text-align:center;letter-spacing:-.3px}
+  .section p{text-align:center;color:#4a5568;font-size:1.04rem}
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:22px;margin-top:34px}
+  .feature{background:#fff;border-radius:16px;padding:28px 24px;box-shadow:0 2px 10px rgba(15,23,42,.07);transition:transform .15s ease}
+  .feature:hover{transform:translateY(-3px)}
+  .feature h3{margin-bottom:8px;font-size:1.08rem}
+  .split{max-width:1080px;margin:0 auto;padding:64px 24px;display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:center}
+  .split.rev .s-img{order:2}
+  .split .s-img img{width:100%;border-radius:18px;box-shadow:0 18px 44px rgba(15,23,42,.18);display:block;aspect-ratio:4/3;object-fit:cover}
+  .split h2{font-size:clamp(1.5rem,3vw,2rem);margin-bottom:14px;letter-spacing:-.3px}
+  .split p{color:#4a5568;font-size:1.04rem;margin-bottom:8px}
+  .split .btn{margin-top:16px;font-size:.98rem;padding:13px 30px}
+  @media(max-width:760px){.split{grid-template-columns:1fr;gap:26px}.split.rev .s-img{order:0}}
+  .img-block{max-width:1000px;margin:0 auto;padding:30px 24px;text-align:center}
+  .img-block img{width:100%;border-radius:18px;box-shadow:0 16px 40px rgba(15,23,42,.16);display:block}
+  .img-block figcaption{color:#64748b;font-size:.88rem;margin-top:12px}
   form.lead{background:#fff;border-radius:12px;padding:30px;box-shadow:0 4px 14px rgba(0,0,0,.1);max-width:460px;margin:24px auto 0}
   form.lead label{display:block;font-size:.85rem;font-weight:600;margin:12px 0 4px;color:#374151}
   form.lead input,form.lead textarea{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:7px;font-size:.95rem}
@@ -99,11 +116,38 @@ function themeCss(theme, brand) {
   );
 }
 
+// Stock photos without any API key: an explicit URL wins; otherwise keywords
+// resolve through loremflickr (keyword-matched, free, hotlinkable).
+function blockImageUrl(block, w = 1200, h = 800) {
+  if (block.image && /^https?:\/\//.test(block.image)) return block.image;
+  const kw = String(block.image_keywords || block.keywords || '')
+    .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9, ]/g, '').trim().replace(/[ ,]+/g, ',');
+  return kw ? `https://loremflickr.com/${w}/${h}/${encodeURIComponent(kw)}` : '';
+}
+
 function renderBlock(block, pageId) {
   switch (block.type) {
-    case 'hero':
-      return `<div class="hero"><h1>${esc(block.headline)}</h1><p>${esc(block.subheadline)}</p>
+    case 'hero': {
+      const img = blockImageUrl(block, 1600, 900);
+      return `<div class="hero${img ? ' has-img' : ''}"${img ? ` style="background-image:url('${esc(img)}')"` : ''}>
+        ${block.badge ? `<span class="badge">${esc(block.badge)}</span>` : ''}
+        <h1>${esc(block.headline)}</h1><p>${esc(block.subheadline)}</p>
         ${block.cta ? `<a class="btn" href="#lead-form">${esc(block.cta)}</a>` : ''}</div>`;
+    }
+    case 'split': {
+      const img = blockImageUrl(block, 1000, 750);
+      return `<div class="split${block.side === 'right' ? ' rev' : ''}">
+        <div class="s-img">${img ? `<img src="${esc(img)}" alt="${esc(block.headline || '')}" loading="lazy">` : ''}</div>
+        <div><h2>${esc(block.headline || '')}</h2><p style="text-align:left">${esc(block.body || '')}</p>
+          ${block.cta ? `<a class="btn" href="#lead-form">${esc(block.cta)}</a>` : ''}</div>
+      </div>`;
+    }
+    case 'image': {
+      const img = blockImageUrl(block, 1400, 800);
+      return img ? `<figure class="img-block"><img src="${esc(img)}" alt="${esc(block.caption || '')}" loading="lazy">
+        ${block.caption ? `<figcaption>${esc(block.caption)}</figcaption>` : ''}</figure>` : '';
+    }
     case 'text':
       return `<div class="section"><h2>${esc(block.headline)}</h2><p>${esc(block.body)}</p></div>`;
     case 'features': {
@@ -167,15 +211,9 @@ function renderBlock(block, pageId) {
   }
 }
 
-router.get('/f/:funnelSlug{/:pageSlug}', async (req, res) => {
-  const funnel = await db.get('SELECT * FROM funnels WHERE slug = ?', [req.params.funnelSlug]);
-  if (!funnel) return res.status(404).send('Funnel not found');
-  const slug = req.params.pageSlug || 'home';
-  const page = await db.get('SELECT * FROM funnel_pages WHERE funnel_id = ? AND slug = ? AND published = 1', [
-    funnel.id,
-    slug,
-  ]);
-  if (!page) return res.status(404).send('Page not found or not published');
+// Builds the complete landing HTML for a funnel page. Shared by the public
+// route and the authenticated draft preview in the builder.
+async function funnelPageHtml(funnel, page) {
   const loc = await db.get('SELECT * FROM locations WHERE id = ?', [funnel.location_id]);
   const css = themeCss(page.theme || 'clean', (loc && loc.brand_color) || '#4f46e5');
   const blocks = JSON.parse(page.content || '[]');
@@ -205,7 +243,19 @@ if(r.ok){f.style.display='none';document.getElementById('form-success').style.di
 else{alert('Something went wrong, please try again.');}
 return false;}
 </script></body></html>`;
-  res.send(html);
+  return html;
+}
+
+router.get('/f/:funnelSlug{/:pageSlug}', async (req, res) => {
+  const funnel = await db.get('SELECT * FROM funnels WHERE slug = ?', [req.params.funnelSlug]);
+  if (!funnel) return res.status(404).send('Funnel not found');
+  const slug = req.params.pageSlug || 'home';
+  const page = await db.get('SELECT * FROM funnel_pages WHERE funnel_id = ? AND slug = ? AND published = 1', [
+    funnel.id,
+    slug,
+  ]);
+  if (!page) return res.status(404).send('Page not found or not published');
+  res.send(await funnelPageHtml(funnel, page));
 });
 
 // Lead capture: upserts a contact by email/phone, records the submission and
@@ -1465,3 +1515,5 @@ router.post('/sign/:token', async (req, res) => {
 });
 
 module.exports = router;
+// Shared with the authenticated draft preview (routes/funnels.js).
+module.exports.funnelPageHtml = funnelPageHtml;
