@@ -811,7 +811,13 @@ if (process.env.DATABASE_URL) {
   const pool = new Pool({
     connectionString: url,
     ssl: isLocal || process.env.PGSSL === 'disable' ? undefined : { rejectUnauthorized: false },
-    max: Number(process.env.PG_POOL_MAX) || 5,
+    // Serverless + Supabase pooler: keep very few connections per instance so we
+    // never exhaust the pooler's client limit (session mode caps ~15). Idle
+    // connections are released quickly so other cold-started instances can reuse
+    // the pooler's slots.
+    max: Number(process.env.PG_POOL_MAX) || 1,
+    idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS) || 10000,
+    allowExitOnIdle: true,
     // Fail fast instead of hanging a serverless invocation until the gateway 504s.
     connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 10000,
     query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS) || 15000,
