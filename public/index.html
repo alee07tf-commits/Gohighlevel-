@@ -21,15 +21,15 @@
 <div id="app"></div>
 <div id="modal-root"></div>
 <div id="toast-root"></div>
-<div id="cookie-banner" hidden style="position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;max-width:640px;margin:0 auto;background:#0f172a;color:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 12px 40px rgba(0,0,0,.3);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+<div id="cookie-banner" style="display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;max-width:640px;margin:0 auto;background:#0f172a;color:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 12px 40px rgba(0,0,0,.3);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;gap:12px;align-items:center;flex-wrap:wrap">
   <span style="flex:1;min-width:220px">Usamos cookies técnicas y almacenamiento local para el funcionamiento del servicio. <a href="/legal/cookies" style="color:#c7d2fe">Más info</a>.</span>
   <button id="cookie-accept" style="background:#6d5ef5;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:600;cursor:pointer">Aceptar</button>
 </div>
 <script>
   (function(){try{
     var b=document.getElementById('cookie-banner');
-    if(!localStorage.getItem('upcro_cookie_ok')){b.hidden=false;}
-    document.getElementById('cookie-accept').addEventListener('click',function(){localStorage.setItem('upcro_cookie_ok','1');b.hidden=true;});
+    if(!localStorage.getItem('upcro_cookie_ok')){b.style.display='flex';}
+    document.getElementById('cookie-accept').addEventListener('click',function(){localStorage.setItem('upcro_cookie_ok','1');b.style.display='none';});
   }catch(e){}})();
 </script>
 <script type="module" src="/js/app.js"></script>
