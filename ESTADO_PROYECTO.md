@@ -190,3 +190,9 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
 Login demo: `demo@upcro.app` / `demo123`.
+
+## 10. Sesión Claude design v2 (última)
+- **Prospección ELIMINADA por decisión del usuario** (vista/ruta/servicio/nav/permisos/proveedor places/tests). No reintroducir.
+- **Claude design v2**: chat conversacional en el builder de funnels (POST `/api/ai/design`, con `history`; `ai.editFunnelDesign` con IA real o `fallbackDesignEdit` por reglas sin clave). Bloques nuevos `split` e `image` + hero con foto de fondo (`image_keywords` → loremflickr sin API key, o `image` URL propia) + CSS de landings mejorado. Preview en vivo real de borradores: `/api/funnels/:id/pages/:pageId/preview` (usa `funnelPageHtml` exportado de public.js).
+- Producción Vercel: proyecto `gohighlevel` (URL `gohighlevel-git-main-alee07tf-commits-projects.vercel.app`), Supabase conectado (Session pooler 5432, pool max=1 por instancia serverless), Deployment Protection OFF. Health: `{"ok":true,"database":"postgres","persistent":true}`.
+- Tests: **229 en verde** (v64 nuevo). SCHEMA_VERSION sigue en 36.
