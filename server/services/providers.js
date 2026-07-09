@@ -39,22 +39,20 @@ async function paymentsProvider(ctx) {
 // Effective per-context status for the Settings → Integraciones card, with the
 // resolution source of each provider.
 async function status(ctx) {
-  const [email, twilio, stripe, ai, places] = await Promise.all([
+  const [email, twilio, stripe, ai] = await Promise.all([
     integrations.resolve('email', ctx || {}),
     integrations.resolve('twilio', ctx || {}),
     integrations.resolve('stripe', ctx || {}),
     integrations.resolve('ai', ctx || {}),
-    integrations.resolve('places', ctx || {}),
   ]);
   return {
     email: email.config.api_key ? emailVendor(email.config) || 'resend' : 'simulated',
     sms: twilioReady(twilio.config) && twilio.config.from_number ? 'twilio' : 'simulated',
     whatsapp: twilioReady(twilio.config) && twilio.config.whatsapp_from ? 'twilio' : 'simulated',
     payments: stripe.config.secret_key ? 'stripe' : 'simulated',
-    prospecting: places.config.google_places_api_key ? 'google_places' : places.config.serper_api_key ? 'serper' : 'simulated',
     ai: Boolean(ai.config.api_key),
     mail_from: email.config.mail_from || null,
-    sources: { email: email.source, sms: twilio.source, whatsapp: twilio.source, payments: stripe.source, ai: ai.source, prospecting: places.source },
+    sources: { email: email.source, sms: twilio.source, whatsapp: twilio.source, payments: stripe.source, ai: ai.source },
   };
 }
 

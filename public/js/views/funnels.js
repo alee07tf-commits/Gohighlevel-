@@ -3,8 +3,8 @@ import { esc, openModal, closeOverlay, toast, fmtDate, fullName } from '../ui.js
 import { t } from '../i18n.js';
 
 const BLOCK_TYPES = {
-  hero: 'Hero', text: 'Texto', features: 'Features', testimonials: 'Testimonios',
-  pricing: 'Precios', faq: 'FAQ', cta: 'CTA', form: 'Formulario',
+  hero: 'Hero', split: 'Texto + Imagen', image: 'Imagen', text: 'Texto', features: 'Features',
+  testimonials: 'Testimonios', pricing: 'Precios', faq: 'FAQ', cta: 'CTA', form: 'Formulario',
 };
 const THEMES = { clean: 'Clean (claro)', bold: 'Bold (oscuro)', warm: 'Warm (cálido)', elegant: 'Elegant (serif)' };
 
@@ -139,15 +139,27 @@ async function renderBuilder(view, funnelId) {
     <button class="btn" id="save-page">${t('Guardar', 'Save')}</button>
   </div>
   <div class="builder">
-    <div class="card"><div class="card-title">${t('Bloques de la página', 'Page Blocks')}</div><div class="card-body">
-      <div id="blocks"></div>
-      <div class="flex" style="margin-top:10px">
-        <select class="input" id="new-block-type">${Object.entries(BLOCK_TYPES)
-          .map(([k, v]) => `<option value="${k}">${v}</option>`)
-          .join('')}</select>
-        <button class="btn secondary" id="add-block">${t('+ Añadir', '+ Add')}</button>
+    <div>
+      <div class="card" style="margin-bottom:14px"><div class="card-title" style="display:flex;align-items:center;gap:8px">✨ Claude design
+        <span class="muted" style="font-weight:400;font-size:11px">${t('pídele cambios como a un diseñador', 'ask for changes like you would a designer')}</span></div>
+        <div class="card-body" style="padding-top:8px">
+          <div id="cd-msgs" class="cd-msgs"><div class="cd-msg ai">${t('Hola 👋 Dime qué quieres cambiar en esta página: «hazla más elegante», «añade una sección de precios», «pon una foto del equipo en el hero», «reescribe el titular para sonar más premium»…', 'Hi 👋 Tell me what to change on this page: "make it more elegant", "add a pricing section", "put a team photo in the hero"…')}</div></div>
+          <form id="cd-form" class="flex" style="gap:6px;margin-top:8px">
+            <input class="input" id="cd-input" placeholder="${t('Pídele algo a Claude design…', 'Ask Claude design…')}" style="flex:1">
+            <button class="btn" id="cd-send">➤</button>
+          </form>
+        </div>
       </div>
-    </div></div>
+      <div class="card"><div class="card-title">${t('Bloques de la página', 'Page Blocks')}</div><div class="card-body">
+        <div id="blocks"></div>
+        <div class="flex" style="margin-top:10px">
+          <select class="input" id="new-block-type">${Object.entries(BLOCK_TYPES)
+            .map(([k, v]) => `<option value="${k}">${v}</option>`)
+            .join('')}</select>
+          <button class="btn secondary" id="add-block">${t('+ Añadir', '+ Add')}</button>
+        </div>
+      </div></div>
+    </div>
     <iframe class="preview-frame" id="preview"></iframe>
   </div>`;
 
@@ -188,7 +200,25 @@ async function renderBuilder(view, funnelId) {
       `<input class="input" data-i="${i}" data-k="${k}" placeholder="${ph}" value="${esc(val || '')}" style="margin-bottom:6px">`;
     switch (b.type) {
       case 'hero':
-        return input('headline', t('Titular', 'Headline'), b.headline) + input('subheadline', t('Subtítulo', 'Subheadline'), b.subheadline) + input('cta', t('Texto del botón', 'Button text'), b.cta);
+        return input('headline', t('Titular', 'Headline'), b.headline) + input('subheadline', t('Subtítulo', 'Subheadline'), b.subheadline) + input('cta', t('Texto del botón', 'Button text'), b.cta) +
+          input('badge', t('Badge (ej. "Oferta limitada")', 'Badge (e.g. "Limited offer")'), b.badge) +
+          input('image_keywords', t('Foto de fondo — palabras EN INGLÉS (ej. dental clinic)', 'Background photo — EN keywords'), b.image_keywords) +
+          input('image', t('…o URL de imagen propia (opcional)', '…or your own image URL (optional)'), b.image);
+      case 'split':
+        return input('headline', t('Titular', 'Headline'), b.headline) +
+          `<textarea class="input" data-i="${i}" data-k="body" rows="3" placeholder="${t('Texto', 'Body')}">${esc(b.body || '')}</textarea>` +
+          input('cta', t('Texto del botón (opcional)', 'Button text (optional)'), b.cta) +
+          input('image_keywords', t('Foto — palabras EN INGLÉS (ej. gym training)', 'Photo — EN keywords'), b.image_keywords) +
+          input('image', t('…o URL de imagen propia (opcional)', '…or your own image URL (optional)'), b.image) +
+          `<label class="muted" style="font-size:12px">${t('Imagen a la', 'Image on the')}
+            <select class="input" data-i="${i}" data-k="side" style="width:110px;display:inline-block;padding:4px">
+              <option value="left" ${b.side !== 'right' ? 'selected' : ''}>${t('izquierda', 'left')}</option>
+              <option value="right" ${b.side === 'right' ? 'selected' : ''}>${t('derecha', 'right')}</option>
+            </select></label>`;
+      case 'image':
+        return input('image_keywords', t('Foto — palabras EN INGLÉS', 'Photo — EN keywords'), b.image_keywords) +
+          input('image', t('…o URL de imagen propia (opcional)', '…or your own image URL (optional)'), b.image) +
+          input('caption', t('Pie de foto (opcional)', 'Caption (optional)'), b.caption);
       case 'text':
         return input('headline', t('Titular', 'Headline'), b.headline) +
           `<textarea class="input" data-i="${i}" data-k="body" rows="3" placeholder="${t('Texto del cuerpo', 'Body text')}">${esc(b.body || '')}</textarea>`;
@@ -305,18 +335,21 @@ async function renderBuilder(view, funnelId) {
     previewTimer = setTimeout(refreshPreview, 600);
   }
   async function refreshPreview() {
-    // Save-less live preview: temporarily render via srcdoc using the same block structure.
-    // For fidelity we just save-then-reload if published; otherwise show a lightweight preview.
+    // Real live preview for drafts AND published pages: persist the blocks, then
+    // render through the actual public renderer via the authenticated preview.
     const iframe = view.querySelector('#preview');
-    if (page.published) {
-      await savePage(true);
-      iframe.src = `/f/${funnel.slug}/${page.slug}?t=${Date.now()}`;
-    } else {
-      iframe.srcdoc = `<body style="font-family:system-ui;padding:40px;color:#334155">
-        <h2>${t('Vista previa (borrador)', 'Draft preview')}</h2><p>${t('Publica la página para ver la versión renderizada en vivo.', 'Publish the page to see the live rendered version.')}</p>
-        <pre style="background:#f1f5f9;padding:14px;border-radius:8px;font-size:12px;white-space:pre-wrap">${esc(
-          JSON.stringify(blocks, null, 2)
-        )}</pre></body>`;
+    await savePage(true);
+    try {
+      const res = await fetch(`/api/funnels/${funnel.id}/pages/${page.id}/preview`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('lf_token')}`,
+          'X-Location-Id': localStorage.getItem('lf_location') || '',
+          ...(localStorage.getItem('lf_agency') ? { 'X-Agency-Id': localStorage.getItem('lf_agency') } : {}),
+        },
+      });
+      iframe.srcdoc = await res.text();
+    } catch {
+      iframe.srcdoc = `<body style="font-family:system-ui;padding:40px;color:#334155">${t('No se pudo cargar la vista previa.', 'Preview failed to load.')}</body>`;
     }
   }
 
@@ -346,7 +379,9 @@ async function renderBuilder(view, funnelId) {
   view.querySelector('#add-block').addEventListener('click', () => {
     const type = view.querySelector('#new-block-type').value;
     const defaults = {
-      hero: { type, headline: 'Tu gran promesa', subheadline: 'Explica el valor en una frase', cta: 'Empezar' },
+      hero: { type, headline: 'Tu gran promesa', subheadline: 'Explica el valor en una frase', cta: 'Empezar', badge: '', image_keywords: '' },
+      split: { type, headline: 'Cuenta tu historia', body: 'Explica qué haces y por qué importa, junto a una foto que lo demuestre.', side: 'left', image_keywords: 'business team' },
+      image: { type, image_keywords: 'office workspace', caption: '' },
       text: { type, headline: 'Título de sección', body: 'Escribe algo persuasivo aquí.' },
       features: { type, headline: 'Por qué elegirnos', items: [{ title: 'Rápido', body: 'Entregamos con rapidez.' }] },
       form: { type, headline: 'Solicita tu presupuesto gratis', button: 'Enviar', fields: ['first_name', 'email', 'phone'], success_message: '¡Gracias! Te contactaremos muy pronto.', tag: '' },
@@ -385,6 +420,56 @@ async function renderBuilder(view, funnelId) {
       btn.textContent = 'Rediseñar';
     }
   });
+  // ---- Claude design chat: iterative prompting, like talking to a designer ----
+  const cdHistory = [];
+  const cdMsgs = view.querySelector('#cd-msgs');
+  function cdAdd(role, text) {
+    const div = document.createElement('div');
+    div.className = `cd-msg ${role}`;
+    div.textContent = text;
+    cdMsgs.appendChild(div);
+    cdMsgs.scrollTop = cdMsgs.scrollHeight;
+  }
+  view.querySelector('#cd-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = view.querySelector('#cd-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    cdAdd('user', text);
+    cdHistory.push({ role: 'user', text });
+    const thinking = document.createElement('div');
+    thinking.className = 'cd-msg ai cd-thinking';
+    thinking.textContent = t('Diseñando…', 'Designing…');
+    cdMsgs.appendChild(thinking);
+    cdMsgs.scrollTop = cdMsgs.scrollHeight;
+    const btn = view.querySelector('#cd-send');
+    btn.disabled = true;
+    try {
+      const r = await api('/ai/design', {
+        method: 'POST',
+        body: { funnel_id: funnel.id, page_id: page.id, prompt: text, history: cdHistory.slice(0, -1) },
+      });
+      thinking.remove();
+      cdAdd('ai', r.reply);
+      cdHistory.push({ role: 'ai', text: r.reply });
+      if (r.changed) {
+        blocks = r.blocks;
+        page.content = r.blocks;
+        page.theme = r.theme;
+        view.querySelector('#theme-select').value = r.theme;
+        renderBlocks();
+        refreshPreview();
+      }
+    } catch (err) {
+      thinking.remove();
+      cdAdd('ai', `⚠️ ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      input.focus();
+    }
+  });
+
   view.querySelector('#view-subs').addEventListener('click', async () => {
     const subs = await api(`/funnels/${funnel.id}/submissions`);
     openModal(`

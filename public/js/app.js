@@ -14,7 +14,6 @@ import { renderSettings } from './views/settings.js';
 import { renderPayments } from './views/payments.js';
 import { renderReputation } from './views/reputation.js';
 import { renderTasks } from './views/tasks.js';
-import { renderProspecting } from './views/prospecting.js';
 import { renderAgency } from './views/agency.js';
 import { renderClients } from './views/clients.js';
 import { renderTraining } from './views/training.js';
@@ -33,7 +32,6 @@ const IC = {
   pipelines: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
   calendar: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
   payments: '<svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
-  prospecting: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   marketing: '<svg viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>',
   automations: '<svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
   funnels: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
@@ -72,7 +70,7 @@ function navSections() {
   const filter = (items) => items.filter(canAccess);
   return [
     { title: t('Workspace', 'Workspace'), items: filter(['dashboard', 'conversations', 'contacts', 'pipelines', 'calendar', 'tasks']) },
-    { title: t('Crecimiento', 'Growth'), items: filter(['prospecting', 'marketing', 'funnels', 'forms', 'surveys', 'automations', 'payments', 'documents', 'reputation', 'analytics']) },
+    { title: t('Crecimiento', 'Growth'), items: filter(['marketing', 'funnels', 'forms', 'surveys', 'automations', 'payments', 'documents', 'reputation', 'analytics']) },
     { title: t('Formación', 'Training'), items: filter(['training', 'community']) },
     // The agency layer is admin-only: "Clientes" manages the agencies below you
     // in the tenant tree; the agency console is SaaS/cross-account/white-label.
@@ -89,7 +87,6 @@ const NAV = [
   { path: 'calendar', label: () => t('Calendario', 'Calendar'), view: renderCalendar },
   { path: 'payments', label: () => t('Pagos', 'Payments'), view: renderPayments },
   { path: 'documents', label: () => t('Documentos', 'Documents'), view: renderDocuments },
-  { path: 'prospecting', label: () => t('Prospección', 'Prospecting'), view: renderProspecting },
   { path: 'marketing', label: () => t('Marketing', 'Marketing'), view: renderMarketing },
   { path: 'automations', label: () => t('Automatizaciones', 'Automations'), view: renderAutomations },
   { path: 'funnels', label: () => t('Sitios y Embudos', 'Sites & Funnels'), view: renderFunnels },

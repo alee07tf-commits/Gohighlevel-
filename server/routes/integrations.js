@@ -1,5 +1,5 @@
 // Per-scope integration credentials (Phase 2). Sub-accounts can bring their
-// own Stripe/Twilio/email/AI/prospecting keys; if not set they inherit the
+// own Stripe/Twilio/email/AI keys; if not set they inherit the
 // agency defaults, and finally the deployment env vars. Secrets are stored
 // encrypted and never returned in clear (masked to last 4 chars).
 const express = require('express');
@@ -43,7 +43,6 @@ const FIELDS = {
   ],
   stripe: [{ k: 'secret_key', secret: true }],
   ai: [{ k: 'api_key', secret: true }, { k: 'model' }],
-  places: [{ k: 'google_places_api_key', secret: true }, { k: 'serper_api_key', secret: true }],
 };
 
 function viewFields(provider, stored = {}) {

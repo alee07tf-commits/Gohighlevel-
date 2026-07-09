@@ -17,9 +17,6 @@ const PROVIDERS = [
   { key: 'ai', label: t('IA (Claude)', 'AI (Claude)'), fields: [
     { k: 'api_key', label: 'Anthropic API key', secret: true },
     { k: 'model', label: t('Modelo (opcional)', 'Model (optional)'), placeholder: 'claude-sonnet-5' } ] },
-  { key: 'places', label: t('Prospección (Google)', 'Prospecting (Google)'), fields: [
-    { k: 'google_places_api_key', label: 'Google Places API key', secret: true },
-    { k: 'serper_api_key', label: t('Serper API key (alternativa)', 'Serper API key (alternative)'), secret: true } ] },
 ];
 
 function sourceBadge(src) {
@@ -504,7 +501,7 @@ export async function renderSettings(view) {
   );
   const MODULE_LABELS = {
     contacts: t('Contactos', 'Contacts'), conversations: t('Conversaciones', 'Conversations'), pipelines: t('Oportunidades', 'Opportunities'),
-    calendar: t('Calendario', 'Calendar'), tasks: t('Tareas', 'Tasks'), prospecting: t('Prospección', 'Prospecting'),
+    calendar: t('Calendario', 'Calendar'), tasks: t('Tareas', 'Tasks'),
     marketing: 'Marketing', funnels: t('Sitios y Embudos', 'Sites & Funnels'), forms: t('Formularios', 'Forms'), surveys: t('Encuestas', 'Surveys'),
     automations: t('Automatizaciones', 'Automations'), payments: t('Pagos', 'Payments'), documents: t('Documentos', 'Documents'),
     reputation: t('Reputación', 'Reputation'), analytics: t('Informes', 'Analytics'), training: t('Formación', 'Training'),
