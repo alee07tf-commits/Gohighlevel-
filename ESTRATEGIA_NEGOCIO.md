@@ -3,7 +3,17 @@
 > Documento vivo. Recoge el modelo de negocio detrás de la plataforma, tal como lo ha
 > definido el fundador (alee07tf@gmail.com), más el análisis estratégico trabajado en sesión.
 > Complementa a `ESTADO_PROYECTO.md` (que cubre el estado técnico del producto).
-> **Última actualización:** 2026-07-10
+> **Última actualización:** 2026-07-10 (añadidos precios, estudio de mercado y evolución del servicio)
+
+## Contexto del fundador (condiciona toda la estrategia)
+
+- **Solo founder**: la capacidad es el recurso escaso. Techo realista: 6–8 clientes de
+  opción B (10–15 h/mes cada uno) + ~2 implementaciones completas al mes (2–4 semanas c/u).
+- **Mercado inicial: España** (EUR, RGPD como argumento).
+- **Cliente objetivo línea 1**: negocios con **1.500–5.000 €/mes de inversión publicitaria**.
+- **Experiencia previa**: freelance trabajando con agencias y sus clientes (no venta directa
+  a cliente final). Implicaciones: (a) la venta directa es un músculo nuevo a desarrollar;
+  (b) su red de agencias es el canal de distribución natural del plan revendedor de la línea 2.
 
 ---
 
@@ -86,6 +96,70 @@ white-label que la plataforma ya genera.
   ventas de leads generados + revisión mensual sobre el informe; ideal cuando el cobro
   pasa por la plataforma (Stripe), donde la venta se registra sola.
 - Definir métrica exacta, línea base y ventana de medición en el contrato.
+
+### 2.3 Precios de la línea 1 (validados 2026-07-10)
+
+**Referencias de mercado (estudio 2026-07):**
+- Implementadores de GoHighLevel: freelancers $800–$7.500/proyecto; agencias $1.500–$10.000+.
+  Una implementación seria lleva 2–4 semanas.
+- Implementación CRM + automatización en España: agencias 1.500–10.000 € (típico 800–5.000 €).
+  Empresas de 4–19 empleados gastan 1.000–10.000 €.
+- Retainers full-service: $300–$1.000/mes en general; $1.000–$2.500/mes en nichos de ticket
+  alto (dental, legal, reformas).
+- Fuentes: netpartners.marketing, ruzuku.com, flowmatic.es, cronomia.com, softwarepara.net.
+
+**La implementación NO es un "setup" — es un proyecto, productizado en 5 módulos**
+(cada uno con instalación + estrategia de marketing alrededor):
+
+| Módulo | Qué incluye |
+|---|---|
+| Fundación | Migración de datos, plataforma adaptada, formación |
+| Captación | Funnels, formularios, conexión de campañas |
+| Retención | Automatizaciones de seguimiento, recordatorios, secuencias |
+| Autoridad | Reputación/reseñas, informes, presencia de marca |
+| Recuperación | Reactivación de base de datos, clientes dormidos |
+
+**Tarifario:**
+- **Implementación completa: 4.900 €** (precio ancla, visible siempre). Faseable por
+  módulos — protege la agenda del solo-founder.
+- **Programa fundadores: 2.900 €** para los primeros 5 clientes, a cambio de caso de
+  éxito documentado con números. No es un descuento: es un intercambio con caducidad.
+  Cuando haya 5 casos, desaparece.
+- **Opción A: 179 €/mes** (plataforma + soporte + mantenimiento) + consumo (rebilling).
+  Sin permanencia ("cuando quieras la dejas" es parte del pitch).
+- **Opción B: 20% de la inversión publicitaria, mínimo 590 €/mes** (fee de gestión,
+  cubierto por la garantía) **+ 179 €/mes de plataforma** (facturada aparte, NUNCA
+  cubierta por la garantía — suelo de MRR). Implementación financiable en 3 meses si
+  firma B directamente.
+- **El pitch aritmético**: cliente con 2.500 €/mes en ads y ticket 1.200 € paga ~680 €/mes;
+  con UNA venta más al mes que las que ya hacía, el servicio se paga solo — y la garantía
+  cubre el resto.
+- **Proyección solo-founder**: 6 clientes B + 4 clientes A ≈ 6.000 €/mes MRR + rebilling
+  + implementaciones. Si la demanda supera 8 clientes B: subir mínimo a 790 € o contratar
+  primer media buyer freelance (de su red actual).
+
+**Oportunidad a investigar — Kit Digital:** subvenciones estatales de hasta 6.000 € para
+digitalización de empresas de 3–9 empleados. Si Upcro se acredita como **agente
+digitalizador**, el Estado paga la implementación al cliente ("te cuesta cero").
+Verificar vigencia del programa en 2026 y requisitos de acreditación.
+
+### 2.4 Evolución del servicio: de implementación a sistema de crecimiento
+
+- **Fase inicial (ahora): simple.** Los 5 módulos con estrategias sólidas pero
+  estandarizadas — suficiente para cumplir la garantía y demostrar resultados.
+- **Fase madura: cada módulo se convierte en un playbook "best-in-class"** con nombre
+  propio: la mejor estrategia de email marketing, la mejor estrategia publicitaria,
+  las mejores landings, recuperación de carritos, mejora de LTV, etc.
+- Esto permite: (1) **subir precio con justificación** — implementación premium a
+  7.000–10.000 € cuando los playbooks tengan resultados probados; (2) **construir IP**:
+  cada playbook perfeccionado en la línea 1 → snapshot/plantilla de la plataforma →
+  onboarding de la línea 2 → lección del curso → contenido de comunidad. *El trabajo de
+  agencia de hoy es el producto de mañana — nada se hace dos veces*; (3) **especializar
+  la contratación**: se ficha al especialista del playbook con más demanda, no generalistas.
+- **Nota de segmentos**: "recuperación de carritos" y "LTV" son playbooks de e-commerce
+  (la integración Shopify ya existe); "citas, show-rate, ticket alto" son playbooks de
+  negocio local de servicios. Dos clientes distintos — el vertical de arranque decidirá
+  qué playbooks se perfeccionan primero.
 
 ---
 
@@ -192,12 +266,15 @@ maneja clientes o tiene un negocio online.
 
 ## 6. Decisiones abiertas (próximos frentes de trabajo)
 
-1. **Precios:** fee de setup y gestión mensual de la opción A; fee full-service de la
-   opción B; planes SaaS de la línea 2 (autónomo vs agencia revendedora) con márgenes
-   de rebilling concretos.
+1. ~~**Precios línea 1**~~ ✅ Resuelto (ver 2.3). Pendiente de la línea 2: afinar planes
+   (boceto: Autónomo 49 € / Negocio 99 € / Agencia revendedora 249 €, rebilling ×2,5–3
+   sobre coste base) cuando se acerque su lanzamiento.
 2. **Vertical de arranque de la línea 1:** elegir uno (la garantía empuja a ticket
-   alto) y armar el pitch con números.
+   alto) y armar el pitch con números. Input pendiente del fundador: a qué sectores
+   tiene mejor acceso (contactos propios o clientes de las agencias con las que trabaja).
 3. **Contrato de la garantía:** métrica exacta, línea base, ventana de medición,
    obligación de registro de ventas en el CRM.
 4. **Definición de "pulido" para lanzar la línea 2:** los 5 flujos móviles diarios
    con push, curso grabado, comunidad con pulso.
+5. **Kit Digital:** verificar vigencia 2026 y requisitos para acreditarse como agente
+   digitalizador (potencial mejor canal de entrada de la línea 1).
