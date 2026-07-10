@@ -234,6 +234,53 @@ maneja clientes o tiene un negocio online.
 
 ---
 
+## 4b. Estructura de costes por usuario (cifras de julio 2026 — volátiles, revisar antes de usar)
+
+> Los PRECIOS de venta no se documentan (ver 2.3); esta sección es el modelo de COSTES
+> para calcular suelos y márgenes. Todas las cifras verificadas 2026-07-10.
+
+### Costes fijos de plataforma (totales, no por usuario)
+- Vercel Pro ~18 € + Supabase Pro ~23 € + Resend (0–18 €) + dominio ≈ **40–60 €/mes total**.
+  Con 10 usuarios: 4–6 €/usuario. Válido hasta ~50 usuarios (luego +50–100 €/mes de tiers).
+
+### Costes fijos POR usuario
+- Número Twilio: ~3–6 €/mes (solo si usa WhatsApp/SMS con número propio).
+- Comisión de cobro de su cuota: ~2% (tarjeta) o ~0,35% (SEPA — usar para recurrentes).
+- **Total fijo por usuario: ~8–12 €/mes.**
+
+### Costes variables (consumo — SIEMPRE medido y rebillado con margen, nunca tarifa plana)
+- **WhatsApp España** (por mensaje desde jul-2025): servicio (ventana 24h) gratis;
+  utility ~0,017 €; marketing ~0,051 € (+~0,005 $ Twilio por mensaje).
+- **SMS España: ~0,08 € — 5× más caro que WhatsApp utility.** Regla operativa: todo por
+  WhatsApp, SMS solo fallback. Refuerza el posicionamiento "WhatsApp en el centro".
+- **Email (Resend):** ~0,0004 €/email — despreciable.
+- **IA (API Claude, jul-2026):** Haiku 4.5 $1/$5 por Mtok; Sonnet 5 $3/$15 ($2/$10 intro
+  hasta 2026-08-31). Prompt caching: lecturas de prefijo repetido a ~10% del precio.
+  - Respuesta de chatbot: Haiku+caché ~0,2 cts → 2.000 respuestas ≈ 4 €/mes;
+    Sonnet sin caché ~1,2 cts → 2.000 respuestas ≈ 25 €/mes. **El modelo elegido y la
+    caché son una palanca de coste de 5–6×.** Decisión: chatbot en Haiku con caché;
+    Sonnet solo para generación de contenido/diseño (~7 cts por funnel generado).
+- **El cost driver es la campaña masiva de WhatsApp**: 1 blast marketing a 1.000
+  contactos ≈ 55 €. Por eso jamás ofrecer consumo "ilimitado".
+
+### Perfiles de consumo mensual por usuario (orientativos)
+| Perfil | Consumo |
+|---|---|
+| Ligero (freelance, secuencias básicas) | ~5–10 € |
+| Medio (~150 leads/mes, chatbot Haiku, sin blasts) | ~35–45 € |
+| Intenso (blasts a bases 1.000+, IA intensiva) | ~100–150 € |
+
+### Reglas de pricing derivadas
+1. La cuota de mantenimiento (ambos planes) solo necesita cubrir el fijo (~8–12 €) +
+   un paquete de consumo incluido definido — todo lo demás es margen bruto.
+2. El consumo extra va SIEMPRE por wallet con margen ×2,5–3 (rebilling ya construido) —
+   ningún usuario puede costar dinero por mucho que envíe.
+3. Nota producto (pendiente): separar utility/marketing en el metering de WhatsApp
+   (`BASE_COSTS` cobra 0,05 € plano; utility real cuesta 0,017 €) y fijar modelo de IA
+   por función (Haiku chatbot / Sonnet contenido) + prompt caching en `agent.js`.
+
+---
+
 ## 5. Riesgos estructurales (no ignorar)
 
 - **Dependencia de proveedores:** el negocio corre sobre Twilio/Meta/Stripe. La API de
