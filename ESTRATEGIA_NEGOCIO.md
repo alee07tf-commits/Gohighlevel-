@@ -97,16 +97,10 @@ white-label que la plataforma ya genera.
   pasa por la plataforma (Stripe), donde la venta se registra sola.
 - Definir métrica exacta, línea base y ventana de medición en el contrato.
 
-### 2.3 Precios de la línea 1 (validados 2026-07-10)
+### 2.3 La implementación como producto (sin tarifas)
 
-**Referencias de mercado (estudio 2026-07):**
-- Implementadores de GoHighLevel: freelancers $800–$7.500/proyecto; agencias $1.500–$10.000+.
-  Una implementación seria lleva 2–4 semanas.
-- Implementación CRM + automatización en España: agencias 1.500–10.000 € (típico 800–5.000 €).
-  Empresas de 4–19 empleados gastan 1.000–10.000 €.
-- Retainers full-service: $300–$1.000/mes en general; $1.000–$2.500/mes en nichos de ticket
-  alto (dental, legal, reformas).
-- Fuentes: netpartners.marketing, ruzuku.com, flowmatic.es, cronomia.com, softwarepara.net.
+> Los precios se deciden fuera de este documento (cambian constantemente y se
+> ajustarán con estudios de mercado). Aquí solo queda CÓMO se estructura la oferta.
 
 **La implementación NO es un "setup" — es un proyecto, productizado en 5 módulos**
 (cada uno con instalación + estrategia de marketing alrededor):
@@ -119,24 +113,11 @@ white-label que la plataforma ya genera.
 | Autoridad | Reputación/reseñas, informes, presencia de marca |
 | Recuperación | Reactivación de base de datos, clientes dormidos |
 
-**Tarifario:**
-- **Implementación completa: 4.900 €** (precio ancla, visible siempre). Faseable por
-  módulos — protege la agenda del solo-founder.
-- **Programa fundadores: 2.900 €** para los primeros 5 clientes, a cambio de caso de
-  éxito documentado con números. No es un descuento: es un intercambio con caducidad.
-  Cuando haya 5 casos, desaparece.
-- **Opción A: 179 €/mes** (plataforma + soporte + mantenimiento) + consumo (rebilling).
-  Sin permanencia ("cuando quieras la dejas" es parte del pitch).
-- **Opción B: 20% de la inversión publicitaria, mínimo 590 €/mes** (fee de gestión,
-  cubierto por la garantía) **+ 179 €/mes de plataforma** (facturada aparte, NUNCA
-  cubierta por la garantía — suelo de MRR). Implementación financiable en 3 meses si
-  firma B directamente.
-- **El pitch aritmético**: cliente con 2.500 €/mes en ads y ticket 1.200 € paga ~680 €/mes;
-  con UNA venta más al mes que las que ya hacía, el servicio se paga solo — y la garantía
-  cubre el resto.
-- **Proyección solo-founder**: 6 clientes B + 4 clientes A ≈ 6.000 €/mes MRR + rebilling
-  + implementaciones. Si la demanda supera 8 clientes B: subir mínimo a 790 € o contratar
-  primer media buyer freelance (de su red actual).
+Principios de pricing acordados (sin cifras): la implementación se cobra como proyecto
+(rango de mercado de implementaciones CRM/automatización, no como "setup" barato); el fee
+de gestión de la opción B se liga a la inversión publicitaria con un mínimo; la cuota de
+plataforma se factura separada y NUNCA la cubre la garantía (suelo de MRR); programa de
+"clientes fundadores" con precio reducido a cambio de casos de éxito documentados.
 
 **Oportunidad a investigar — Kit Digital:** subvenciones estatales de hasta 6.000 € para
 digitalización de empresas de 3–9 empleados. Si Upcro se acredita como **agente
