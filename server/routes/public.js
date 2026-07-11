@@ -214,6 +214,36 @@ function renderBlock(block, pageId) {
 // Builds the complete landing HTML for a funnel page. Shared by the public
 // route and the authenticated draft preview in the builder.
 async function funnelPageHtml(funnel, page) {
+  // Pro design mode: the page IS custom HTML/CSS (AI-generated and/or visually
+  // edited). We wrap it with SEO/head/body code and wire any <form data-lead>
+  // to the same lead-capture endpoint the block form uses.
+  if (page.mode === 'html' && (page.html_raw || '').trim()) {
+    const cv = await customValues.getMap(funnel.location_id);
+    const bodyHtml = customValues.apply(page.html_raw, cv);
+    const css = customValues.apply(page.css_raw || '', cv);
+    const title = esc(customValues.apply(page.seo_title || page.name, cv));
+    const desc = esc(customValues.apply(page.seo_description || '', cv));
+    const ogImg = esc(page.seo_image || '');
+    return `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
+${desc ? `<meta name="description" content="${desc}">` : ''}
+<meta property="og:title" content="${title}">${desc ? `<meta property="og:description" content="${desc}">` : ''}${ogImg ? `<meta property="og:image" content="${ogImg}">` : ''}
+<meta name="twitter:card" content="summary_large_image">
+<style>${css}</style>${page.head_code || ''}</head><body>
+${bodyHtml}
+${page.body_code || ''}
+<script>
+document.querySelectorAll('form[data-lead]').forEach(function(f){
+  f.addEventListener('submit', async function(e){
+    e.preventDefault();
+    var data=Object.fromEntries(new FormData(f).entries());
+    var r=await fetch('/api/public/pages/${page.id}/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(r.ok){var ok=f.getAttribute('data-success')||'¡Recibido! Te contactamos muy pronto.';f.outerHTML='<div style="padding:18px;border-radius:12px;background:#ecfdf5;border:1px solid #10b981;color:#065f46;font-weight:600;text-align:center">'+ok+'</div>';}
+    else{alert('No se pudo enviar, inténtalo de nuevo.');}
+  });
+});
+</script></body></html>`;
+  }
   const loc = await db.get('SELECT * FROM locations WHERE id = ?', [funnel.location_id]);
   const css = themeCss(page.theme || 'clean', (loc && loc.brand_color) || '#4f46e5');
   const blocks = JSON.parse(page.content || '[]');

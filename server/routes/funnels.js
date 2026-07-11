@@ -114,7 +114,8 @@ router.put('/:id/pages/:pageId', getFunnel, async (req, res) => {
   }
   await db.run(
     `UPDATE funnel_pages SET name=?, published=?, content=?, theme=?,
-       seo_title=?, seo_description=?, seo_image=?, head_code=?, body_code=? WHERE id=?`,
+       seo_title=?, seo_description=?, seo_image=?, head_code=?, body_code=?,
+       mode=?, html_raw=?, css_raw=? WHERE id=?`,
     [
       merged.name,
       merged.published ? 1 : 0,
@@ -122,6 +123,9 @@ router.put('/:id/pages/:pageId', getFunnel, async (req, res) => {
       ['clean', 'bold', 'warm', 'elegant'].includes(merged.theme) ? merged.theme : 'clean',
       merged.seo_title ?? page.seo_title, merged.seo_description ?? page.seo_description,
       merged.seo_image ?? page.seo_image, merged.head_code ?? page.head_code, merged.body_code ?? page.body_code,
+      merged.mode === 'html' ? 'html' : 'blocks',
+      merged.html_raw ?? page.html_raw ?? '',
+      merged.css_raw ?? page.css_raw ?? '',
       page.id,
     ]
   );

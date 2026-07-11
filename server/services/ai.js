@@ -270,6 +270,97 @@ Devuelve el JSON completo actualizado.`;
   }
 }
 
+// ---- Diseño Pro: full bespoke HTML landing pages (ClickFunnels-quality) ----
+// Instead of the constrained block schema, Claude designs the complete page
+// (layout, CSS, copy). Output uses plain-text markers — far more robust than
+// JSON for large HTML payloads:
+//   ===CSS===\n …stylesheet… \n===HTML===\n …body markup…
+const HTML_RULES = `Requisitos tecnicos OBLIGATORIOS:
+- Devuelve EXACTAMENTE este formato, sin markdown ni explicaciones:
+===CSS===
+(hoja de estilos completa)
+===HTML===
+(contenido del <body>, SIN etiquetas <html>/<head>/<body>)
+- Pagina 100% responsive (mobile-first), tipografia del sistema o Google Fonts via @import en el CSS.
+- Incluye SIEMPRE un formulario de captura: <form data-lead data-success="mensaje de gracias"> con inputs name="first_name", name="email", name="phone" y un boton submit. No le pongas action ni JS: la plataforma lo cablea sola.
+- Imagenes: usa https://loremflickr.com/ANCHO/ALTO/palabras,clave (en ingles) o la URL que te de el usuario. Nada de rutas locales.
+- CSS con clases propias (prefijo lp-), sin estilos que dependan de librerias externas. Animaciones sutiles CSS permitidas.
+- Sin <script> propios.`;
+
+function parseCssHtml(text) {
+  const cssMatch = text.match(/===CSS===([\s\S]*?)===HTML===/);
+  const htmlMatch = text.match(/===HTML===([\s\S]*)$/);
+  const css = cssMatch ? cssMatch[1].trim() : '';
+  let html = htmlMatch ? htmlMatch[1].trim() : '';
+  html = html.replace(/^```html?\s*/i, '').replace(/```\s*$/, '').trim();
+  if (!html) throw new Error('no html');
+  return { css, html };
+}
+
+function fallbackLandingHtml({ prompt, business }) {
+  const biz = business || 'Tu negocio';
+  const off = (prompt || 'Nuestra oferta').slice(0, 90);
+  const kw = String(biz).toLowerCase().split(/\s+/).filter((w) => w.length > 3).slice(0, 2).join(',') || 'business';
+  return {
+    css: `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,system-ui,sans-serif;color:#0f172a;line-height:1.6}
+.lp-hero{min-height:70vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:80px 24px;color:#fff;background:linear-gradient(rgba(10,12,30,.65),rgba(10,12,30,.75)),url('https://loremflickr.com/1600/900/${kw}') center/cover}
+.lp-hero h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:800;max-width:800px;letter-spacing:-.5px}
+.lp-hero p{font-size:1.15rem;opacity:.92;max-width:620px;margin:16px 0 28px}
+.lp-btn{background:#f59e0b;color:#fff;border:none;padding:16px 40px;border-radius:12px;font-size:1.05rem;font-weight:700;cursor:pointer;box-shadow:0 12px 30px rgba(0,0,0,.3)}
+.lp-sec{max-width:1000px;margin:0 auto;padding:70px 24px}
+.lp-form{max-width:440px;margin:0 auto;background:#fff;border-radius:16px;box-shadow:0 18px 50px rgba(15,23,42,.14);padding:28px}
+.lp-form input{width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:9px;font-size:16px;margin-bottom:12px}
+.lp-form button{width:100%}`,
+    html: `<section class="lp-hero"><h1>${off}</h1><p>${biz} — resultados reales sin complicaciones. Déjanos tus datos y te contactamos hoy.</p><a class="lp-btn" href="#lead">Quiero empezar</a></section>
+<section class="lp-sec" id="lead"><form class="lp-form" data-lead data-success="¡Recibido! Te contactamos en menos de 24h.">
+<h2 style="margin-bottom:14px">Solicita información</h2>
+<input name="first_name" placeholder="Tu nombre" required><input name="email" type="email" placeholder="Tu email" required><input name="phone" placeholder="Tu teléfono">
+<button class="lp-btn" type="submit">Enviar</button></form></section>`,
+  };
+}
+
+async function generateLandingHtml({ prompt, business, locationName, ctx }) {
+  if (!(await ready(ctx))) return { ...fallbackLandingHtml({ prompt, business: business || locationName }), generated_by: 'template' };
+  const system = `Eres un director de arte y desarrollador senior de landing pages de conversion (nivel ClickFunnels/Webflow). Diseñas paginas COMPLETAS, modernas y bellas: jerarquia visual clara, hero potente con imagen, secciones que respiran, social proof, CTA repetido, copy persuasivo y especifico en el idioma del usuario (por defecto español).
+${HTML_RULES}`;
+  const userPrompt = `Negocio: ${business || locationName || 'negocio local'}
+Encargo del cliente: ${prompt}
+Diseña la landing completa (7-10 secciones: hero con imagen de fondo, beneficios, como funciona, testimonios, oferta/precios si aplica, FAQ, CTA final con el formulario de captura).`;
+  try {
+    const text = await complete(system, userPrompt, 8000, ctx);
+    return { ...parseCssHtml(text), generated_by: 'claude' };
+  } catch (err) {
+    if (err.status === 501) throw err;
+    return { ...fallbackLandingHtml({ prompt, business: business || locationName }), generated_by: 'template-after-error' };
+  }
+}
+
+async function editLandingHtml({ html, css, prompt, locationName, ctx }) {
+  if (!(await ready(ctx))) {
+    return { html, css, reply: 'Para editar el Diseño Pro con lenguaje natural necesito la IA conectada (Anthropic API key en Agencia → Servicios de la plataforma → IA).', generated_by: 'none', changed: false };
+  }
+  const system = `Eres Claude design: editas una landing page existente conversando con el usuario. Mantienes intacto TODO lo que no pida cambiar (incluido el <form data-lead>). Copy persuasivo en su idioma.
+${HTML_RULES}
+Ademas del CSS y HTML, empieza tu salida con una linea: ===REPLY=== seguida de 1-2 frases cercanas resumiendo el cambio, antes de ===CSS===.`;
+  const userPrompt = `Negocio: ${locationName || 'negocio local'}
+CSS actual:
+${String(css || '').slice(0, 20000)}
+HTML actual (body):
+${String(html || '').slice(0, 30000)}
+Peticion del usuario: ${prompt}
+Devuelve la pagina COMPLETA actualizada en el formato indicado.`;
+  const text = await complete(system, userPrompt, 8000, ctx);
+  const replyMatch = text.match(/===REPLY===([\s\S]*?)===CSS===/);
+  const parsed = parseCssHtml(text);
+  if (!/data-lead/.test(parsed.html)) {
+    // Never lose the capture form: re-append the previous one if Claude dropped it.
+    const prevForm = String(html || '').match(/<form[^>]*data-lead[\s\S]*?<\/form>/i);
+    if (prevForm) parsed.html += `\n<section class="lp-sec">${prevForm[0]}</section>`;
+  }
+  return { ...parsed, reply: replyMatch ? replyMatch[1].trim() : 'Cambios aplicados ✅', generated_by: 'claude', changed: true };
+}
+
 // ---- Workflow AI: generate an automation from a plain-language goal ----
 const WF_TRIGGERS = ['contact_created', 'tag_added', 'form_submitted', 'appointment_booked', 'opportunity_stage_changed', 'message_received', 'invoice_paid', 'appointment_status_changed', 'review_received'];
 const WF_ACTIONS = ['add_tag', 'remove_tag', 'send_email', 'send_sms', 'send_whatsapp', 'add_note', 'create_opportunity', 'wait', 'branch', 'create_task', 'send_review_request', 'webhook'];
@@ -327,4 +418,4 @@ async function suggestReviewReply({ business, rating, comment, contactName, ctx 
   }
 }
 
-module.exports = { enabled, ready, resolveAi, complete, generateCopy, reportNarrative, generateFunnelDesign, editFunnelDesign, generateWorkflow, suggestReviewReply };
+module.exports = { enabled, ready, resolveAi, complete, generateCopy, reportNarrative, generateFunnelDesign, editFunnelDesign, generateLandingHtml, editLandingHtml, generateWorkflow, suggestReviewReply };

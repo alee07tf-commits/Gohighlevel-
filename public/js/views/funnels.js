@@ -132,6 +132,7 @@ async function renderBuilder(view, funnelId) {
     <select class="input" id="theme-select" style="width:150px" title="Tema visual">
       ${Object.entries(THEMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
     </select>
+    <button class="btn small" id="visual-editor" title="${t('Constructor visual de páginas (arrastrar y soltar)', 'Visual page builder (drag & drop)')}">🖱️ ${t('Editor visual', 'Visual editor')}</button>
     <button class="btn secondary small" id="ai-redesign" title="La IA rediseña esta página (podrás editarla después)">Rediseñar</button>
     <button class="btn secondary small" id="page-seo">SEO</button>
     <label class="flex" style="font-size:13px"><input type="checkbox" id="published"> ${t('Publicada', 'Published')}</label>
@@ -263,6 +264,21 @@ async function renderBuilder(view, funnelId) {
 
   function renderBlocks() {
     const el = view.querySelector('#blocks');
+    if (page.mode === 'html') {
+      el.innerHTML = `<div class="empty" style="padding:24px;text-align:left">
+        <strong>🎨 ${t('Esta página usa Diseño Pro', 'This page uses Pro design')}</strong>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 12px">${t('Edítala con el <b>editor visual</b> (arrastrar y soltar) o pídele cambios al chat de Claude design. Los bloques clásicos no aplican en este modo.', 'Edit it with the <b>visual editor</b> (drag & drop) or ask the Claude design chat. Classic blocks do not apply in this mode.')}</p>
+        <button class="btn secondary small" id="back-to-blocks">↩ ${t('Volver al modo bloques', 'Back to blocks mode')}</button>
+      </div>`;
+      el.querySelector('#back-to-blocks').addEventListener('click', async () => {
+        if (!confirm(t('¿Volver al modo bloques? El diseño Pro se conserva guardado, pero la página volverá a renderizar los bloques clásicos.', 'Back to blocks mode? The Pro design stays saved, but the page will render the classic blocks again.'))) return;
+        const updated = await api(`/funnels/${funnel.id}/pages/${page.id}`, { method: 'PUT', body: { mode: 'blocks', content: blocks, published: view.querySelector('#published').checked, theme: view.querySelector('#theme-select').value } });
+        page = updated;
+        renderBlocks();
+        refreshPreview();
+      });
+      return;
+    }
     el.innerHTML = blocks.length
       ? blocks
           .map(
@@ -405,14 +421,16 @@ async function renderBuilder(view, funnelId) {
     refreshPreview();
   });
   view.querySelector('#ai-redesign').addEventListener('click', async () => {
-    if (!confirm(t('La IA rediseñará esta página (estructura y textos). Podrás editar el resultado. ¿Continuar?', 'AI will redesign this page (structure and copy). You can edit the result. Continue?'))) return;
+    const desc = prompt(t('Describe la página que quieres (negocio, oferta, estilo). La IA diseñará una landing completa a medida que luego puedes retocar en el editor visual:', 'Describe the page you want. The AI will design a complete bespoke landing you can then tweak in the visual editor:'), funnel.name);
+    if (!desc) return;
     const btn = view.querySelector('#ai-redesign');
     btn.disabled = true;
-    btn.textContent = 'Diseñando…';
+    btn.textContent = t('Diseñando… (20-40s)', 'Designing… (20-40s)');
     try {
-      const offer = prompt(t('¿Qué quieres promocionar en esta página?', 'What do you want to promote on this page?'), funnel.name) || funnel.name;
-      await api('/ai/funnel', { method: 'POST', body: { offer, funnel_id: funnel.id, page_id: page.id } });
-      toast(t('Página rediseñada — revisa y edita antes de guardar', 'Page redesigned — review and edit before saving'));
+      const r = await api('/ai/landing-html', { method: 'POST', body: { prompt: desc, funnel_id: funnel.id, page_id: page.id } });
+      toast(r.generated_by === 'claude'
+        ? t('Landing diseñada a medida por Claude — retócala en el editor visual', 'Bespoke landing designed by Claude — tweak it in the visual editor')
+        : t('Landing generada con plantilla (conecta la IA para diseño a medida)', 'Landing generated from template (connect AI for bespoke design)'));
       renderBuilder(view, funnelId);
     } catch (err) {
       toast(err.message, true);
@@ -420,6 +438,111 @@ async function renderBuilder(view, funnelId) {
       btn.textContent = 'Rediseñar';
     }
   });
+  // ---- Constructor visual propio (drag & drop, motor GrapesJS embebido) ----
+  const STARTER_CSS = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,system-ui,sans-serif;color:#0f172a;line-height:1.6}
+.lp-hero{min-height:60vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:80px 24px;color:#fff;background:linear-gradient(rgba(10,12,30,.6),rgba(10,12,30,.72)),url('https://loremflickr.com/1600/900/business') center/cover}
+.lp-hero h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:800;max-width:800px}
+.lp-hero p{font-size:1.15rem;opacity:.92;max-width:620px;margin:16px 0 28px}
+.lp-btn{display:inline-block;background:#f59e0b;color:#fff;border:none;padding:15px 38px;border-radius:12px;font-size:1.05rem;font-weight:700;cursor:pointer;text-decoration:none}
+.lp-sec{max-width:1000px;margin:0 auto;padding:64px 24px}
+.lp-grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:22px}
+.lp-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:24px;box-shadow:0 2px 10px rgba(15,23,42,.06)}
+.lp-form{max-width:440px;margin:0 auto;background:#fff;border-radius:16px;box-shadow:0 18px 50px rgba(15,23,42,.14);padding:28px}
+.lp-form input{width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:9px;font-size:16px;margin-bottom:12px}`;
+  const STARTER_HTML = `<section class="lp-hero"><h1>Tu gran promesa aquí</h1><p>Explica en una frase el valor que ofreces y por qué importa.</p><a class="lp-btn" href="#lead">Quiero empezar</a></section>
+<section class="lp-sec"><div class="lp-grid3">
+<div class="lp-card"><h3>Beneficio 1</h3><p>Describe un beneficio concreto.</p></div>
+<div class="lp-card"><h3>Beneficio 2</h3><p>Describe otro beneficio.</p></div>
+<div class="lp-card"><h3>Beneficio 3</h3><p>Y uno más para rematar.</p></div>
+</div></section>
+<section class="lp-sec" id="lead"><form class="lp-form" data-lead data-success="¡Recibido! Te contactamos muy pronto.">
+<h2 style="margin-bottom:14px">Solicita información</h2>
+<input name="first_name" placeholder="Tu nombre" required><input name="email" type="email" placeholder="Tu email" required><input name="phone" placeholder="Tu teléfono">
+<button class="lp-btn" type="submit" style="width:100%">Enviar</button></form></section>`;
+
+  function loadOnce(kind, url, key) {
+    return new Promise((ok, fail) => {
+      if (document.getElementById(key)) return ok();
+      const el = kind === 'css' ? document.createElement('link') : document.createElement('script');
+      if (kind === 'css') { el.rel = 'stylesheet'; el.href = url; } else el.src = url;
+      el.id = key;
+      el.onload = ok;
+      el.onerror = () => fail(new Error(t('No se pudo cargar el editor (revisa tu conexión)', 'Editor failed to load (check your connection)')));
+      document.head.appendChild(el);
+    });
+  }
+
+  async function openVisualEditor() {
+    // A blocks page converts to Pro mode the first time (starting from a clean skeleton).
+    if (page.mode !== 'html' || !(page.html_raw || '').trim()) {
+      if (!confirm(t('Esta página pasará al modo Diseño Pro (constructor visual). Empezarás desde una plantilla base editable — o cancela y usa "Rediseñar" para que la IA genere el diseño primero. ¿Continuar?', 'This page will switch to Pro design mode (visual builder), starting from an editable base template. Continue?'))) return;
+      page.mode = 'html';
+      page.html_raw = STARTER_HTML;
+      page.css_raw = STARTER_CSS;
+    }
+    const btn = view.querySelector('#visual-editor');
+    btn.disabled = true; btn.textContent = t('Cargando…', 'Loading…');
+    try {
+      await loadOnce('css', 'https://unpkg.com/grapesjs@0.21.13/dist/css/grapes.min.css', 'gjs-css');
+      await loadOnce('js', 'https://unpkg.com/grapesjs@0.21.13/dist/grapes.min.js', 'gjs-js');
+      await loadOnce('js', 'https://unpkg.com/grapesjs-preset-webpage@1.0.3/dist/index.js', 'gjs-preset');
+    } catch (err) { toast(err.message, true); btn.disabled = false; btn.textContent = '🖱️ ' + t('Editor visual', 'Visual editor'); return; }
+    btn.disabled = false; btn.textContent = '🖱️ ' + t('Editor visual', 'Visual editor');
+
+    const root = document.getElementById('modal-root');
+    root.innerHTML = `<div class="ve-shell">
+      <div class="ve-head">
+        <strong>🖱️ ${t('Constructor visual', 'Visual builder')} — ${esc(page.name)}</strong>
+        <span class="muted" style="font-size:11px;flex:1">${t('arrastra bloques desde la derecha · edita cualquier texto haciendo doble clic', 'drag blocks from the right · double-click any text to edit')}</span>
+        <button class="btn secondary" id="ve-cancel">${t('Cancelar', 'Cancel')}</button>
+        <button class="btn" id="ve-save">${t('Guardar diseño', 'Save design')}</button>
+      </div>
+      <div id="gjs"></div>
+    </div>`;
+
+    const editor = window.grapesjs.init({
+      container: '#gjs',
+      height: '100%',
+      fromElement: false,
+      components: page.html_raw,
+      style: page.css_raw,
+      storageManager: false,
+      plugins: ['grapesjs-preset-webpage'],
+      pluginsOpts: { 'grapesjs-preset-webpage': { modalImportButton: false } },
+      canvas: { styles: [], scripts: [] },
+    });
+
+    // Bloques propios de Upcro, arriba del todo.
+    const bm = editor.BlockManager;
+    const upcro = (id, label, content) => bm.add(id, { label, category: 'Upcro', content, attributes: { class: 'gjs-block-section' } });
+    upcro('u-hero', '🎬 Hero', `<section class="lp-hero"><h1>Titular potente</h1><p>Subtítulo que vende el beneficio.</p><a class="lp-btn" href="#lead">Llamada a la acción</a></section>`);
+    upcro('u-benefits', '✨ Beneficios (3)', `<section class="lp-sec"><div class="lp-grid3"><div class="lp-card"><h3>Beneficio</h3><p>Descripción corta.</p></div><div class="lp-card"><h3>Beneficio</h3><p>Descripción corta.</p></div><div class="lp-card"><h3>Beneficio</h3><p>Descripción corta.</p></div></div></section>`);
+    upcro('u-cta', '📣 CTA', `<section class="lp-sec" style="text-align:center"><h2>¿Listo para empezar?</h2><p style="margin:10px 0 22px">Da el primer paso hoy mismo.</p><a class="lp-btn" href="#lead">Quiero empezar</a></section>`);
+    upcro('u-form', '📩 Formulario de captura', `<section class="lp-sec" id="lead"><form class="lp-form" data-lead data-success="¡Recibido! Te contactamos muy pronto."><h2 style="margin-bottom:14px">Solicita información</h2><input name="first_name" placeholder="Tu nombre" required><input name="email" type="email" placeholder="Tu email" required><input name="phone" placeholder="Tu teléfono"><button class="lp-btn" type="submit" style="width:100%">Enviar</button></form></section>`);
+    upcro('u-testimonial', '⭐ Testimonio', `<section class="lp-sec"><div class="lp-card" style="max-width:640px;margin:0 auto;text-align:center"><p style="font-style:italic">“Resultados increíbles, lo recomiendo al 100%.”</p><strong style="display:block;margin-top:10px">María G.</strong></div></section>`);
+
+    root.querySelector('#ve-cancel').addEventListener('click', () => { editor.destroy(); root.innerHTML = ''; });
+    root.querySelector('#ve-save').addEventListener('click', async () => {
+      const html = editor.getHtml().replace(/^<body[^>]*>|<\/body>$/g, '').trim();
+      const css = editor.getCss();
+      try {
+        const updated = await api(`/funnels/${funnel.id}/pages/${page.id}`, {
+          method: 'PUT',
+          body: { mode: 'html', html_raw: html, css_raw: css, content: blocks, published: view.querySelector('#published').checked, theme: view.querySelector('#theme-select').value },
+        });
+        page = updated;
+        const idx = funnel.pages.findIndex((p) => p.id === page.id);
+        funnel.pages[idx] = updated;
+        editor.destroy(); root.innerHTML = '';
+        toast(t('Diseño guardado', 'Design saved'));
+        renderBlocks();
+        refreshPreview();
+      } catch (err) { toast(err.message, true); }
+    });
+  }
+  view.querySelector('#visual-editor').addEventListener('click', openVisualEditor);
+
   // ---- Claude design chat: iterative prompting, like talking to a designer ----
   const cdHistory = [];
   const cdMsgs = view.querySelector('#cd-msgs');
@@ -454,12 +577,18 @@ async function renderBuilder(view, funnelId) {
       cdAdd('ai', r.reply);
       cdHistory.push({ role: 'ai', text: r.reply });
       if (r.changed) {
-        blocks = r.blocks;
-        page.content = r.blocks;
-        page.theme = r.theme;
-        view.querySelector('#theme-select').value = r.theme;
-        renderBlocks();
-        refreshPreview();
+        if (r.mode === 'html') {
+          // Pro page: the server already saved the new HTML/CSS — just re-render.
+          page.mode = 'html';
+          refreshPreview();
+        } else {
+          blocks = r.blocks;
+          page.content = r.blocks;
+          page.theme = r.theme;
+          view.querySelector('#theme-select').value = r.theme;
+          renderBlocks();
+          refreshPreview();
+        }
       }
     } catch (err) {
       thinking.remove();

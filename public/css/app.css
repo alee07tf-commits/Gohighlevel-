@@ -530,3 +530,25 @@ code.inline { background: #f0f1f6; padding: 2px 7px; border-radius: 6px; font-si
 @media (max-width: 640px) {
   .input, input.input, select.input, textarea.input { font-size: 16px; }
 }
+
+/* Visual page builder (GrapesJS overlay). */
+.ve-shell { position: fixed; inset: 0; z-index: 300; background: #fff; display: flex; flex-direction: column; }
+.ve-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: #fff; }
+.ve-shell #gjs { flex: 1; min-height: 0; }
+.gjs-one-bg { background-color: #1f2333; }
+.gjs-block-section { min-height: 44px; }
+
+/* Mobile-first visual builder: compact toolbar, bottom block tray, touch targets. */
+@media (max-width: 760px) {
+  .ve-head { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+  .ve-head strong { font-size: 13px; }
+  .ve-head .muted { display: none; }
+  .ve-head .btn { padding: 9px 14px; font-size: 13px; }
+  /* GrapesJS: right sidebar becomes a slim bottom tray; canvas gets the space. */
+  .gjs-pn-views-container, .gjs-pn-views { width: 42vw !important; }
+  .gjs-cv-canvas { width: 58vw !important; }
+  .gjs-pn-panel .gjs-pn-buttons { flex-wrap: wrap; }
+  .gjs-block { min-height: 60px; padding: 8px 4px; font-size: 11px; }
+  .gjs-field, .gjs-sm-sector .gjs-sm-field input { font-size: 16px; }
+  .preview-frame { height: 70vh; }
+}
