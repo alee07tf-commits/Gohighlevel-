@@ -17,7 +17,7 @@ const CENTRAL = [
     { k: 'vendor', label: t('Proveedor', 'Provider'), type: 'select', opts: ['resend', 'sendgrid'] },
     { k: 'api_key', label: t('API key', 'API key'), secret: true },
     { k: 'mail_from', label: t('Remitente (from)', 'Sender (from)'), placeholder: t('tu@dominio.com', 'you@domain.com') } ] },
-  { key: 'ai', label: t('IA conversacional (Claude)', 'Conversational AI (Claude)'), managed: true, primary: 'api_key', fields: [
+  { key: 'ai', label: t('IA (Claude) — motor de TODAS las funciones IA', 'AI (Claude) — powers ALL AI features'), managed: true, primary: 'api_key', fields: [
     { k: 'api_key', label: 'Anthropic API key', secret: true },
     { k: 'model', label: t('Modelo (opcional)', 'Model (optional)'), placeholder: 'claude-sonnet-5' } ] },
   { key: 'stripe', label: t('Pagos (Stripe)', 'Payments (Stripe)'), primary: 'secret_key', fields: [{ k: 'secret_key', label: 'Secret key (sk_…)', secret: true }] },

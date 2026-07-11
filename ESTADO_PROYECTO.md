@@ -202,3 +202,11 @@ Login demo: `demo@upcro.app` / `demo123`.
 - Ruta `POST /api/copilot` (+rebilling ai por ejecución). Frontend: FAB ✨ + panel en `app.js` (`setupCopilot`), historial en `window.__copilotHistory`, chips de acciones. CSS `.copilot-*`.
 - Tests v65 con fetch stub del round-trip tool_use. **235 tests en verde.**
 - OJO: las claves puestas en la UI (Agencia→Servicios→IA) solo aplican a ESA agencia; la cuenta de diagnóstico live31606@x.com es otra agencia y siempre verá simulado salvo que haya ANTHROPIC_API_KEY en el env de Vercel.
+
+## 12. Constructor visual propio (Diseño Pro) — prioridad del usuario
+- REGLA PERMANENTE del usuario: **móvil primero** — todo lo nuevo debe funcionar muy bien en móvil.
+- Modo `html` por página (schema **37**: funnel_pages.mode/html_raw/css_raw). Render público en public.js (rama html de funnelPageHtml): wrap SEO + custom values + script que cablea `<form data-lead>` a /api/public/pages/:id/submit.
+- Editor visual embebido: GrapesJS 0.21.13 + preset-webpage por CDN (loadOnce en funnels.js), overlay .ve-shell, bloques Upcro personalizados. Guardar → PUT page mode html.
+- IA potenciador: `ai.generateLandingHtml`/`editLandingHtml` (marcadores ===CSS===/===HTML===, fallback plantilla); rutas `/api/ai/landing-html` y `/api/ai/design` (mode-aware). 'Rediseñar' del builder usa landing-html.
+- 'Volver a bloques' conserva html guardado. Tests v66. **241 tests.**
+- ANTHROPIC_API_KEY del usuario VALIDADA (sk-ant-…44dtMwAA, no está en el repo) — pendiente que la ponga en Vercel y redeploy; el Empleado IA en prod aún respondía configured:false con la cuenta diagnóstico.
