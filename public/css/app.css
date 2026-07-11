@@ -480,3 +480,28 @@ code.inline { background: #f0f1f6; padding: 2px 7px; border-radius: 6px; font-si
 .cd-msg.user { background: var(--primary, #4f46e5); color: #fff; border-bottom-right-radius: 4px; align-self: flex-end; }
 .cd-msg.cd-thinking { opacity: .7; font-style: italic; animation: cdPulse 1.2s ease-in-out infinite; }
 @keyframes cdPulse { 50% { opacity: .35; } }
+
+/* Empleado IA (global copilot). */
+.copilot-fab {
+  position: fixed; right: 22px; bottom: 22px; z-index: 90;
+  width: 54px; height: 54px; border-radius: 50%; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--primary, #4f46e5), #7c3aed); color: #fff; font-size: 22px;
+  box-shadow: 0 10px 30px rgba(79, 70, 229, .45); transition: transform .15s ease;
+}
+.copilot-fab:hover { transform: scale(1.08); }
+.copilot-panel {
+  position: fixed; right: 22px; bottom: 88px; z-index: 95;
+  width: 390px; max-width: calc(100vw - 24px); height: 540px; max-height: calc(100vh - 120px);
+  background: #fff; border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .28); display: flex; flex-direction: column; overflow: hidden;
+}
+.copilot-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--primary-soft, #eef2ff); }
+.copilot-msgs { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.copilot-suggest { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
+.cp-sug { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; color: var(--muted); }
+.cp-sug:hover { border-color: var(--primary); color: var(--primary); }
+.copilot-form { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.copilot-form .input { flex: 1; }
+.cp-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.cp-chip { background: #ecfdf5; border: 1px solid #86efac; color: #166534; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+@media (max-width: 640px) { .copilot-panel { right: 12px; left: 12px; width: auto; } }

@@ -78,3 +78,6 @@ router.post('/:id/send', async (req, res) => {
 });
 
 module.exports = router;
+
+// Reused by the AI employee generate_report tool.
+module.exports.computeStats = computeStats;
