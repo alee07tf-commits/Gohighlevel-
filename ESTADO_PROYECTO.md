@@ -196,3 +196,9 @@ Login demo: `demo@upcro.app` / `demo123`.
 - **Claude design v2**: chat conversacional en el builder de funnels (POST `/api/ai/design`, con `history`; `ai.editFunnelDesign` con IA real o `fallbackDesignEdit` por reglas sin clave). Bloques nuevos `split` e `image` + hero con foto de fondo (`image_keywords` → loremflickr sin API key, o `image` URL propia) + CSS de landings mejorado. Preview en vivo real de borradores: `/api/funnels/:id/pages/:pageId/preview` (usa `funnelPageHtml` exportado de public.js).
 - Producción Vercel: proyecto `gohighlevel` (URL `gohighlevel-git-main-alee07tf-commits-projects.vercel.app`), Supabase conectado (Session pooler 5432, pool max=1 por instancia serverless), Deployment Protection OFF. Health: `{"ok":true,"database":"postgres","persistent":true}`.
 - Tests: **229 en verde** (v64 nuevo). SCHEMA_VERSION sigue en 36.
+
+## 11. Empleado IA (copiloto global)
+- `server/services/copilot.js`: 12 herramientas seguras scoped a sub-cuenta (stats, hot_leads, search/create contact, task, note, tag, send_message 1-a-1, draft_campaign SIEMPRE borrador, create_workflow SIEMPRE inactiva, generate_report, list_appointments). SIN herramientas de borrado. Loop tool-use Anthropic (máx 6 turnos), clave por cascada, `configured:false` amable sin clave.
+- Ruta `POST /api/copilot` (+rebilling ai por ejecución). Frontend: FAB ✨ + panel en `app.js` (`setupCopilot`), historial en `window.__copilotHistory`, chips de acciones. CSS `.copilot-*`.
+- Tests v65 con fetch stub del round-trip tool_use. **235 tests en verde.**
+- OJO: las claves puestas en la UI (Agencia→Servicios→IA) solo aplican a ESA agencia; la cuenta de diagnóstico live31606@x.com es otra agencia y siempre verá simulado salvo que haya ANTHROPIC_API_KEY en el env de Vercel.
