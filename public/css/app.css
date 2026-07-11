@@ -509,4 +509,24 @@ code.inline { background: #f0f1f6; padding: 2px 7px; border-radius: 6px; font-si
 .copilot-form .input { flex: 1; }
 .cp-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .cp-chip { background: #ecfdf5; border: 1px solid #86efac; color: #166534; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
-@media (max-width: 640px) { .copilot-panel { right: 12px; left: 12px; width: auto; } }
+/* Mobile: the copilot becomes a full-screen chat sheet (like a messaging app)
+   and inputs use 16px font so iOS Safari does not auto-zoom on focus. */
+@media (max-width: 640px) {
+  .copilot-panel {
+    inset: 0; right: 0; bottom: 0; width: 100%; max-width: 100%;
+    height: 100dvh; max-height: 100dvh; border-radius: 0; border: none;
+  }
+  .copilot-head { padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top)); }
+  .copilot-head strong { font-size: 16px; }
+  .copilot-msgs { padding: 14px; }
+  .copilot-msgs .cd-msg { font-size: 15px; max-width: 86%; }
+  .copilot-form { padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .copilot-form .input { font-size: 16px; padding: 12px; }
+  .copilot-form .btn { padding: 12px 18px; }
+  .copilot-fab { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); width: 50px; height: 50px; font-size: 20px; }
+  .cp-sug { font-size: 13px; padding: 8px 14px; }
+}
+/* App-wide: 16px form controls on touch screens kill the iOS focus auto-zoom. */
+@media (max-width: 640px) {
+  .input, input.input, select.input, textarea.input { font-size: 16px; }
+}
