@@ -1,3 +1,8 @@
+/* The hidden attribute must ALWAYS win, even over classes that set display
+   (flex/grid/inline-flex) or inline styles - otherwise panels toggled via
+   el.hidden (copilot, notification badge, cookie banner...) can never close. */
+[hidden] { display: none !important; }
+
 :root {
   --bg: #f6f7fb;
   --surface: #ffffff;
