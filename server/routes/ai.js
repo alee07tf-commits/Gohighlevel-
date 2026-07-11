@@ -91,9 +91,36 @@ router.post('/funnel', async (req, res) => {
   }
 });
 
+// Diseño Pro: generate a complete bespoke HTML landing into an existing page
+// (switches it to mode 'html'). The visual editor and the design chat can then
+// keep refining it. Body: { funnel_id, page_id, prompt }.
+router.post('/landing-html', async (req, res) => {
+  const { funnel_id, page_id, prompt } = req.body || {};
+  if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: 'Describe la página que quieres' });
+  const page = await db.get(
+    `SELECT fp.* FROM funnel_pages fp JOIN funnels f ON f.id = fp.funnel_id
+     WHERE fp.id = ? AND f.id = ? AND f.location_id = ?`,
+    [page_id, funnel_id, req.location.id]
+  );
+  if (!page) return res.status(404).json({ error: 'Página no encontrada' });
+  try {
+    const out = await ai.generateLandingHtml({
+      prompt: String(prompt).slice(0, 3000),
+      business: `${req.location.name}${req.location.company ? ` (${req.location.company})` : ''}`,
+      locationName: req.location.name,
+      ctx: { locationId: req.location.id, agencyId: req.user.agency_id },
+    });
+    await db.run(`UPDATE funnel_pages SET mode = 'html', html_raw = ?, css_raw = ? WHERE id = ?`, [out.html, out.css, page.id]);
+    res.json({ ok: true, generated_by: out.generated_by, mode: 'html', html: out.html, css: out.css });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 // Claude design chat: iteratively edit a page from natural-language prompts.
 // Body: { funnel_id, page_id, prompt, history?: [{role,text}] }.
-// Saves the updated blocks/theme and returns them with the designer's reply.
+// Works on both modes: block pages get JSON edits; Pro (html) pages get the
+// full HTML/CSS rewritten. Saves and returns the updated page state.
 router.post('/design', async (req, res) => {
   const { funnel_id, page_id, prompt, history } = req.body || {};
   if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: 'Escribe qué quieres cambiar' });
@@ -103,6 +130,25 @@ router.post('/design', async (req, res) => {
     [page_id, funnel_id, req.location.id]
   );
   if (!page) return res.status(404).json({ error: 'Página no encontrada' });
+
+  // Pro mode: edit the raw HTML/CSS page.
+  if (page.mode === 'html' && (page.html_raw || '').trim()) {
+    try {
+      const out = await ai.editLandingHtml({
+        html: page.html_raw, css: page.css_raw || '',
+        prompt: String(prompt).slice(0, 2000),
+        locationName: req.location.name,
+        ctx: { locationId: req.location.id, agencyId: req.user.agency_id },
+      });
+      if (out.changed !== false) {
+        await db.run('UPDATE funnel_pages SET html_raw = ?, css_raw = ? WHERE id = ?', [out.html, out.css, page.id]);
+      }
+      return res.json({ ok: true, mode: 'html', reply: out.reply, changed: out.changed !== false, generated_by: out.generated_by });
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+  }
+
   let blocks = [];
   try { blocks = JSON.parse(page.content || '[]'); } catch { blocks = []; }
   try {

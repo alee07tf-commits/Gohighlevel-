@@ -792,6 +792,11 @@ CREATE TABLE IF NOT EXISTS round_robin_state (
 );
 -- Order bumps / upsells offered on the public payment page (JSON on the invoice).
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS bumps TEXT DEFAULT '';
+-- Pro design mode: pages can be full custom HTML/CSS (AI-generated, visually
+-- editable) instead of the structured block list. mode: 'blocks' | 'html'.
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'blocks';
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS html_raw TEXT DEFAULT '';
+ALTER TABLE funnel_pages ADD COLUMN IF NOT EXISTS css_raw TEXT DEFAULT '';
 `;
 
 // Rewrites `?` placeholders to Postgres $1..$n.
@@ -870,7 +875,7 @@ if (process.env.DATABASE_URL) {
 
 // Schema init. Bump SCHEMA_VERSION whenever SCHEMA/MIGRATIONS change so
 // running deployments apply them once and then skip DDL on every cold start.
-const SCHEMA_VERSION = 36;
+const SCHEMA_VERSION = 37;
 
 let readyPromise = null;
 function ensureReady() {
