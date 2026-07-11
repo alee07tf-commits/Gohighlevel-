@@ -175,6 +175,25 @@ function renderShell(activePath) {
         <button class="btn secondary small" id="logout-btn">${t('Salir', 'Log out')}</button>
       </header>
       <main class="content" id="view"></main>
+      <button class="copilot-fab" id="copilot-fab" title="${t('Empleado IA', 'AI Employee')}" aria-label="${t('Empleado IA', 'AI Employee')}">✨</button>
+      <div class="copilot-panel" id="copilot-panel" hidden>
+        <div class="copilot-head">
+          <strong>✨ ${t('Empleado IA', 'AI Employee')}</strong>
+          <span class="muted" style="font-size:11px;flex:1">${t('pídele trabajo de verdad', 'give it real work')}</span>
+          <button class="btn ghost small" id="copilot-close">✕</button>
+        </div>
+        <div class="copilot-msgs" id="copilot-msgs"></div>
+        <div class="copilot-suggest" id="copilot-suggest">
+          <button class="cp-sug">${t('¿A qué 5 leads llamo hoy?', 'Which 5 leads should I call today?')}</button>
+          <button class="cp-sug">${t('Resúmeme cómo va el negocio', 'Summarize how the business is doing')}</button>
+          <button class="cp-sug">${t('Prepara una campaña para reactivar leads fríos', 'Draft a campaign to revive cold leads')}</button>
+          <button class="cp-sug">${t('Genera el informe del mes para el cliente', 'Generate this month’s client report')}</button>
+        </div>
+        <form class="copilot-form" id="copilot-form">
+          <input class="input" id="copilot-input" placeholder="${t('Pídele algo… (crear tarea, campaña, informe…)', 'Ask for something… (task, campaign, report…)')}" autocomplete="off">
+          <button class="btn" id="copilot-send">➤</button>
+        </form>
+      </div>
     </div>
   </div>`;
 
@@ -223,6 +242,7 @@ function renderShell(activePath) {
     setTimeout(() => document.getElementById('search')?.focus(), 350);
   });
   setupNotifications();
+  setupCopilot();
   window.__greeting = `${greet}, ${firstName}`;
   return document.getElementById('view');
 }
@@ -281,6 +301,81 @@ async function setupNotifications() {
   refreshCount();
   clearInterval(window.__notifTimer);
   window.__notifTimer = setInterval(refreshCount, 60000);
+}
+
+// ---- Empleado IA (global copilot) ----
+// Chat history survives route changes within the session.
+window.__copilotHistory = window.__copilotHistory || [];
+function setupCopilot() {
+  const fab = document.getElementById('copilot-fab');
+  const panel = document.getElementById('copilot-panel');
+  const msgs = document.getElementById('copilot-msgs');
+  const form = document.getElementById('copilot-form');
+  const input = document.getElementById('copilot-input');
+  const suggest = document.getElementById('copilot-suggest');
+  if (!fab || !panel) return;
+
+  const add = (role, text, actions = []) => {
+    if (actions.length) {
+      const chips = document.createElement('div');
+      chips.className = 'cp-actions';
+      chips.innerHTML = actions.map((a) => `<span class="cp-chip">✔ ${esc(a)}</span>`).join('');
+      msgs.appendChild(chips);
+    }
+    const div = document.createElement('div');
+    div.className = `cd-msg ${role}`;
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+  };
+  const repaint = () => {
+    msgs.innerHTML = '';
+    if (!window.__copilotHistory.length) {
+      add('ai', t('¡Hola! Soy tu Empleado IA. Puedo consultar tus datos y hacer trabajo por ti: crear tareas, preparar campañas, generar informes, etiquetar contactos… ¿Qué necesitas?', 'Hi! I am your AI Employee. I can look at your data and do real work: create tasks, draft campaigns, generate reports, tag contacts… What do you need?'));
+    } else {
+      for (const m of window.__copilotHistory) add(m.role === 'user' ? 'user' : 'ai', m.text, m.actions || []);
+    }
+    suggest.style.display = window.__copilotHistory.length ? 'none' : 'flex';
+  };
+
+  async function send(text) {
+    if (!text.trim()) return;
+    add('user', text);
+    suggest.style.display = 'none';
+    const historyForApi = window.__copilotHistory.map((m) => ({ role: m.role, text: m.text }));
+    window.__copilotHistory.push({ role: 'user', text });
+    const thinking = document.createElement('div');
+    thinking.className = 'cd-msg ai cd-thinking';
+    thinking.textContent = t('Trabajando…', 'Working…');
+    msgs.appendChild(thinking);
+    msgs.scrollTop = msgs.scrollHeight;
+    document.getElementById('copilot-send').disabled = true;
+    try {
+      const r = await api('/copilot', { method: 'POST', body: { message: text, history: historyForApi } });
+      thinking.remove();
+      add('ai', r.reply, r.actions || []);
+      window.__copilotHistory.push({ role: 'ai', text: r.reply, actions: r.actions || [] });
+    } catch (err) {
+      thinking.remove();
+      add('ai', `⚠️ ${err.message}`);
+    } finally {
+      document.getElementById('copilot-send').disabled = false;
+      input.focus();
+    }
+  }
+
+  fab.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) { repaint(); input.focus(); }
+  });
+  document.getElementById('copilot-close').addEventListener('click', () => { panel.hidden = true; });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = input.value;
+    input.value = '';
+    send(text);
+  });
+  suggest.querySelectorAll('.cp-sug').forEach((b) => b.addEventListener('click', () => send(b.textContent)));
 }
 
 async function route() {

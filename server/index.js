@@ -49,6 +49,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/system', require('./routes/system'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/copilot', require('./routes/copilot'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/documents', require('./routes/documents'));
